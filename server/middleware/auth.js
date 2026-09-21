@@ -89,11 +89,60 @@ export const canViewNetRates = (viewer, hotel) => isAdmin(viewer) || ownsHotel(v
 const absoluteDeadline = (session) =>
     session.createdAt.getTime() + config.auth.sessionAbsoluteTtlMs;
 
-const resolveSession = async (token) => {
-    if (!token) {
-        return null;
+/**
+ * Every value the request carries for the session cookie, in the order the
+ * browser sent them.
+ *
+ * `req.cookies` holds one value per name — the first — which is wrong when a
+ * browser holds two cookies of that name: the host-only one the API set before
+ * AUTH_COOKIE_DOMAIN existed and the `Domain=` one it sets now. Browsers send
+ * both to the API host, and the older, dead one comes first. Reading the raw
+ * header lets `resolveSession` try each, so a stale leftover cannot mask a
+ * live session. The sign-in and sign-out responses also expire the leftover
+ * (see services/auth.service.js), so this is the belt to that's braces.
+ */
+const sessionTokens = (req) => {
+    const header = req.headers.cookie;
+
+    if (!header) {
+        return [];
     }
 
+    const prefix = `${config.auth.cookieName}=`;
+
+    return header
+        .split(';')
+        .map((pair) => pair.trim())
+        .filter((pair) => pair.startsWith(prefix))
+        .map((pair) => {
+            const raw = pair.slice(prefix.length);
+
+            // Tokens are URL-safe and never encoded, but a hand-edited cookie
+            // could be anything and must not turn into a 500 here.
+            try {
+                return decodeURIComponent(raw);
+            } catch {
+                return raw;
+            }
+        })
+        .filter(Boolean);
+};
+
+const resolveSession = async (req) => {
+    // Sequential on purpose: one token in practice, two during the clean-up
+    // of a leftover, and the first live one wins.
+    for (const token of sessionTokens(req)) {
+        const session = await resolveToken(token);
+
+        if (session) {
+            return session;
+        }
+    }
+
+    return null;
+};
+
+const resolveToken = async (token) => {
     const session = await prisma.session.findUnique({
         where: { tokenHash: hashToken(token) },
         include: { user: { include: { partner: true } } }
@@ -176,7 +225,7 @@ export const noStoreResponses = (req, res, next) => {
 };
 
 export const authenticate = async (req, res, next) => {
-    const session = await resolveSession(req.cookies?.[config.auth.cookieName]);
+    const session = await resolveSession(req);
 
     if (!session) {
         throw new UnauthorizedError('Authentication required');
@@ -192,7 +241,7 @@ export const authenticate = async (req, res, next) => {
 
 /** Resolves a session when one is present, but does not require it. */
 export const optionalAuthenticate = async (req, res, next) => {
-    const session = await resolveSession(req.cookies?.[config.auth.cookieName]);
+    const session = await resolveSession(req);
 
     if (session) {
         req.user = session.user;

@@ -139,6 +139,25 @@ describe('authentication', { skip: dbAvailable ? false : 'Postgres is not reacha
     });
 });
 
+/**
+ * Two Set-Cookie headers for the session name: one for the configured domain,
+ * and one with no Domain attribute that is already expired — the only thing
+ * that removes a host-only cookie, since a browser matches on name, domain
+ * and path together.
+ */
+const assertClearsHostOnlyCookie = (headers) => {
+    const session = headers.filter((header) => header.startsWith(`${config.auth.cookieName}=`));
+
+    assert.equal(session.length, 2);
+
+    const hostOnly = session.find((header) => !/Domain=/i.test(header));
+    const scoped = session.find((header) => /Domain=example\.test/i.test(header));
+
+    assert.ok(hostOnly, 'a Set-Cookie without a Domain attribute');
+    assert.match(hostOnly, /Expires=Thu, 01 Jan 1970/);
+    assert.ok(scoped, 'a Set-Cookie for the configured domain');
+};
+
 describe('session lifetime', { skip: dbAvailable ? false : 'Postgres is not reachable' }, () => {
     const tracker = createTracker();
 
@@ -160,6 +179,73 @@ describe('session lifetime', { skip: dbAvailable ? false : 'Postgres is not reac
             .set('Cookie', [`${config.auth.cookieName}=${createToken()}`]);
 
         assert.equal(res.status, 401);
+    });
+
+    /**
+     * A browser that signed in before AUTH_COOKIE_DOMAIN was set still holds
+     * the host-only cookie next to the `Domain=` one, and sends both — the
+     * dead one first. Only the first value reaches `req.cookies`, so every
+     * browser-side write used to fail with 401 while server-rendered pages,
+     * which carry only the site host's cookie, kept working.
+     */
+    it('does not let a dead leftover session cookie mask the live one', async () => {
+        const admin = await makeAdmin(tracker);
+        const { cookie } = await signIn(app, admin.email);
+        const live = cookie[0].split(';')[0];
+        const dead = `${config.auth.cookieName}=${createToken()}`;
+
+        const res = await request(app).get('/api/auth/me').set('Cookie', `${dead}; ${live}`);
+
+        assert.equal(res.status, 200);
+        assert.equal(res.body.user.email, admin.email);
+    });
+
+    it('rejects a request whose every session cookie is dead', async () => {
+        const res = await request(app)
+            .get('/api/auth/me')
+            .set('Cookie', `${config.auth.cookieName}=${createToken()}; ${config.auth.cookieName}=${createToken()}`);
+
+        assert.equal(res.status, 401);
+    });
+
+    /**
+     * The other half of the same clean-up: when a domain is configured, sign-in
+     * and sign-out also expire the host-only cookie, so an affected browser
+     * heals itself the next time it signs in. Without a domain the current
+     * cookie *is* host-only and a second Set-Cookie would be a duplicate.
+     */
+    it('expires the leftover host-only cookie on sign-in and sign-out when a domain is configured', async () => {
+        const admin = await makeAdmin(tracker);
+        const previous = config.auth.cookieDomain;
+        config.auth.cookieDomain = 'example.test';
+
+        try {
+            const { status, cookie } = await signIn(app, admin.email);
+
+            assert.equal(status, 200);
+            assertClearsHostOnlyCookie(cookie);
+
+            const out = await request(app).post('/api/auth/logout').set('Cookie', cookie[1].split(';')[0]);
+
+            assert.equal(out.status, 204);
+            assertClearsHostOnlyCookie(out.headers['set-cookie'] ?? []);
+        } finally {
+            config.auth.cookieDomain = previous;
+        }
+    });
+
+    it('sends one session cookie when no domain is configured', async () => {
+        const admin = await makeAdmin(tracker);
+        const previous = config.auth.cookieDomain;
+        config.auth.cookieDomain = undefined;
+
+        try {
+            const { cookie } = await signIn(app, admin.email);
+
+            assert.equal(cookie.filter((header) => header.startsWith(`${config.auth.cookieName}=`)).length, 1);
+        } finally {
+            config.auth.cookieDomain = previous;
+        }
     });
 
     it('ends the session on logout and refuses the cookie afterwards', async () => {

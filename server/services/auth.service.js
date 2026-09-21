@@ -32,11 +32,37 @@ const cookieOptions = () => ({
     maxAge: config.auth.sessionTtlMs
 });
 
+/**
+ * Expires the host-only session cookie a browser may still hold from before
+ * AUTH_COOKIE_DOMAIN was set.
+ *
+ * A cookie is identified by name, domain and path, so the host-only cookie
+ * the API used to set and the `Domain=` one it sets now are two different
+ * cookies to the browser. Clearing the current one never touched the old
+ * one, and the browser kept sending both to the API host — oldest first,
+ * which is the dead one — and the cookie parser keeps the first value it
+ * sees. Every write from the browser then failed with 401 while server
+ * rendered pages, which only carry the site host's cookie, kept working.
+ *
+ * Sent on every sign-in and sign-out, so an affected browser heals itself the
+ * next time it signs in. A no-op when no domain is configured: the current
+ * cookie is then host-only itself and the two would be the same cookie.
+ */
+const clearLegacyHostOnlyCookie = (res) => {
+    if (!config.auth.cookieDomain) {
+        return;
+    }
+
+    res.clearCookie(config.auth.cookieName, { ...cookieOptions(), domain: undefined, maxAge: undefined });
+};
+
 export const setSessionCookie = (res, token) => {
+    clearLegacyHostOnlyCookie(res);
     res.cookie(config.auth.cookieName, token, cookieOptions());
 };
 
 export const clearSessionCookie = (res) => {
+    clearLegacyHostOnlyCookie(res);
     res.clearCookie(config.auth.cookieName, { ...cookieOptions(), maxAge: undefined });
 };
 
