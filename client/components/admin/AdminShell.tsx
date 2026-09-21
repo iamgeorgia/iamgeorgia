@@ -5,6 +5,7 @@ import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 
 import { AdminSidebar } from "./AdminSidebar";
+import { NavigationProgressBar, NavigationProgressProvider } from "./NavigationProgress";
 import { signOut } from "@/lib/api/partners";
 import { NO_BADGES } from "@/lib/api/admin";
 import { forgetViewer } from "@/lib/auth/useViewer";
@@ -150,112 +151,117 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
   }, [accountOpen, setAccountOpen]);
 
   return (
-    <div className="flex min-h-svh w-full bg-background">
-      <Suspense
-        fallback={
-          <AdminSidebar role={user.role} badges={NO_BADGES} open={navOpen} onClose={() => setNavOpen(false)} />
-        }
-      >
-        <WithBadges badges={badges}>
-          {(resolved) => (
-            <AdminSidebar role={user.role} badges={resolved} open={navOpen} onClose={() => setNavOpen(false)} />
-          )}
-        </WithBadges>
-      </Suspense>
+    <NavigationProgressProvider>
+      <div className="flex min-h-svh w-full bg-background">
+        <Suspense
+          fallback={
+            <AdminSidebar role={user.role} badges={NO_BADGES} open={navOpen} onClose={() => setNavOpen(false)} />
+          }
+        >
+          <WithBadges badges={badges}>
+            {(resolved) => (
+              <AdminSidebar role={user.role} badges={resolved} open={navOpen} onClose={() => setNavOpen(false)} />
+            )}
+          </WithBadges>
+        </Suspense>
 
-      <div className="flex min-w-0 flex-1 flex-col lg:ps-64">
-        <header className="sticky top-0 z-60 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-background/90 px-4 backdrop-blur-md sm:px-6">
-          <button
-            type="button"
-            onClick={() => setNavOpen(true)}
-            aria-label="Open navigation"
-            aria-expanded={navOpen}
-            className="flex size-10 shrink-0 items-center justify-center rounded-sm text-ink transition-colors hover:bg-surface-soft lg:hidden"
-          >
-            <Menu size={20} aria-hidden />
-          </button>
+        <div className="flex min-w-0 flex-1 flex-col lg:ps-64">
+          <header className="sticky top-0 z-60 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-background/90 px-4 backdrop-blur-md sm:px-6">
+            {/* Runs along the header's bottom edge while a section is being fetched. */}
+            <NavigationProgressBar />
 
-          {/* Presentational only — the panel has no search index yet. */}
-          <div className="relative min-w-0 flex-1 sm:max-w-sm">
-            <Search
-              size={16}
-              className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
-              aria-hidden
-            />
-            <input
-              type="search"
-              placeholder="Search bookings, partners…"
-              aria-label="Search the admin panel"
-              className="h-10 w-full rounded-sm border border-line bg-surface ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
-            />
-          </div>
+            <button
+              type="button"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open navigation"
+              aria-expanded={navOpen}
+              className="flex size-10 shrink-0 items-center justify-center rounded-sm text-ink transition-colors hover:bg-surface-soft lg:hidden"
+            >
+              <Menu size={20} aria-hidden />
+            </button>
 
-          <div className="ms-auto flex shrink-0 items-center gap-1">
-            <Suspense fallback={<NotificationBell badges={NO_BADGES} />}>
-              <WithBadges badges={badges}>{(resolved) => <NotificationBell badges={resolved} />}</WithBadges>
-            </Suspense>
+            {/* Presentational only — the panel has no search index yet. */}
+            <div className="relative min-w-0 flex-1 sm:max-w-sm">
+              <Search
+                size={16}
+                className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
+                aria-hidden
+              />
+              <input
+                type="search"
+                placeholder="Search bookings, partners…"
+                aria-label="Search the admin panel"
+                className="h-10 w-full rounded-sm border border-line bg-surface ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
+              />
+            </div>
 
-            <div ref={accountRef} className="relative">
-              <button
-                type="button"
-                onClick={() => setAccountOpen(!accountOpen)}
-                aria-expanded={accountOpen}
-                aria-haspopup="menu"
-                className="flex items-center gap-2 rounded-sm py-1.5 ps-1.5 pe-2 transition-colors hover:bg-surface-soft"
-              >
-                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink text-[0.6875rem] font-semibold text-on-dark">
-                  {initialsOf(user)}
-                </span>
-                <span className="hidden text-start sm:block">
-                  <span className="block text-[0.8125rem] font-medium text-ink">
-                    {user.fullName}
-                  </span>
-                  <span className="block text-[0.6875rem] text-muted">
-                    {ROLE_LABELS[user.role] ?? user.role}
-                  </span>
-                </span>
-                <ChevronDown
-                  size={15}
-                  className={cn(
-                    "shrink-0 text-subtle transition-transform duration-200",
-                    accountOpen && "rotate-180",
-                  )}
-                  aria-hidden
-                />
-              </button>
+            <div className="ms-auto flex shrink-0 items-center gap-1">
+              <Suspense fallback={<NotificationBell badges={NO_BADGES} />}>
+                <WithBadges badges={badges}>{(resolved) => <NotificationBell badges={resolved} />}</WithBadges>
+              </Suspense>
 
-              {accountOpen && (
-                <div
-                  role="menu"
-                  className="absolute top-full end-0 z-70 mt-2 w-56 rounded-sm border border-line bg-surface p-1.5 shadow-lift"
+              <div ref={accountRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setAccountOpen(!accountOpen)}
+                  aria-expanded={accountOpen}
+                  aria-haspopup="menu"
+                  className="flex items-center gap-2 rounded-sm py-1.5 ps-1.5 pe-2 transition-colors hover:bg-surface-soft"
                 >
-                  <p className="px-3 py-2">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-ink text-[0.6875rem] font-semibold text-on-dark">
+                    {initialsOf(user)}
+                  </span>
+                  <span className="hidden text-start sm:block">
                     <span className="block text-[0.8125rem] font-medium text-ink">
                       {user.fullName}
                     </span>
-                    <span className="block truncate text-[0.75rem] text-muted">
-                      {user.email}
+                    <span className="block text-[0.6875rem] text-muted">
+                      {ROLE_LABELS[user.role] ?? user.role}
                     </span>
-                  </p>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={handleSignOut}
-                    className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-start text-[0.8125rem] text-body transition-colors hover:bg-surface-soft hover:text-ink"
-                  >
-                    <LogOut size={15} className="text-subtle rtl:-scale-x-100" aria-hidden />
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
+                  </span>
+                  <ChevronDown
+                    size={15}
+                    className={cn(
+                      "shrink-0 text-subtle transition-transform duration-200",
+                      accountOpen && "rotate-180",
+                    )}
+                    aria-hidden
+                  />
+                </button>
 
-        <main id="admin-main" className="min-w-0 flex-1">
-          {children}
-        </main>
+                {accountOpen && (
+                  <div
+                    role="menu"
+                    className="absolute top-full end-0 z-70 mt-2 w-56 rounded-sm border border-line bg-surface p-1.5 shadow-lift"
+                  >
+                    <p className="px-3 py-2">
+                      <span className="block text-[0.8125rem] font-medium text-ink">
+                        {user.fullName}
+                      </span>
+                      <span className="block truncate text-[0.75rem] text-muted">
+                        {user.email}
+                      </span>
+                    </p>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleSignOut}
+                      className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2 text-start text-[0.8125rem] text-body transition-colors hover:bg-surface-soft hover:text-ink"
+                    >
+                      <LogOut size={15} className="text-subtle rtl:-scale-x-100" aria-hidden />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </header>
+
+          <main id="admin-main" className="min-w-0 flex-1">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
+    </NavigationProgressProvider>
   );
 }

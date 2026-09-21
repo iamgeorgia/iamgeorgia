@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { Loader2 } from "lucide-react";
 
 import { AdminContainer } from "@/components/admin/AdminPage";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -49,7 +50,15 @@ export default function PanelLoading() {
           ) : (
             <Skeleton className="h-9 w-64 lg:h-10" />
           )}
-          <Skeleton className="mt-3 h-4 w-80 max-w-full" />
+          {/* Said in words as well as shape: grey bars alone do not tell a
+              first-time operator that anything is happening. */}
+          <p
+            role="status"
+            className="mt-2 flex items-center gap-2 text-[0.9375rem] leading-relaxed text-muted"
+          >
+            <Loader2 size={15} className="animate-spin text-brand-text" aria-hidden />
+            {title ? `Loading ${title.toLowerCase()}…` : "Loading…"}
+          </p>
         </div>
         <Skeleton className="h-10 w-36 shrink-0" />
       </div>

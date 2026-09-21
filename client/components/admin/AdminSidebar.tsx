@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { ArrowUpRight, ChevronDown, X } from "lucide-react";
 import { useId, useState } from "react";
 
+import { useReportPendingNavigation } from "@/components/admin/NavigationProgress";
 import { Logo } from "@/components/layout/Logo";
 import { stripLocale } from "@/lib/i18n/config";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -68,6 +69,7 @@ function NavRow({
   nested?: boolean;
 }) {
   const { pending } = useLinkStatus();
+  useReportPendingNavigation(pending);
   const lit = active || pending;
 
   return (

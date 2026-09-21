@@ -517,3 +517,27 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* ==========================================================================
+   Admin navigation progress
+   An indeterminate bar for the stretch between a sidebar click and the
+   router committing the destination. Reduced motion collapses it to a static
+   bar through the global rule above, which is still a visible signal.
+   ========================================================================== */
+
+@keyframes admin-progress {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.admin-progress-bar {
+  animation: admin-progress 1.1s var(--ease-out-soft) infinite;
+}
+
+[dir="rtl"] .admin-progress-bar {
+  animation-direction: reverse;
+}
