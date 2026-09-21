@@ -1,10 +1,6 @@
 import type { Metadata } from "next";
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 
-import { Footer } from "@/components/layout/Footer";
-import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { getI18n } from "@/lib/i18n/server";
@@ -16,29 +12,21 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 /**
- * Rendered for any URL that matches no route, so it sits above the `(site)`
- * group and does not inherit its header and footer. It brings its own, rather
- * than pushing the chrome back up into the root layout where the admin panel
- * would inherit it too.
+ * The bare 404, above every route group.
+ *
+ * Next bundles this file's client dependencies into the first load of every
+ * route under the root layout — the admin panel, the partner portal and the
+ * driver app included. So it renders nothing that needs JavaScript: no site
+ * header with its menus, no newsletter form, no motion library. The public
+ * site has its own branded version in `(site)/not-found.tsx`, which is what a
+ * visitor normally sees; this one is reached only from outside that group.
  */
 export default async function NotFound() {
   const { t, path } = await getI18n();
-  return (
-    <>
-      <Header />
-      <main id="main" className="flex-1">
-    <section className="relative flex min-h-[86svh] items-center overflow-hidden bg-ink">
-      <Image
-        src="/images/about/landscape.jpg"
-        alt=""
-        fill
-        sizes="100vw"
-        className="object-cover opacity-40"
-      />
-      <div className="scrim-full absolute inset-0" aria-hidden />
-      <div className="scrim-side absolute inset-0" aria-hidden />
 
-      <Container className="relative py-28">
+  return (
+    <main id="main" className="flex flex-1 items-center bg-ink">
+      <Container className="py-28">
         <p className="type-eyebrow animate-hero-rise text-on-dark/60">{t.notFound.eyebrow}</p>
 
         <h1
@@ -55,10 +43,7 @@ export default async function NotFound() {
           {t.notFound.body}
         </p>
 
-        <div
-          className="animate-hero-rise mt-10 flex flex-wrap gap-3"
-          style={{ animationDelay: "0.3s" }}
-        >
+        <div className="animate-hero-rise mt-10 flex flex-wrap gap-3" style={{ animationDelay: "0.3s" }}>
           <Button href={path("/")} size="lg" variant="light">
             {t.notFound.backHome}
           </Button>
@@ -77,23 +62,15 @@ export default async function NotFound() {
               <li key={item.key}>
                 <Link
                   href={path(item.href)}
-                  className="group inline-flex items-center gap-2 text-sm font-medium text-on-dark/70 transition-colors hover:text-on-dark"
+                  className="text-sm font-medium text-on-dark/70 transition-colors hover:text-on-dark"
                 >
                   {navLabel(t, item.key)}
-                  <ArrowRight
-                    size={14}
-                    className="transition-transform duration-200 ease-(--ease-out-soft) group-hover:translate-x-1 rtl:-scale-x-100 rtl:group-hover:-translate-x-1"
-                    aria-hidden
-                  />
                 </Link>
               </li>
             ))}
           </ul>
         </nav>
       </Container>
-    </section>
-      </main>
-      <Footer />
-    </>
+    </main>
   );
 }
