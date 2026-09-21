@@ -26,7 +26,8 @@ interface MediaGalleryProps {
   /** Used for the "show all" label and the lightbox announcement. */
   label: string;
   className?: string;
-  priority?: boolean;
+  /** Preload the lead photograph — for the page whose LCP element it is. */
+  preload?: boolean;
 }
 
 /**
@@ -34,7 +35,7 @@ interface MediaGalleryProps {
  * Shared by tours, hotels, destinations and experiences so the gallery
  * interaction is identical everywhere it appears.
  */
-export function MediaGallery({ images, label, className, priority }: MediaGalleryProps) {
+export function MediaGallery({ images, label, className, preload }: MediaGalleryProps) {
   const { t } = useI18n();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const reduceMotion = useReducedMotion();
@@ -77,7 +78,7 @@ export function MediaGallery({ images, label, className, priority }: MediaGaller
    * The rail and the mosaic are two DOM trees for the same photographs, one
    * hidden at each breakpoint — and `display: none` does not stop an image
    * loading. It only stops a lazy one, because a hidden element never
-   * intersects the viewport. The lead is not lazy: with `priority` it is
+   * intersects the viewport. The lead is not lazy: with `preload` it is
    * eager and preloaded in *both* trees, so a mismatched `sizes` had the
    * browser fetch two different widths of the same file on every detail page —
    * on a desktop viewport the wasted one was the 1600px variant, competing
@@ -101,7 +102,8 @@ export function MediaGallery({ images, label, className, priority }: MediaGaller
               src={image.src}
               alt={image.alt}
               fill
-              priority={priority && index === 0}
+              preload={preload && index === 0}
+              fetchPriority={preload && index === 0 ? "high" : undefined}
               sizes={index === 0 ? leadSizes : "85vw"}
               className="object-cover"
             />
@@ -125,7 +127,8 @@ export function MediaGallery({ images, label, className, priority }: MediaGaller
             src={lead.src}
             alt={lead.alt}
             fill
-            priority={priority}
+            preload={preload}
+            fetchPriority={preload ? "high" : undefined}
             sizes={leadSizes}
             className="object-cover transition-transform duration-700 ease-(--ease-out-soft) group-hover:scale-[1.03]"
           />

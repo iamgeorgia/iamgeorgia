@@ -118,7 +118,7 @@ export function PackageExplorer({ packages, regions }: PackageExplorerProps) {
         {filtered.length > 0 ? (
           <div className="mt-10 grid gap-x-6 gap-y-10 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((pkg, index) => (
-              <PackageCard key={pkg.id} pkg={pkg} priority={index < 3} />
+              <PackageCard key={pkg.id} pkg={pkg} eager={index < 3} />
             ))}
           </div>
         ) : (

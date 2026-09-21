@@ -298,7 +298,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
       </Container>
 
       <Container>
-        <MediaGallery images={hotel.gallery} label={hotel.name} priority />
+        <MediaGallery images={hotel.gallery} label={hotel.name} preload />
       </Container>
 
       {/* The control the whole page hangs off. It sits above the fold of the

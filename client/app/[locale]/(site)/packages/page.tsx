@@ -76,7 +76,7 @@ export default async function PackagesPage(props: PageProps<"/[locale]/packages"
       {spotlight && (
         <section className="border-b border-line py-16 lg:py-20">
           <Container>
-            <PackageCard pkg={spotlight} variant="feature" query={query} priority />
+            <PackageCard pkg={spotlight} variant="feature" query={query} eager />
           </Container>
         </section>
       )}

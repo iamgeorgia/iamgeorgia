@@ -16,14 +16,15 @@ import { cn, formatPrice } from "@/lib/utils";
 interface HotelListItemProps {
   hotel: Hotel;
   className?: string;
-  priority?: boolean;
+  /** Load the photograph immediately — for cards in the first screen. */
+  eager?: boolean;
 }
 
 /**
  * Horizontal property row — the layout travellers expect when comparing hotels.
  * Shared by the hotels index and the homepage feature so the two stay identical.
  */
-export function HotelListItem({ hotel, className, priority }: HotelListItemProps) {
+export function HotelListItem({ hotel, className, eager }: HotelListItemProps) {
   // Locale-aware, or a Georgian or Hebrew reader is bounced to English on click.
   const path = useLocalePath();
   const href = path(`/hotels/${hotel.slug}`);
@@ -46,7 +47,7 @@ export function HotelListItem({ hotel, className, priority }: HotelListItemProps
             src={hotel.image}
             alt=""
             fill
-            priority={priority}
+            loading={eager ? "eager" : undefined}
             sizes="(max-width: 640px) 90vw, 16rem"
             className="object-cover transition-transform duration-700 ease-(--ease-out-soft) group-hover:scale-[1.04]"
           />

@@ -8,18 +8,28 @@ import { getDictionary } from "@/lib/i18n/dictionaries";
 import { isLocale, locales, localeMeta } from "@/lib/i18n/config";
 import { LocaleProvider } from "@/lib/i18n/provider";
 
-/** Editorial display face for headlines. */
+/**
+ * Editorial display face for headlines. Only the default axes: the design
+ * never moves SOFT or WONK off their defaults, and asking for them makes the
+ * font file larger for nothing.
+ */
 const fraunces = Fraunces({
   variable: "--font-fraunces",
   subsets: ["latin"],
   display: "swap",
-  axes: ["SOFT", "WONK"],
 });
 
-/** Interface face for everything else. */
+/**
+ * Interface face for everything else.
+ *
+ * `subsets` decides which files are *preloaded*, not which are available:
+ * every unicode-range face Google serves is still declared, so Russian pages
+ * still set Cyrillic in Inter — it simply arrives on demand rather than being
+ * pushed ahead of the hero image on every English, Georgian and Hebrew page.
+ */
 const inter = Inter({
   variable: "--font-inter",
-  subsets: ["latin", "cyrillic"],
+  subsets: ["latin"],
   display: "swap",
 });
 

@@ -19,7 +19,8 @@ interface TourCardProps {
   /** Appended to the link, so a card in dated results keeps the date. */
   query?: string;
   className?: string;
-  priority?: boolean;
+  /** Load the photograph immediately — for cards in the first screen. */
+  eager?: boolean;
 }
 
 /**
@@ -29,7 +30,7 @@ interface TourCardProps {
  * price sheet — never a quote. A tour with no price sheet yet shows no figure
  * at all rather than a made-up one.
  */
-export function TourCard({ tour, variant = "default", query = "", className, priority }: TourCardProps) {
+export function TourCard({ tour, variant = "default", query = "", className, eager }: TourCardProps) {
   const { t, intlLocale } = useI18n();
   const path = useLocalePath();
   const isFeature = variant === "feature";
@@ -49,7 +50,7 @@ export function TourCard({ tour, variant = "default", query = "", className, pri
               src={image}
               alt={tour.title}
               fill
-              priority={priority}
+              loading={eager ? "eager" : undefined}
               sizes={isFeature ? "(max-width: 1024px) 100vw, 60vw" : "(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"}
               className="object-cover transition-transform duration-700 ease-(--ease-out-soft) group-hover:scale-[1.04]"
             />

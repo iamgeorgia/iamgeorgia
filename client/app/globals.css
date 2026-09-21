@@ -186,12 +186,6 @@
     border-radius: var(--radius-xs);
   }
 
-  /* Fraunces is a variable font — keep the optical size tied to display use. */
-  .font-display,
-  [class*="type-display"],
-  [class*="type-h"] {
-    font-variation-settings: "SOFT" 0, "WONK" 0;
-  }
 }
 
 /* ==========================================================================
@@ -315,9 +309,27 @@
 /* ---- Hero entrance -------------------------------------------------------
    Deliberately CSS rather than JS: the headline is the LCP element and must
    paint without waiting for hydration. `both` fill means the reduced-motion
-   rule below lands it on the final frame instead of hiding it. */
+   rule below lands it on the final frame instead of hiding it.
+
+   The headline and the photograph never start invisible: the browser does
+   not count an element at opacity 0 as a largest-contentful-paint candidate,
+   so a fade from nothing pushes the measured (and the perceived) paint back
+   by the length of the animation. They rise and settle from a visible state;
+   the secondary lines — eyebrow, standfirst, buttons — use the soft variant
+   and may still fade in, because none of them is the element that matters. */
 
 @keyframes hero-rise {
+  from {
+    opacity: 0.35;
+    transform: translateY(28px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes hero-rise-soft {
   from {
     opacity: 0;
     transform: translateY(28px);
@@ -330,17 +342,19 @@
 
 @keyframes hero-zoom {
   from {
-    opacity: 0;
-    transform: scale(1.08);
+    transform: scale(1.04);
   }
   to {
-    opacity: 1;
     transform: scale(1);
   }
 }
 
 @utility animate-hero-rise {
   animation: hero-rise 0.9s var(--ease-out-soft) both;
+}
+
+@utility animate-hero-rise-soft {
+  animation: hero-rise-soft 0.9s var(--ease-out-soft) both;
 }
 
 @utility animate-hero-zoom {

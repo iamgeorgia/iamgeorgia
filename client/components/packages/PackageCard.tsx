@@ -19,7 +19,8 @@ interface PackageCardProps {
   /** Appended to the link, so a card in dated results keeps the dates. */
   query?: string;
   className?: string;
-  priority?: boolean;
+  /** Load the photograph immediately — for cards in the first screen. */
+  eager?: boolean;
 }
 
 /**
@@ -35,7 +36,7 @@ export function PackageCard({
   variant = "default",
   query = "",
   className,
-  priority,
+  eager,
 }: PackageCardProps) {
   const { t, intlLocale } = useI18n();
   const path = useLocalePath();
@@ -59,7 +60,7 @@ export function PackageCard({
               src={image}
               alt={pkg.name}
               fill
-              priority={priority}
+              loading={eager ? "eager" : undefined}
               sizes={
                 isFeature
                   ? "(max-width: 1024px) 100vw, 60vw"

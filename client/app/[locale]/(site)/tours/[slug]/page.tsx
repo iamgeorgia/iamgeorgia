@@ -236,7 +236,7 @@ export default async function TourDetailPage(props: PageProps<"/[locale]/tours/[
       </Container>
 
       <Container>
-        <MediaGallery images={galleryOf(tour)} label={tour.title} priority />
+        <MediaGallery images={galleryOf(tour)} label={tour.title} preload />
       </Container>
 
       {/* The control the whole page hangs off: on a tour page the first

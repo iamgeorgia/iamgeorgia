@@ -265,7 +265,7 @@ export default async function PackageDetailPage(props: PageProps<"/[locale]/pack
 
       {gallery.length > 0 && (
         <Container className="mt-8">
-          <MediaGallery images={gallery} label={pkg.name} priority />
+          <MediaGallery images={gallery} label={pkg.name} preload />
         </Container>
       )}
 

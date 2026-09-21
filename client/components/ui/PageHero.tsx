@@ -41,7 +41,8 @@ export function PageHero({
         src={image}
         alt={imageAlt}
         fill
-        priority
+        preload
+        fetchPriority="high"
         sizes="100vw"
         className="animate-hero-zoom object-cover"
       />
@@ -50,14 +51,14 @@ export function PageHero({
 
       <Container className="relative pt-28 pb-14 sm:pt-32 lg:pb-16">
         {breadcrumbs && (
-          <div className="animate-hero-rise mb-6" style={{ animationDelay: "0.05s" }}>
+          <div className="animate-hero-rise-soft mb-6" style={{ animationDelay: "0.05s" }}>
             <Breadcrumbs items={breadcrumbs} tone="light" />
           </div>
         )}
 
         {eyebrow && (
           <p
-            className="type-eyebrow animate-hero-rise text-on-dark/70"
+            className="type-eyebrow animate-hero-rise-soft text-on-dark/70"
             style={{ animationDelay: "0.1s" }}
           >
             {eyebrow}
@@ -73,7 +74,7 @@ export function PageHero({
 
         {description && (
           <p
-            className="type-body-lg animate-hero-rise mt-6 max-w-xl text-on-dark/80"
+            className="type-body-lg animate-hero-rise-soft mt-6 max-w-xl text-on-dark/80"
             style={{ animationDelay: "0.28s" }}
           >
             {description}
@@ -81,7 +82,7 @@ export function PageHero({
         )}
 
         {children && (
-          <div className="animate-hero-rise mt-10" style={{ animationDelay: "0.38s" }}>
+          <div className="animate-hero-rise-soft mt-10" style={{ animationDelay: "0.38s" }}>
             {children}
           </div>
         )}

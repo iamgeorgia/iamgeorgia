@@ -11,11 +11,12 @@ import { cn, formatPrice } from "@/lib/utils";
 interface HotelCardProps {
   hotel: Hotel;
   className?: string;
-  priority?: boolean;
+  /** Load the photograph immediately — for cards in the first screen. */
+  eager?: boolean;
 }
 
 /** Vertical property card, used on the homepage and destination pages. */
-export function HotelCard({ hotel, className, priority }: HotelCardProps) {
+export function HotelCard({ hotel, className, eager }: HotelCardProps) {
   return (
     <article className={cn("group flex h-full flex-col", className)}>
       <Link
@@ -27,7 +28,7 @@ export function HotelCard({ hotel, className, priority }: HotelCardProps) {
             src={hotel.image}
             alt={hotel.name}
             fill
-            priority={priority}
+            loading={eager ? "eager" : undefined}
             sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
             className="object-cover transition-transform duration-700 ease-(--ease-out-soft) group-hover:scale-[1.04]"
           />

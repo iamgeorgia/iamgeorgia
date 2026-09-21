@@ -36,7 +36,7 @@ export default async function NotFound() {
       <div className="scrim-side absolute inset-0" aria-hidden />
 
       <Container className="relative py-28">
-        <p className="type-eyebrow animate-hero-rise text-on-dark/60">{t.notFound.eyebrow}</p>
+        <p className="type-eyebrow animate-hero-rise-soft text-on-dark/60">{t.notFound.eyebrow}</p>
 
         <h1
           className="type-display animate-hero-rise mt-6 max-w-3xl text-on-dark text-balance"
@@ -46,14 +46,14 @@ export default async function NotFound() {
         </h1>
 
         <p
-          className="type-body-lg animate-hero-rise mt-7 max-w-lg text-on-dark/75"
+          className="type-body-lg animate-hero-rise-soft mt-7 max-w-lg text-on-dark/75"
           style={{ animationDelay: "0.2s" }}
         >
           {t.notFound.body}
         </p>
 
         <div
-          className="animate-hero-rise mt-10 flex flex-wrap gap-3"
+          className="animate-hero-rise-soft mt-10 flex flex-wrap gap-3"
           style={{ animationDelay: "0.3s" }}
         >
           <Button href={path("/")} size="lg" variant="light">
@@ -66,7 +66,7 @@ export default async function NotFound() {
 
         <nav
           aria-label={t.notFound.sections}
-          className="animate-hero-rise mt-16 border-t border-on-dark/15 pt-8"
+          className="animate-hero-rise-soft mt-16 border-t border-on-dark/15 pt-8"
           style={{ animationDelay: "0.4s" }}
         >
           <ul className="flex flex-wrap gap-x-8 gap-y-3">

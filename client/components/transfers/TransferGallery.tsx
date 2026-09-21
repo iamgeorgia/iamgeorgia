@@ -77,7 +77,8 @@ export function TransferGallery({ vehicle, from, to, className }: TransferGaller
             src={active.src}
             alt={active.label}
             fill
-            priority
+            preload
+            fetchPriority="high"
             sizes="(max-width: 1024px) 100vw, 66vw"
             className="object-cover"
           />

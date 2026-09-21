@@ -19,7 +19,8 @@ interface StayResultCardProps {
   result: SearchResult;
   stay: StayQuery;
   nights: number;
-  priority?: boolean;
+  /** Load the photograph immediately — for cards in the first screen. */
+  eager?: boolean;
 }
 
 /**
@@ -34,7 +35,7 @@ interface StayResultCardProps {
  * The stay travels on every link out of here, so choosing a property never
  * loses the dates the traveller has already given us.
  */
-export function StayResultCard({ result, stay, nights, priority }: StayResultCardProps) {
+export function StayResultCard({ result, stay, nights, eager }: StayResultCardProps) {
   const { t, locale, intlLocale } = useI18n();
   const path = useLocalePath();
 
@@ -59,7 +60,7 @@ export function StayResultCard({ result, stay, nights, priority }: StayResultCar
               src={image}
               alt=""
               fill
-              priority={priority}
+              loading={eager ? "eager" : undefined}
               sizes="(max-width: 640px) 90vw, 16rem"
               className="object-cover transition-transform duration-700 ease-(--ease-out-soft) group-hover:scale-[1.04]"
             />

@@ -20,7 +20,8 @@ export async function Hero() {
           src="/images/home/hero.jpg"
           alt={t.home.hero.imageAlt}
           fill
-          priority
+          preload
+          fetchPriority="high"
           sizes="100vw"
           className="object-cover"
         />
@@ -30,7 +31,7 @@ export async function Hero() {
 
       <Container className="relative pt-28 pb-12 sm:pt-32 lg:pb-16">
         <div className="max-w-4xl">
-          <p className="type-eyebrow animate-hero-rise text-on-dark/70" style={{ animationDelay: "0.1s" }}>
+          <p className="type-eyebrow animate-hero-rise-soft text-on-dark/70" style={{ animationDelay: "0.1s" }}>
             {t.home.hero.eyebrow}
           </p>
 
@@ -42,14 +43,14 @@ export async function Hero() {
           </h1>
 
           <p
-            className="type-body-lg animate-hero-rise mt-7 max-w-xl text-on-dark/80"
+            className="type-body-lg animate-hero-rise-soft mt-7 max-w-xl text-on-dark/80"
             style={{ animationDelay: "0.32s" }}
           >
             {t.home.hero.body}
           </p>
 
           <div
-            className="animate-hero-rise mt-10 flex flex-wrap items-center gap-3"
+            className="animate-hero-rise-soft mt-10 flex flex-wrap items-center gap-3"
             style={{ animationDelay: "0.44s" }}
           >
             <Button href={path("/tours")} size="lg" variant="light">
@@ -70,7 +71,7 @@ export async function Hero() {
        * claim a guest could hold us to.
        */}
       <div
-        className="animate-hero-rise relative border-t border-on-dark/15"
+        className="animate-hero-rise-soft relative border-t border-on-dark/15"
         style={{ animationDelay: "0.56s" }}
       >
         <Container>
