@@ -398,6 +398,7 @@ All under `/admin/transfers/*`, guarded by `authenticate + requireAdmin`.
 | GET/POST/PUT/DELETE | `/admin/transfers/extras[/:code]` |
 | GET/POST/DELETE | `/admin/transfers/blackouts[/:id]` |
 | GET | `/admin/transfers/bookings` · `/:reference` · POST `/:reference/cancel` |
+| GET | `/admin/transfers/bookings/summary` — `{ total, confirmed, confirmedValue: { byCurrency: [{ currency, amountCents, count }] } }`, aggregated in the database; operations roles |
 
 ### Seeding the transfer catalogue
 
@@ -964,6 +965,8 @@ Detaching is a 409 while a verified certificate points at it.
 | GET/POST | `/admin/media` (multipart: `file`, `category`, `altText?`) |
 | GET/DELETE | `/admin/media/:id`, `GET /admin/media/:id/url` (signed, private only) |
 | GET | `/admin/bookings`, `/admin/bookings/:reference` |
+| GET | `/admin/bookings/summary?days=30` — `{ activeCount, recent: { days, from, byCurrency: [{ currency, amountCents, count }] } }`; `recent` is what was **created** in the window, PENDING and CONFIRMED only, summed in the database; `days` 1–365 |
+| GET | `/admin/badges` — the panel's queue counts in one request: `{ pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders }`. Operations roles; a DISPATCHER gets `unassignedLegs` and `null` for the rest |
 | POST | `/admin/bookings/:reference/cancel` |
 | GET/POST | `/admin/pricing-rules`, `GET /admin/pricing-rules/explain?partnerId&hotelId&tourId&serviceId&packageId&productType&destinationId` — a rule names at most one product (`hotelId` / `tourId` / `serviceId` / `packageId`) and optionally a `productType` (`HOTEL` `TRANSFER` `TOUR` `SERVICE` `PACKAGE`); specificity is partner 8 + named product 4 + destination 2 + product type 1 |
 | PUT/DELETE | `/admin/pricing-rules/:id` |

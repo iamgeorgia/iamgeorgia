@@ -1476,6 +1476,7 @@ stored. If it ever disagrees with that arithmetic, that is a bug.
 | `GET`/`POST`/`PUT`/`DELETE` | `/api/admin/transfers/extras[/:code]` |
 | `GET`/`POST`/`DELETE` | `/api/admin/transfers/blackouts[/:id]` |
 | `GET` | `/api/admin/transfers/bookings` · `/:reference` · `POST /:reference/cancel` |
+| `GET` | `/api/admin/transfers/bookings/summary` — `total`, `confirmed`, `confirmedValue.byCurrency`; aggregated, operations roles |
 
 **`DELETE /points/:id` retires rather than deletes.** Routes and bookings
 reference the row with `Restrict`, and a place that has ever been travelled to
@@ -1519,6 +1520,8 @@ quote it and expect `200` with `"closed": true` and no offers.
 | `GET`/`DELETE` | `/api/admin/media/:id` | |
 | `GET` | `/api/admin/media/:id/url` | signed link, **private categories only** |
 | `GET` | `/api/admin/bookings`, `/api/admin/bookings/:reference` | every booking on the platform |
+| `GET` | `/api/admin/bookings/summary?days=30` | `activeCount` + what was created in the window, by currency; `days` 1–365 |
+| `GET` | `/api/admin/badges` | the sidebar's five queue counts; a DISPATCHER gets `unassignedLegs` and `null` for the rest |
 | `POST` | `/api/admin/bookings/:reference/cancel` | |
 | `GET`/`POST` | `/api/admin/pricing-rules` | |
 | `GET` | `/api/admin/pricing-rules/explain?partnerId&hotelId` | which rule wins, and why |

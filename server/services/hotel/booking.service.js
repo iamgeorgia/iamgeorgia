@@ -1113,3 +1113,45 @@ export const sweepCompletedHotelBookings = async ({ now = new Date(), limit = 50
 };
 
 export const hotelBookingInclude = bookingInclude;
+
+/** A hotel booking that still owes the operator something. */
+const ACTIVE_STATUSES = ['PENDING', 'CONFIRMED'];
+
+/**
+ * Sums grouped by currency, largest first — the dashboard shows the leading
+ * figure and says how many currencies stand behind it, rather than adding
+ * lari to dollars.
+ */
+const byCurrency = (rows) =>
+    rows
+        .map((row) => ({
+            currency: row.currency,
+            amountCents: row._sum.sellTotalCents ?? 0,
+            count: row._count._all
+        }))
+        .sort((a, b) => b.amountCents - a.amountCents);
+
+/**
+ * The overview's figures: how many bookings are live, and what was booked
+ * in the last `days` days.
+ *
+ * Aggregates in the database rather than a page of rows summed in the
+ * client, which is what the dashboard did — capped at a hundred bookings and
+ * therefore wrong past the hundredth. "Booked" means created: the window is
+ * on `createdAt`, as the label on the tile says, not on the stay's check-in.
+ */
+export const summarizeBookings = async ({ days }) => {
+    const from = new Date(Date.now() - days * 86_400_000);
+
+    const [activeCount, grouped] = await Promise.all([
+        prisma.hotelBooking.count({ where: { status: { in: ACTIVE_STATUSES } } }),
+        prisma.hotelBooking.groupBy({
+            by: ['currency'],
+            where: { status: { in: ACTIVE_STATUSES }, createdAt: { gte: from } },
+            _sum: { sellTotalCents: true },
+            _count: { _all: true }
+        })
+    ]);
+
+    return { activeCount, recent: { days, from: from.toISOString(), byCurrency: byCurrency(grouped) } };
+};

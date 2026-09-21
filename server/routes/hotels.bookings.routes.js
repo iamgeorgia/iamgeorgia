@@ -19,7 +19,8 @@ import {
     guestLookupSchema,
     holdSchema,
     holdTokenParamSchema,
-    referenceParamSchema
+    referenceParamSchema,
+    bookingSummaryQuerySchema
 } from '../validation/booking.js';
 import {
     amendBooking,
@@ -29,7 +30,8 @@ import {
     findBookingOr404,
     holdOffer,
     listBookings,
-    quoteCancellation
+    quoteCancellation,
+    summarizeBookings
 } from '../services/hotel/booking.service.js';
 import { releaseHoldByToken } from '../services/hotel/availability.service.js';
 import {
@@ -175,6 +177,15 @@ adminBookingRoutes.get('/', validate({ query: bookingQuerySchema }), async (req,
     const { bookings, ...page } = await listBookings(req.valid.query, req.user);
 
     res.json({ data: bookings.map((booking) => toBookingSummary(booking, req.user)), ...page });
+});
+
+/**
+ * The overview's figures, aggregated here rather than summed over a page of
+ * rows in the panel. Declared before `/:reference` so the word is a route,
+ * not a booking that does not exist.
+ */
+adminBookingRoutes.get('/summary', validate({ query: bookingSummaryQuerySchema }), async (req, res) => {
+    res.json(await summarizeBookings(req.valid.query));
 });
 
 adminBookingRoutes.get('/:reference', validate({ params: referenceParamSchema }), async (req, res) => {

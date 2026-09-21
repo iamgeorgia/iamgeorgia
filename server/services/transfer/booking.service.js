@@ -724,3 +724,36 @@ export { bookingInclude, assertMayRead };
 
 /** The include an order needs to read this product's bookings by the same shape. */
 export const transferBookingInclude = bookingInclude;
+
+/**
+ * The transfer bookings screen's tiles: how many journeys, how many
+ * confirmed, and what the confirmed ones are worth — summed in the database
+ * and grouped by currency, not over "the most recent 100" as the page used
+ * to do.
+ */
+export const summarizeTransferBookings = async () => {
+    const [total, confirmed, grouped] = await Promise.all([
+        prisma.transferBooking.count(),
+        prisma.transferBooking.count({ where: { status: 'CONFIRMED' } }),
+        prisma.transferBooking.groupBy({
+            by: ['currency'],
+            where: { status: 'CONFIRMED' },
+            _sum: { sellTotalCents: true },
+            _count: { _all: true }
+        })
+    ]);
+
+    return {
+        total,
+        confirmed,
+        confirmedValue: {
+            byCurrency: grouped
+                .map((row) => ({
+                    currency: row.currency,
+                    amountCents: row._sum.sellTotalCents ?? 0,
+                    count: row._count._all
+                }))
+                .sort((a, b) => b.amountCents - a.amountCents)
+        }
+    };
+};

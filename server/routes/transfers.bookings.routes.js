@@ -23,7 +23,8 @@ import {
     confirmTransferBooking,
     findTransferBookingOr404,
     listTransferBookings,
-    quoteTransferCancellation
+    quoteTransferCancellation,
+    summarizeTransferBookings
 } from '../services/transfer/booking.service.js';
 import {
     toCancellationQuote,
@@ -219,6 +220,11 @@ adminTransferBookingRoutes.get(
         });
     }
 );
+
+/** The screen's tiles, aggregated. Before `/:reference`, so the word is a route. */
+adminTransferBookingRoutes.get('/summary', async (req, res) => {
+    res.json(await summarizeTransferBookings());
+});
 
 adminTransferBookingRoutes.get(
     '/:reference',

@@ -10346,6 +10346,44 @@
           ]
         },
         {
+          "name": "Badges — the sidebar's queue counts in one request",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/badges",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "badges"
+              ]
+            },
+            "description": "**Expected: 200** with five counts: `pendingPartners`, `activeBookings`, `unassignedLegs`, `pendingTourRequests`, `pendingOrders`.\n\nAll five are numbers for an admin. Signed in as a **DISPATCHER**, `unassignedLegs` is a number and the other four are `null` — a dispatcher is never told how many partners are waiting. `unassignedLegs` counts the same thirty-day window the dispatch board lists."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Every badge is present', () => {",
+                  "    const body = pm.response.json();",
+                  "    for (const key of ['pendingPartners', 'activeBookings', 'unassignedLegs', 'pendingTourRequests', 'pendingOrders']) {",
+                  "        pm.expect(body).to.have.property(key);",
+                  "    }",
+                  "    pm.expect(body.unassignedLegs).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Partners — list",
           "request": {
             "method": "GET",
@@ -10610,6 +10648,50 @@
           ]
         },
         {
+          "name": "Bookings — summary for the overview (aggregated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/bookings/summary?days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "bookings",
+                "summary"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "**Expected: 200** with `activeCount` (PENDING or CONFIRMED stays) and `recent: { days, from, byCurrency: [{ currency, amountCents, count }] }` — what was **created** in the last `days` days, summed in the database and grouped by currency, largest first.\n\n`days` must be 1–365; `days=0` or `days=week` is a **400**. Admin only: a dispatcher gets **403**."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Aggregated shape', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.activeCount).to.be.a('number');",
+                  "    pm.expect(body.recent.days).to.eql(30);",
+                  "    pm.expect(body.recent.byCurrency).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
           "name": "Transfer bookings — admin",
           "request": {
             "method": "GET",
@@ -10647,6 +10729,45 @@
                 "exec": [
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
                   "pm.test('Paginated', () => pm.expect(pm.response.json()).to.have.property('totalPages'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Transfer bookings — summary (aggregated)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/transfers/bookings/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "transfers",
+                "bookings",
+                "summary"
+              ]
+            },
+            "description": "**Expected: 200** with `total`, `confirmed` and `confirmedValue.byCurrency: [{ currency, amountCents, count }]` — the confirmed journeys' worth summed in the database, not over the most recent hundred rows.\n\nOpen to dispatchers as well as admins, like the list."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Aggregated shape', () => {",
+                  "    const body = pm.response.json();",
+                  "    pm.expect(body.total).to.be.a('number');",
+                  "    pm.expect(body.confirmed).to.be.a('number');",
+                  "    pm.expect(body.confirmedValue.byCurrency).to.be.an('array');",
+                  "});"
                 ]
               }
             }

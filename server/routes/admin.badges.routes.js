@@ -1,0 +1,55 @@
+import { Router } from 'express';
+
+import { prisma } from '../db/index.js';
+import { authenticate, isAdmin, requireTransferOps } from '../middleware/auth.js';
+import { dateOnlyToUtc } from '../lib/time.js';
+
+/**
+ * The queue counts on the admin panel's sidebar, in one request.
+ *
+ * The panel used to assemble these from five paginated list calls with
+ * `pageSize: 1`, each of which ran its count *and* fetched one full row with
+ * its includes, on every panel render and after every save. These are the
+ * same `where` clauses the list endpoints use — a badge that says "3" must
+ * open a queue that shows three — expressed as counts and nothing else.
+ *
+ * Open to dispatchers as well as admins, because the dispatch board has a
+ * badge too; what a dispatcher may not see comes back as `null` rather than
+ * a number they were never allowed to count. Mirrors `listDispatchLegs` for
+ * the window: the same thirty days the client asks that list for.
+ */
+export const adminBadgeRoutes = Router();
+
+adminBadgeRoutes.use(authenticate, requireTransferOps);
+
+/** A hotel booking that still owes the operator something. */
+const ACTIVE_BOOKING_STATUSES = ['PENDING', 'CONFIRMED'];
+
+/** Applications submitted, and ones somebody is partway through filling in. */
+const PENDING_PARTNER_STATUSES = ['PENDING_APPROVAL', 'REGISTRATION_IN_PROGRESS'];
+
+/** How far ahead the dispatch board counts unassigned legs. */
+const LEG_WINDOW_DAYS = 30;
+
+adminBadgeRoutes.get('/', async (req, res) => {
+    const admin = isAdmin(req.user);
+
+    // The list takes `from`/`to` as calendar dates and treats `to` as
+    // inclusive (`< to + 1 day`); the same arithmetic here keeps the badge and
+    // the board in step at the window's far edge.
+    const today = dateOnlyToUtc(new Date().toISOString().slice(0, 10));
+    const until = new Date(today.getTime() + (LEG_WINDOW_DAYS + 1) * 86_400_000);
+
+    const [pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders] =
+        await Promise.all([
+            admin ? prisma.partner.count({ where: { status: { in: PENDING_PARTNER_STATUSES } } }) : null,
+            admin ? prisma.hotelBooking.count({ where: { status: { in: ACTIVE_BOOKING_STATUSES } } }) : null,
+            prisma.transferBookingLeg.count({
+                where: { status: 'UNASSIGNED', pickupAt: { gte: today, lt: until } }
+            }),
+            admin ? prisma.tourBooking.count({ where: { status: 'PENDING' } }) : null,
+            admin ? prisma.order.count({ where: { status: 'PENDING_CONFIRMATION' } }) : null
+        ]);
+
+    res.json({ pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders });
+});

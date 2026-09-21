@@ -123,6 +123,11 @@ export const cancelBookingSchema = z
     .optional()
     .default({});
 
+/** The dashboard's window for "booked recently": a day count, never a date. */
+export const bookingSummaryQuerySchema = z.object({
+    days: z.coerce.number().int().min(1).max(365).default(30)
+});
+
 export const bookingQuerySchema = z.object({
     status: z.union([z.enum(BOOKING_STATUSES), z.array(z.enum(BOOKING_STATUSES))]).optional(),
     hotelId: z.string().min(1).optional(),
