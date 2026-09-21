@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { CancelOrder } from "@/components/packages/CancelOrder";
 import { Modal } from "@/components/ui/Modal";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import type { OrderCancellationQuote, OrderItem } from "@/types/order";
 

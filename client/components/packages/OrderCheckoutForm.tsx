@@ -18,7 +18,7 @@ import {
   orderCheckoutDraftSnapshot,
   subscribeOrderCheckoutDraft,
 } from "@/lib/booking/checkoutSession";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { hasOnRequestSlot, resolvedService, resolvedTour } from "@/lib/packages/query";
 import { formatMoney } from "@/lib/money";

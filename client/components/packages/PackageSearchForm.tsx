@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { todayISO } from "@/lib/booking/stay";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import {

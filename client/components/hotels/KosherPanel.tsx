@@ -4,7 +4,7 @@ import { BadgeCheck, Check, FileText, Info, Mail, Phone } from "lucide-react";
 
 import { KosherBadge } from "./KosherBadge";
 import { kosherIcon } from "./kosherIcons";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { featureLabel, groupFeatures, kosherExpiryNote } from "@/lib/hotels/kosher";
 import type { KosherProfile, NearbyPlace } from "@/types/catalogue";

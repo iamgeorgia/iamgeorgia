@@ -4,7 +4,7 @@ import { Building2, Landmark, MapPin, Plane, Search, TrainFront, TreePalm } from
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Modal } from "@/components/ui/Modal";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { searchTransferPoints } from "@/lib/api/transfers";
 import { pointKindOrder } from "@/lib/transfers/vocabulary";

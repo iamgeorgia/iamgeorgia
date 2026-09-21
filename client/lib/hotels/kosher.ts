@@ -4,7 +4,7 @@ import type {
   KosherSummary,
 } from "@/types/catalogue";
 import type { UiDictionary } from "@/lib/i18n/ui/en";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 
 /**
  * Turning the server's kosher facts into one honest line.
@@ -84,7 +84,7 @@ export function groupFeatures(
 }
 
 /** The label for one facility, falling back to the raw code. */
-export const featureLabel = (t: UiDictionary, code: string): string =>
+export const featureLabel = (t: Pick<UiDictionary, "hotels">, code: string): string =>
   (t.hotels.kosher.features as Record<string, string>)[code] ?? code;
 
 /**
@@ -96,7 +96,7 @@ export const featureLabel = (t: UiDictionary, code: string): string =>
  */
 export function kosherBadge(
   kosher: KosherSummary | KosherProfile,
-  t: UiDictionary,
+  t: Pick<UiDictionary, "hotels">,
 ): KosherBadgeContent | null {
   if (!kosher.offersKosher) return null;
 
@@ -133,7 +133,7 @@ export function kosherBadge(
  */
 export function kosherExpiryNote(
   kosher: KosherProfile,
-  t: UiDictionary,
+  t: Pick<UiDictionary, "hotels">,
   formatDate: (iso: string) => string,
 ): string | null {
   const certification = kosher.certification;

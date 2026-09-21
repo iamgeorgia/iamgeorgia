@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 
 import { MotionProvider } from "@/components/motion/MotionProvider";
+import { PANEL_NAMESPACES, pickClientDictionary } from "@/lib/i18n/client";
+import { DictionaryProvider } from "@/lib/i18n/provider";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: {
@@ -17,8 +20,15 @@ export const metadata: Metadata = {
  * which must not show a navigation sidebar to someone who has not signed in —
  * can sit alongside it without the shell having to special-case a route.
  */
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  const { t } = await getI18n();
+
   // The panel's dialogs and disclosure panels animate; the engine behind them
-  // loads lazily, after the screen is usable.
-  return <MotionProvider>{children}</MotionProvider>;
+  // loads lazily, after the screen is usable. The strings are the shared
+  // booking and order components' share only — the panel itself is English.
+  return (
+    <DictionaryProvider dictionary={pickClientDictionary(t, PANEL_NAMESPACES)}>
+      <MotionProvider>{children}</MotionProvider>
+    </DictionaryProvider>
+  );
 }

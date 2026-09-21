@@ -9,7 +9,7 @@ import { Modal } from "@/components/ui/Modal";
 import { cancelBooking } from "@/lib/api/bookings";
 import { bookingErrorKey } from "@/lib/booking/errors";
 import { formatInstant } from "@/lib/booking/stay";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import type { CancellationQuote, HotelBookingStatus } from "@/types/booking";

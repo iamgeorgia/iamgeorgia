@@ -8,7 +8,7 @@ import { VehicleIllustration } from "./VehicleIllustration";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Rating } from "@/components/ui/Rating";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatDuration, type TransferQuery } from "@/lib/transfers/query";

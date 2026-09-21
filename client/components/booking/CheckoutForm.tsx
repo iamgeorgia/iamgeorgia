@@ -31,7 +31,7 @@ import {
 import { nightsBetween } from "@/lib/booking/stay";
 import { KosherRequests } from "./KosherRequests";
 import { featureLabel } from "@/lib/hotels/kosher";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import type { BookingGuestInput, BookingGuestType, BookingRequestInput } from "@/types/booking";

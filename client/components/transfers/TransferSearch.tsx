@@ -7,7 +7,7 @@ import { useState } from "react";
 import { LocationSelector } from "./LocationSelector";
 import { PassengerSelector } from "./PassengerSelector";
 import { Button } from "@/components/ui/Button";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import {
   emptyQuery,

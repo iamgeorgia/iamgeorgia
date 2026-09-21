@@ -5,7 +5,7 @@ import { useState } from "react";
 import { FilterChip } from "@/components/ui/FilterChip";
 import { featureLabel } from "@/lib/hotels/kosher";
 import type { HotelFilterFacets, HotelFilterState } from "@/lib/hotels/filters";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatPrice } from "@/lib/utils";
 

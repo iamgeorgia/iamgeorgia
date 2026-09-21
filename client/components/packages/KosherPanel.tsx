@@ -2,7 +2,7 @@
 
 import { AlertTriangle, Info, ShieldCheck, XCircle } from "lucide-react";
 
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import type { KosherFinding, KosherPackageProfile } from "@/types/package";
 import { cn } from "@/lib/utils";

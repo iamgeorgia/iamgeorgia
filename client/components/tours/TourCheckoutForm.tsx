@@ -19,7 +19,7 @@ import {
   tourCheckoutDraftServerSnapshot,
   tourCheckoutDraftSnapshot,
 } from "@/lib/booking/checkoutSession";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import type { BookingGuestType } from "@/types/booking";

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Layers, MapPin, Moon } from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import { packageImageUrl } from "@/lib/packages/query";

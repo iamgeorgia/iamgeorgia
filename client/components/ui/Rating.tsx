@@ -2,7 +2,7 @@
 
 import { Star } from "lucide-react";
 
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 import { guestScoreLabel } from "@/lib/utils";

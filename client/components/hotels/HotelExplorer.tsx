@@ -17,7 +17,7 @@ import {
   matchesFilters,
   type HotelFilterState,
 } from "@/lib/hotels/filters";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import type { UiDictionary } from "@/lib/i18n/ui/en";

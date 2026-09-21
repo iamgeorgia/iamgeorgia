@@ -38,11 +38,11 @@ export const primaryNavigation: NavItem[] = [
   { key: "transfers", href: "/transfers", icon: CarFront },
 ];
 
-export function navLabel(t: UiDictionary, key: NavKey): string {
+export function navLabel(t: Pick<UiDictionary, "nav">, key: NavKey): string {
   return t.nav[key];
 }
 
-export function navDescription(t: UiDictionary, key: NavKey): string {
+export function navDescription(t: Pick<UiDictionary, "nav">, key: NavKey): string {
   return t.nav.descriptions[key];
 }
 
@@ -52,7 +52,7 @@ export interface FooterGroup {
 }
 
 /** Built per-locale because both the group titles and the labels are translated. */
-export function footerNavigation(t: UiDictionary): FooterGroup[] {
+export function footerNavigation(t: Pick<UiDictionary, "nav" | "booking">): FooterGroup[] {
   return [
     {
       title: t.nav.groups.explore,

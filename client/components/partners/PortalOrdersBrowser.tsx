@@ -8,7 +8,7 @@ import { Clock, Search } from "lucide-react";
 import { Cell, DataTable, EmptyRow, Row, type Column } from "@/components/admin/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { formatInstant, formatStayDate } from "@/lib/booking/stay";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";

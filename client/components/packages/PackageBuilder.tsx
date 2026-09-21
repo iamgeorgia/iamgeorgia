@@ -23,7 +23,7 @@ import { createOrderHolds } from "@/lib/api/orders";
 import { ApiError } from "@/lib/api/client";
 import { newIdempotencyKey, saveOrderCheckoutDraft } from "@/lib/booking/checkoutSession";
 import { formatInstant, formatStayDate } from "@/lib/booking/stay";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";

@@ -3,6 +3,9 @@ import type { Metadata } from "next";
 import { MotionProvider } from "@/components/motion/MotionProvider";
 import { PortalShell } from "@/components/partners/PortalShell";
 import { getSession } from "@/lib/auth/session";
+import { PANEL_NAMESPACES, pickClientDictionary } from "@/lib/i18n/client";
+import { DictionaryProvider } from "@/lib/i18n/provider";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata: Metadata = {
   title: {
@@ -23,11 +26,13 @@ export const metadata: Metadata = {
  * other way would still see nothing but 403s.
  */
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
+  const [session, { t }] = await Promise.all([getSession(), getI18n()]);
 
   return (
-    <MotionProvider>
-      <PortalShell session={session}>{children}</PortalShell>
-    </MotionProvider>
+    <DictionaryProvider dictionary={pickClientDictionary(t, PANEL_NAMESPACES)}>
+      <MotionProvider>
+        <PortalShell session={session}>{children}</PortalShell>
+      </MotionProvider>
+    </DictionaryProvider>
   );
 }

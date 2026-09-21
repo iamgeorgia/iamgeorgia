@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ApiError } from "@/lib/api/client";
 import { cancelOrder, cancelOrderItem } from "@/lib/api/orders";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import type { OrderCancellationQuote, OrderStatus } from "@/types/order";

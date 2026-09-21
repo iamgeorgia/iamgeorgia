@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useState } from "react";
 
 import { VehicleIllustration } from "./VehicleIllustration";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 import type { TransferPoint, TransferVehicle } from "@/types/transfer";

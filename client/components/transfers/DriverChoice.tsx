@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 
 import { describeError } from "@/lib/api/client";
 import { listAvailableDrivers } from "@/lib/api/transfers";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { languageNames } from "@/lib/transfers/languages";
 import { cn } from "@/lib/utils";

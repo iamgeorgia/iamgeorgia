@@ -4,7 +4,7 @@ import { Minus, Plus, Users } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n } from "@/lib/i18n/provider";
 import type { TransferQuery } from "@/lib/transfers/query";

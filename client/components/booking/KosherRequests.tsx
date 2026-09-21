@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { kosherIcon } from "@/components/hotels/kosherIcons";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { featureLabel, groupFeatures } from "@/lib/hotels/kosher";
 import { useI18n } from "@/lib/i18n/provider";
 import type { BookingRequestInput } from "@/types/booking";

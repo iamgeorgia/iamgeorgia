@@ -2,7 +2,7 @@
 
 import { Check, Clock, Languages, Phone, ShieldCheck, Star, UserRound } from "lucide-react";
 
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { languageNames } from "@/lib/transfers/languages";
 import type { AssignmentForPartner } from "@/types/driver";

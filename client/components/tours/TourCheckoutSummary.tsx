@@ -4,7 +4,7 @@ import { CalendarDays, Clock, ShieldCheck, Users, XCircle } from "lucide-react";
 
 import type { TourCheckoutDraft } from "@/lib/booking/checkoutSession";
 import { formatInstant, formatStayDate } from "@/lib/booking/stay";
-import { fill } from "@/lib/i18n/dictionaries";
+import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";

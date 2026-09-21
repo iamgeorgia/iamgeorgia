@@ -108,7 +108,6 @@ export default async function RootLayout(props: LayoutProps<"/[locale]">) {
   const { locale } = await props.params;
   if (!isLocale(locale)) notFound();
 
-  const t = getDictionary(locale);
   const { dir, htmlLang } = localeMeta[locale];
 
   return (
@@ -123,9 +122,13 @@ export default async function RootLayout(props: LayoutProps<"/[locale]">) {
         header and footer from `(site)/layout.tsx`; the admin panel is a
         different product surface with its own shell. Both are route groups, so
         neither appears in a URL.
+
+        Nor does it hand out the dictionary: whatever is passed to the client
+        provider is serialised into every document, and the strings each group
+        needs differ. The group layouts provide their own share.
       */}
       <body className="flex min-h-full flex-col">
-        <LocaleProvider locale={locale} dictionary={t}>{props.children}</LocaleProvider>
+        <LocaleProvider locale={locale}>{props.children}</LocaleProvider>
       </body>
     </html>
   );
