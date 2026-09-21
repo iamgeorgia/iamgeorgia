@@ -278,3 +278,23 @@ export function adminSectionBadgeCount(
     0,
   );
 }
+
+/**
+ * The label of the screen a canonical admin path opens, or null when the path
+ * is not a listed screen — a detail page, a "new" form, a redirect.
+ *
+ * Used by the panel's loading state, which paints the destination's title
+ * from this table before the server has said anything about the page. Only an
+ * exact match counts: a booking's detail page is not "Hotel bookings", and a
+ * skeleton that says so would be a wrong heading for as long as it lasts.
+ */
+export function adminScreenLabel(pathname: string): string | null {
+  for (const group of adminNavigation) {
+    for (const entry of group.entries) {
+      const items = isAdminNavSection(entry) ? adminSectionItems(entry) : [entry];
+      const match = items.find((item) => item.href === pathname);
+      if (match) return match.label;
+    }
+  }
+  return null;
+}

@@ -29,10 +29,11 @@ export default async function AdminBookingsPage({
   const [list, confirmed, arriving] = await Promise.all([
     listAdminBookings(query),
     listAdminBookings({ status: "CONFIRMED", pageSize: 1 }),
+    // Only the total is read, so one row is all the API needs to send.
     listAdminBookings({
       status: "CONFIRMED",
       from: new Date().toISOString().slice(0, 10),
-      pageSize: 50,
+      pageSize: 1,
     }),
   ]);
 

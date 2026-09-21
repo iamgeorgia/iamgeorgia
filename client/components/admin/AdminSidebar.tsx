@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowUpRight, ChevronDown, X } from "lucide-react";
 import { useId, useState } from "react";
@@ -47,8 +47,59 @@ function NavBadge({ count }: { count: number }) {
 }
 
 /**
+ * The visible row of a destination.
+ *
+ * Split from the link so it can read the link's pending state: the row
+ * lights up the moment it is clicked, not when the router has finished the
+ * transition. With the panel's loading boundary prefetched those are the same
+ * frame; when they are not — a cold dev server, a slow connection, a click
+ * before the prefetch landed — the operator still sees at once that the
+ * click registered and where they are going.
+ */
+function NavRow({
+  item,
+  active,
+  count,
+  nested,
+}: {
+  item: AdminNavItem;
+  active: boolean;
+  count: number;
+  nested?: boolean;
+}) {
+  const { pending } = useLinkStatus();
+  const lit = active || pending;
+
+  return (
+    <span
+      data-pending={pending || undefined}
+      className={cn(
+        "flex items-center rounded-sm transition-colors",
+        nested
+          ? "gap-2.5 px-2.5 py-2 text-[0.8125rem]"
+          : "gap-3 px-3 py-2.5 text-sm font-medium",
+        lit
+          ? "bg-on-dark/12 text-on-dark"
+          : "text-on-dark/65 group-hover:bg-on-dark/6 group-hover:text-on-dark",
+      )}
+    >
+      <item.icon
+        size={nested ? 15 : 17}
+        className={cn("shrink-0", lit ? "text-brand" : "text-on-dark/45")}
+        aria-hidden
+      />
+      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+      {count > 0 && <NavBadge count={count} />}
+    </span>
+  );
+}
+
+/**
  * One destination. `nested` only changes the weight — a sub-item is quieter
  * and slightly smaller than a top-level one, but it is the same control.
+ *
+ * `aria-current` follows the real pathname, never the pending state: what is
+ * announced as the current page must be the page that is actually open.
  */
 function NavLink({
   item,
@@ -70,23 +121,9 @@ function NavLink({
       href={path(item.href)}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      className={cn(
-        "flex items-center rounded-sm transition-colors",
-        nested
-          ? "gap-2.5 px-2.5 py-2 text-[0.8125rem]"
-          : "gap-3 px-3 py-2.5 text-sm font-medium",
-        active
-          ? "bg-on-dark/12 text-on-dark"
-          : "text-on-dark/65 hover:bg-on-dark/6 hover:text-on-dark",
-      )}
+      className="group block rounded-sm"
     >
-      <item.icon
-        size={nested ? 15 : 17}
-        className={cn("shrink-0", active ? "text-brand" : "text-on-dark/45")}
-        aria-hidden
-      />
-      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-      {count > 0 && <NavBadge count={count} />}
+      <NavRow item={item} active={active} count={count} nested={nested} />
     </Link>
   );
 }

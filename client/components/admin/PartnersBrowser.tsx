@@ -195,11 +195,20 @@ export function PartnersBrowser({
               <EmptyRow colSpan={COLUMNS.length} message="No partners match your filters." />
             )}
 
+            {/*
+              The detail links do not prefetch. The partner page's
+              `generateMetadata` reads the record for its title, and Next runs
+              that for every prefetch, so a page of twenty rows would cost
+              twenty API calls before anyone clicked — against a limiter the
+              whole panel shares. The panel's loading boundary still streams
+              the shell first on a click, so nothing is lost but the head start.
+            */}
             {partners.map((partner) => (
               <Row key={partner.id}>
                 <Cell>
                   <Link
                     href={path(`/admin/partners/${partner.id}`)}
+                    prefetch={false}
                     className="font-medium text-ink underline-offset-4 hover:underline"
                   >
                     {partner.name}
@@ -236,6 +245,7 @@ export function PartnersBrowser({
                 <Cell align="end">
                   <Link
                     href={path(`/admin/partners/${partner.id}`)}
+                    prefetch={false}
                     className="inline-flex items-center gap-1 text-[0.8125rem] text-brand-text underline-offset-4 hover:underline"
                   >
                     Open
@@ -258,6 +268,7 @@ export function PartnersBrowser({
             <li key={partner.id}>
               <Link
                 href={path(`/admin/partners/${partner.id}`)}
+                prefetch={false}
                 className="block rounded-sm border border-line bg-surface p-4 transition-colors hover:border-ink/30"
               >
                 <div className="flex items-start justify-between gap-3">
