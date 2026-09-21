@@ -10,13 +10,8 @@ import { listPartners } from "@/lib/api/partners";
 import { getSession } from "@/lib/auth/session";
 import { APPLICATION_STATUSES, formatPartnerDate, partnerKindLabels } from "@/lib/admin/partners";
 import { formatStay, formatStayDate } from "@/lib/admin/bookings";
-import {
-  countActive,
-  formatCompactMoney,
-  recentBookings,
-  recentValue,
-  upcomingArrivals,
-} from "@/lib/admin/metrics";
+import { formatCompactMoney, recentBookings, upcomingArrivals } from "@/lib/admin/metrics";
+import { getBookingSummary } from "@/lib/api/admin";
 import { formatMoney } from "@/lib/money";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
@@ -43,14 +38,23 @@ export default async function AdminOverviewPage() {
 
   const { path } = await getI18n();
 
-  const [applications, approved, active, monthValue, arrivals, recent] = await Promise.all([
+  const [applications, approved, summary, arrivals, recent] = await Promise.all([
     listPartners({ status: APPLICATION_STATUSES, pageSize: 4 }),
     listPartners({ status: "APPROVED", pageSize: 1 }),
-    countActive(),
-    recentValue(30),
+    getBookingSummary(30),
     upcomingArrivals(5),
     recentBookings(6),
   ]);
+
+  // The API sums per currency, largest first. The tile shows the leading one
+  // and says so when there is more than one, rather than adding lari to
+  // dollars and printing a number that is nothing.
+  const [leading, ...otherCurrencies] = summary.recent.byCurrency;
+  const monthValue = leading ?? { amountCents: 0, currency: "GEL" };
+  const monthHint =
+    otherCurrencies.length > 0
+      ? `In ${monthValue.currency}; ${otherCurrencies.length} more ${otherCurrencies.length === 1 ? "currency" : "currencies"} not shown`
+      : "Cancellations excluded";
 
   return (
     <AdminContainer>
@@ -62,7 +66,7 @@ export default async function AdminOverviewPage() {
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Active bookings"
-          value={String(active)}
+          value={String(summary.activeCount)}
           icon={CheckCircle2}
           hint="Confirmed or pending stays"
         />
@@ -70,7 +74,7 @@ export default async function AdminOverviewPage() {
           label="Booked, last 30 days"
           value={formatCompactMoney(monthValue.amountCents, monthValue.currency)}
           icon={Wallet}
-          hint="Cancellations excluded"
+          hint={monthHint}
         />
         <StatCard
           label="Arriving soon"

@@ -2,10 +2,11 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 
 import { AdminSidebar } from "./AdminSidebar";
 import { signOut } from "@/lib/api/partners";
+import { NO_BADGES } from "@/lib/api/admin";
 import { forgetViewer } from "@/lib/auth/useViewer";
 import { useLocalePath } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
@@ -13,9 +14,46 @@ import type { AdminBadges } from "@/lib/admin/navigation";
 import type { SessionUser } from "@/types/auth";
 
 interface AdminShellProps {
-  badges: AdminBadges;
+  /**
+   * A promise, not a value: the layout starts the request and hands it over
+   * without waiting, so the shell paints before the counts are known. The
+   * pieces that show a number read it through `use()` under Suspense and
+   * show zeros until it lands.
+   */
+  badges: Promise<AdminBadges>;
   user: SessionUser;
   children: React.ReactNode;
+}
+
+/** Renders its children with the resolved counts; suspends until they arrive. */
+function WithBadges({
+  badges,
+  children,
+}: {
+  badges: Promise<AdminBadges>;
+  children: (badges: AdminBadges) => React.ReactNode;
+}) {
+  return children(use(badges));
+}
+
+function NotificationBell({ badges }: { badges: AdminBadges }) {
+  const awaiting = badges.pendingBookings + badges.pendingPartners;
+
+  return (
+    <button
+      type="button"
+      aria-label={`Notifications, ${awaiting} awaiting review`}
+      className="relative flex size-10 items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-soft hover:text-ink"
+    >
+      <Bell size={18} aria-hidden />
+      {awaiting > 0 && (
+        <span
+          className="absolute top-2 end-2 size-2 rounded-full bg-brand ring-2 ring-background"
+          aria-hidden
+        />
+      )}
+    </button>
+  );
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -113,7 +151,17 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
 
   return (
     <div className="flex min-h-svh w-full bg-background">
-      <AdminSidebar role={user.role} badges={badges} open={navOpen} onClose={() => setNavOpen(false)} />
+      <Suspense
+        fallback={
+          <AdminSidebar role={user.role} badges={NO_BADGES} open={navOpen} onClose={() => setNavOpen(false)} />
+        }
+      >
+        <WithBadges badges={badges}>
+          {(resolved) => (
+            <AdminSidebar role={user.role} badges={resolved} open={navOpen} onClose={() => setNavOpen(false)} />
+          )}
+        </WithBadges>
+      </Suspense>
 
       <div className="flex min-w-0 flex-1 flex-col lg:ps-64">
         <header className="sticky top-0 z-60 flex h-16 shrink-0 items-center gap-3 border-b border-line bg-background/90 px-4 backdrop-blur-md sm:px-6">
@@ -143,19 +191,9 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
           </div>
 
           <div className="ms-auto flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              aria-label={`Notifications, ${badges.pendingBookings + badges.pendingPartners} awaiting review`}
-              className="relative flex size-10 items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-soft hover:text-ink"
-            >
-              <Bell size={18} aria-hidden />
-              {badges.pendingBookings + badges.pendingPartners > 0 && (
-                <span
-                  className="absolute top-2 end-2 size-2 rounded-full bg-brand ring-2 ring-background"
-                  aria-hidden
-                />
-              )}
-            </button>
+            <Suspense fallback={<NotificationBell badges={NO_BADGES} />}>
+              <WithBadges badges={badges}>{(resolved) => <NotificationBell badges={resolved} />}</WithBadges>
+            </Suspense>
 
             <div ref={accountRef} className="relative">
               <button

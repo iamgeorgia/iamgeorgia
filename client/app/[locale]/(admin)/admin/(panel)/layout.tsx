@@ -1,12 +1,6 @@
 import { AdminShell } from "@/components/admin/AdminShell";
-import { listPartners } from "@/lib/api/partners";
+import { NO_BADGES, getAdminBadges } from "@/lib/api/admin";
 import { requireAdminSession } from "@/lib/auth/session";
-import { countActive } from "@/lib/admin/metrics";
-import { listDispatchLegs } from "@/lib/api/dispatch";
-import { listAdminOrders } from "@/lib/api/orders";
-import { listAdminTourBookings } from "@/lib/api/tours";
-import { defaultWindow } from "@/lib/admin/dispatch";
-import { isAdmin } from "@/types/auth";
 
 /**
  * The panel shell — sidebar, top bar and working area.
@@ -17,54 +11,21 @@ import { isAdmin } from "@/types/auth";
  * role, so a viewer who reached this markup some other way would still see an
  * empty page full of 401s.
  *
- * The queue counts are resolved here rather than in the sidebar, so the
- * navigation stays presentational and the numbers come from one place.
+ * The queue counts are requested here rather than in the sidebar, so the
+ * navigation stays presentational and the numbers come from one place — one
+ * aggregate request, which the API scopes to the viewer's role itself.
  */
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const session = await requireAdminSession();
 
-  // The counts are decoration on the sidebar and must never take the panel
-  // down: an operator who cannot see "3 pending" can still open the queue and
-  // count. A failure here is logged and shown as zeros rather than thrown.
-  let badges = {
-    pendingBookings: 0,
-    pendingPartners: 0,
-    unassignedLegs: 0,
-    pendingTourRequests: 0,
-    pendingOrders: 0,
-  };
-
-  try {
-    // The counts go out together rather than one waiting on the other. A
-    // dispatcher cannot read the partner queue or the hotel bookings, so
-    // those two are not even asked for on their behalf.
-    const admin = isAdmin(session);
-    const window = defaultWindow(30);
-
-    const [applications, activeBookings, unassigned, tourRequests, pendingOrders] = await Promise.all([
-      // The two states waiting on the admin: an application that has been
-      // submitted, and one somebody is partway through filling in.
-      admin ? listPartners({ status: ["PENDING_APPROVAL", "REGISTRATION_IN_PROGRESS"], pageSize: 1 }) : null,
-      admin ? countActive() : 0,
-      listDispatchLegs({ from: window.from, to: window.to, legStatus: "UNASSIGNED", pageSize: 1 }),
-      // On-request tour bookings the operator has not answered yet.
-      admin ? listAdminTourBookings({ status: "PENDING", pageSize: 1 }) : null,
-      // Orders holding a request nobody has answered. Their rooms and seats
-      // are already claimed, so a queue left standing is capacity nobody can
-      // sell — which is exactly what a badge is for.
-      admin ? listAdminOrders({ status: "PENDING_CONFIRMATION", pageSize: 1 }) : null,
-    ]);
-
-    badges = {
-      pendingBookings: activeBookings,
-      pendingPartners: applications?.total ?? 0,
-      unassignedLegs: unassigned.total,
-      pendingTourRequests: tourRequests?.total ?? 0,
-      pendingOrders: pendingOrders?.total ?? 0,
-    };
-  } catch (error) {
+  // Not awaited: the shell renders at once and the pills fill in when the
+  // counts arrive, so no screen waits on decoration. The counts must never
+  // take the panel down either — an operator who cannot see "3 pending" can
+  // still open the queue and count — so a failure is logged and read as zeros.
+  const badges = getAdminBadges().catch((error: unknown) => {
     console.error("Admin queue counts failed:", error);
-  }
+    return NO_BADGES;
+  });
 
   return (
     <AdminShell badges={badges} user={session.user}>

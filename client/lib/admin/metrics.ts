@@ -1,6 +1,5 @@
 import { listAdminBookings } from "@/lib/api/bookings";
 import { formatMoneyCompact } from "@/lib/money";
-import { ACTIVE_BOOKING_STATUSES } from "./bookings";
 import type { BookingSummary, HotelBookingStatus } from "@/types/booking";
 
 /**
@@ -22,29 +21,9 @@ export async function countByStatus(status: HotelBookingStatus): Promise<number>
   return total;
 }
 
-/** Bookings that still owe the operator something. */
-export async function countActive(): Promise<number> {
-  const { total } = await listAdminBookings({ status: ACTIVE_BOOKING_STATUSES, pageSize: 1 });
-
-  return total;
-}
-
-/**
- * Money the studio can count, over a recent window.
- *
- * Deliberately scoped rather than "all time": a lifetime total would mean
- * reading every booking ever made on every dashboard render. The window is
- * stated in the label so the figure is never mistaken for something it is not.
- */
-export async function recentValue(days = 30): Promise<{ amountCents: number; currency: string }> {
-  const from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
-  const { data } = await listAdminBookings({ from, status: ACTIVE_BOOKING_STATUSES, pageSize: 100 });
-
-  return {
-    amountCents: data.reduce((sum, booking) => sum + booking.totalCents, 0),
-    currency: data[0]?.currency ?? "GEL",
-  };
-}
+// The active count and the recent value used to be derived here from list
+// pages; they come from `getBookingSummary` in `lib/api/admin.ts` now, summed
+// in the database rather than over the hundred most recent rows.
 
 /** The newest bookings, for the dashboard's activity list. */
 export async function recentBookings(limit = 6): Promise<BookingSummary[]> {

@@ -6,6 +6,7 @@ import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { Cell, DataTable, EmptyRow, Row } from "@/components/admin/DataTable";
 import { StatCard } from "@/components/admin/StatCard";
 import { TransferBookingStatusBadge } from "@/components/admin/DispatchBadges";
+import { getTransferBookingSummary } from "@/lib/api/admin";
 import { listAdminTransferBookings } from "@/lib/api/transfers";
 import { getI18n } from "@/lib/i18n/server";
 import { formatMoney, formatMoneyCompact } from "@/lib/money";
@@ -34,13 +35,14 @@ export default async function AdminTransferBookingsPage({
     10,
   );
 
-  const [list, confirmed] = await Promise.all([
+  const [list, summary] = await Promise.all([
     listAdminTransferBookings({ page: Number.isFinite(page) && page > 0 ? page : 1, pageSize: 25 }),
-    listAdminTransferBookings({ status: "CONFIRMED", pageSize: 100 }),
+    getTransferBookingSummary(),
   ]);
 
-  const revenue = confirmed.data.reduce((sum, booking) => sum + booking.totalCents, 0);
-  const currency = confirmed.data[0]?.currency ?? "GEL";
+  // Summed in the database, per currency, largest first — not over a page.
+  const [leading, ...otherCurrencies] = summary.confirmedValue.byCurrency;
+  const revenue = leading ?? { amountCents: 0, currency: "GEL" };
 
   return (
     <AdminContainer>
@@ -50,13 +52,17 @@ export default async function AdminTransferBookingsPage({
       />
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Bookings" value={String(list.total)} icon={CalendarCheck} />
-        <StatCard label="Confirmed" value={String(confirmed.total)} icon={CarFront} />
+        <StatCard label="Bookings" value={String(summary.total)} icon={CalendarCheck} />
+        <StatCard label="Confirmed" value={String(summary.confirmed)} icon={CarFront} />
         <StatCard
           label="Confirmed value"
-          value={formatMoneyCompact(revenue, currency)}
+          value={formatMoneyCompact(revenue.amountCents, revenue.currency)}
           icon={Coins}
-          hint="Across the most recent 100"
+          hint={
+            otherCurrencies.length > 0
+              ? `In ${revenue.currency}; ${otherCurrencies.length} more not shown`
+              : "Every confirmed journey"
+          }
         />
       </div>
 
