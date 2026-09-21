@@ -119,10 +119,10 @@ export default function ContactPage() {
               </Reveal>
             </div>
 
+            {/* The form is the page's purpose and, on desktop, its first
+                screen — it is never faded in. */}
             <div className="lg:col-span-7">
-              <Reveal>
-                <ContactForm />
-              </Reveal>
+              <ContactForm />
             </div>
           </div>
         </Container>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { Check, Copy, Loader2 } from "lucide-react";
 import { useState } from "react";
 
@@ -278,7 +278,7 @@ export function PartnerRegistrationForm() {
 
   if (result) {
     return (
-      <motion.section
+      <m.section
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         className="mt-8 rounded-sm border border-line bg-surface p-6"
@@ -336,7 +336,7 @@ export function PartnerRegistrationForm() {
             Add another
           </button>
         </div>
-      </motion.section>
+      </m.section>
     );
   }
 
@@ -632,7 +632,7 @@ function Field({
       )}
       <AnimatePresence>
         {error && (
-          <motion.p
+          <m.p
             id={`${id}-error`}
             role="alert"
             initial={{ opacity: 0, height: 0 }}
@@ -642,7 +642,7 @@ function Field({
             className="mt-1.5 overflow-hidden text-[0.75rem] text-error-text"
           >
             {error}
-          </motion.p>
+          </m.p>
         )}
       </AnimatePresence>
     </div>

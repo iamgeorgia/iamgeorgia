@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { Check, Info } from "lucide-react";
 import { useState } from "react";
 
@@ -93,7 +93,7 @@ export function ContactForm() {
 
   if (submitted) {
     return (
-      <motion.div
+      <m.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
@@ -119,7 +119,7 @@ export function ContactForm() {
           </Button>
           <Button href={path("/tours")}>Browse tours</Button>
         </div>
-      </motion.div>
+      </m.div>
     );
   }
 
@@ -262,7 +262,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
   return (
     <AnimatePresence>
       {message && (
-        <motion.p
+        <m.p
           id={id}
           role="alert"
           initial={{ opacity: 0, height: 0 }}
@@ -272,7 +272,7 @@ function FieldError({ id, message }: { id: string; message?: string }) {
           className="type-caption overflow-hidden text-error-text"
         >
           <span className="block pt-1.5">{message}</span>
-        </motion.p>
+        </m.p>
       )}
     </AnimatePresence>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Check, Globe } from "lucide-react";
@@ -68,7 +68,7 @@ export function LanguageMenu({ tone = "dark" }: { tone?: "dark" | "light" }) {
 
       <AnimatePresence>
         {open && (
-          <motion.ul
+          <m.ul
             role="menu"
             initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -102,7 +102,7 @@ export function LanguageMenu({ tone = "dark" }: { tone?: "dark" | "light" }) {
                 </li>
               );
             })}
-          </motion.ul>
+          </m.ul>
         )}
       </AnimatePresence>
     </div>

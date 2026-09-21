@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { Check, Copy, Loader2, MailPlus, PauseCircle, RotateCcw, X } from "lucide-react";
 import { useState } from "react";
 
@@ -139,7 +139,7 @@ export function PartnerActions({ partner }: { partner: Partner }) {
         */}
         <AnimatePresence initial={false}>
           {rejecting && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
@@ -199,7 +199,7 @@ export function PartnerActions({ partner }: { partner: Partner }) {
                   </button>
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
 
@@ -212,7 +212,7 @@ export function PartnerActions({ partner }: { partner: Partner }) {
 
         <AnimatePresence initial={false}>
           {suspending && (
-            <motion.div
+            <m.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: "auto" }}
               exit={{ opacity: 0, height: 0 }}
@@ -255,7 +255,7 @@ export function PartnerActions({ partner }: { partner: Partner }) {
                   </button>
                 </div>
               </div>
-            </motion.div>
+            </m.div>
           )}
         </AnimatePresence>
 

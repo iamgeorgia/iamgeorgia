@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { ArrowLeft, ArrowRight, Check, Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 
@@ -250,7 +250,7 @@ export function PartnerRegistrationWizard({
 
   if (done) {
     return (
-      <motion.section
+      <m.section
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
         className="mt-10 rounded-sm border border-line bg-surface p-8 text-center"
@@ -280,7 +280,7 @@ export function PartnerRegistrationWizard({
         >
           Sign in to your account
         </a>
-      </motion.section>
+      </m.section>
     );
   }
 
@@ -310,7 +310,7 @@ export function PartnerRegistrationWizard({
       </ol>
 
       <AnimatePresence mode="wait">
-        <motion.section
+        <m.section
           key={step}
           initial={{ opacity: 0, x: 12 }}
           animate={{ opacity: 1, x: 0 }}
@@ -416,7 +416,7 @@ export function PartnerRegistrationWizard({
               </p>
             </Fieldset>
           )}
-        </motion.section>
+        </m.section>
       </AnimatePresence>
 
       {formError && (
@@ -530,7 +530,7 @@ function Field({
       )}
       <AnimatePresence>
         {error && (
-          <motion.p
+          <m.p
             id={`${id}-error`}
             role="alert"
             initial={{ opacity: 0, height: 0 }}
@@ -540,7 +540,7 @@ function Field({
             className="mt-1.5 overflow-hidden text-[0.75rem] text-error-text"
           >
             {error}
-          </motion.p>
+          </m.p>
         )}
       </AnimatePresence>
     </div>

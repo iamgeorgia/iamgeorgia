@@ -1,6 +1,7 @@
 import { CookieNotice } from "@/components/layout/CookieNotice";
 import { Footer } from "@/components/layout/Footer";
 import { Header } from "@/components/layout/Header";
+import { MotionProvider } from "@/components/motion/MotionProvider";
 import { getI18n } from "@/lib/i18n/server";
 import { JsonLd, organizationSchema, webSiteSchema } from "@/lib/seo/jsonLd";
 
@@ -15,7 +16,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const { t, locale } = await getI18n();
 
   return (
-    <>
+    <MotionProvider>
       {/*
         Who publishes this site, once, on every public page. The admin panel and
         the driver app sit outside this group and get none of it, which is
@@ -34,6 +35,6 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       </main>
       <Footer />
       <CookieNotice />
-    </>
+    </MotionProvider>
   );
 }

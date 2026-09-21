@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ArrowRight, Briefcase, CalendarDays, Clock, Pencil, Users } from "lucide-react";
 import { useState } from "react";
 
@@ -119,7 +119,7 @@ export function TransferJourneyBar({
 
       <AnimatePresence initial={false}>
         {editing && (
-          <motion.div
+          <m.div
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
             animate={reduceMotion ? { opacity: 1 } : { opacity: 1, height: "auto" }}
             exit={reduceMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
@@ -135,7 +135,7 @@ export function TransferJourneyBar({
                 className="shadow-none"
               />
             </div>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, X } from "lucide-react";
 import { useEffect } from "react";
 
@@ -50,7 +50,7 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
+        <m.div
           id="mobile-navigation"
           className="fixed inset-0 z-90 flex flex-col bg-ink text-on-dark lg:hidden"
           initial={reduceMotion ? { opacity: 0 } : { opacity: 0, clipPath: "inset(0 0 100% 0)" }}
@@ -78,7 +78,7 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
               {primaryNavigation.map((item, index) => {
                 const Icon = item.icon;
                 return (
-                  <motion.li
+                  <m.li
                     key={item.key}
                     initial={reduceMotion ? false : { opacity: 0, y: 18 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -107,12 +107,12 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
                         aria-hidden
                       />
                     </Link>
-                  </motion.li>
+                  </m.li>
                 );
               })}
             </ul>
 
-            <motion.div
+            <m.div
               initial={reduceMotion ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 0.4, delay: 0.45 }}
@@ -140,9 +140,9 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
               >
                 {site.contact.email}
               </a>
-            </motion.div>
+            </m.div>
           </nav>
-        </motion.div>
+        </m.div>
       )}
     </AnimatePresence>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { useId, useState } from "react";
 
@@ -65,7 +65,7 @@ export function Accordion({ items, defaultOpen = 0, className }: AccordionProps)
 
             <AnimatePresence initial={false}>
               {isOpen && (
-                <motion.div
+                <m.div
                   id={panelId}
                   role="region"
                   aria-labelledby={buttonId}
@@ -76,7 +76,7 @@ export function Accordion({ items, defaultOpen = 0, className }: AccordionProps)
                   className="overflow-hidden"
                 >
                   <div className="pb-7 sm:ps-21">{item.content}</div>
-                </motion.div>
+                </m.div>
               )}
             </AnimatePresence>
           </div>

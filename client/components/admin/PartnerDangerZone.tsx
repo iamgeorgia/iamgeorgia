@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
@@ -78,7 +78,7 @@ export function PartnerDangerZone({ partner }: { partner: Partner }) {
         </button>
       ) : (
         <AnimatePresence initial={false}>
-          <motion.div
+          <m.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -145,7 +145,7 @@ export function PartnerDangerZone({ partner }: { partner: Partner }) {
                 </button>
               </div>
             </div>
-          </motion.div>
+          </m.div>
         </AnimatePresence>
       )}
 

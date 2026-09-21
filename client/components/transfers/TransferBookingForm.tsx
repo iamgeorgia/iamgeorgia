@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { AlertCircle, Info } from "lucide-react";
 import { useState } from "react";
 
@@ -459,7 +459,7 @@ function Field({
       )}
       <AnimatePresence>
         {error && (
-          <motion.p
+          <m.p
             id={`${id}-error`}
             role="alert"
             initial={{ opacity: 0, height: 0 }}
@@ -469,7 +469,7 @@ function Field({
             className="type-caption overflow-hidden text-error-text"
           >
             <span className="block pt-1.5">{error}</span>
-          </motion.p>
+          </m.p>
         )}
       </AnimatePresence>
     </div>

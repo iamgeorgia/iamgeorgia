@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
@@ -161,7 +161,7 @@ export function MediaGallery({ images, label, className, priority }: MediaGaller
 
       <AnimatePresence>
         {isOpen && (
-          <motion.div
+          <m.div
             role="dialog"
             aria-modal="true"
             aria-label={`${label} gallery`}
@@ -188,7 +188,7 @@ export function MediaGallery({ images, label, className, priority }: MediaGaller
 
             <div className="relative min-h-0 flex-1">
               <AnimatePresence mode="wait" initial={false}>
-                <motion.div
+                <m.div
                   key={lightboxIndex}
                   className="absolute inset-0 m-4 sm:m-8"
                   initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985 }}
@@ -203,7 +203,7 @@ export function MediaGallery({ images, label, className, priority }: MediaGaller
                     sizes="100vw"
                     className="object-contain"
                   />
-                </motion.div>
+                </m.div>
               </AnimatePresence>
 
               <button
@@ -227,7 +227,7 @@ export function MediaGallery({ images, label, className, priority }: MediaGaller
             <p className="type-caption shrink-0 px-5 py-5 text-center text-on-dark/60 sm:px-8">
               {images[lightboxIndex].alt}
             </p>
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, m } from "framer-motion";
 import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
 
@@ -28,7 +28,7 @@ export function NewsletterForm() {
     <div className="mt-6">
       <AnimatePresence mode="wait" initial={false}>
         {status === "done" ? (
-          <motion.p
+          <m.p
             key="done"
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
@@ -37,9 +37,9 @@ export function NewsletterForm() {
           >
             <Check size={16} className="text-accent-gold-on-dark" aria-hidden />
             {t.footer.newsletterThanks}
-          </motion.p>
+          </m.p>
         ) : (
-          <motion.form
+          <m.form
             key="form"
             initial={false}
             exit={{ opacity: 0 }}
@@ -70,7 +70,7 @@ export function NewsletterForm() {
             >
               <ArrowRight size={17} className="rtl:-scale-x-100" aria-hidden />
             </button>
-          </motion.form>
+          </m.form>
         )}
       </AnimatePresence>
 

@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 
+import { MotionProvider } from "@/components/motion/MotionProvider";
+
 export const metadata: Metadata = {
   title: {
     default: "Admin",
@@ -16,5 +18,7 @@ export const metadata: Metadata = {
  * can sit alongside it without the shell having to special-case a route.
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  // The panel's dialogs and disclosure panels animate; the engine behind them
+  // loads lazily, after the screen is usable.
+  return <MotionProvider>{children}</MotionProvider>;
 }

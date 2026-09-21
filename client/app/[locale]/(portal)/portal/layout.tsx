@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { MotionProvider } from "@/components/motion/MotionProvider";
 import { PortalShell } from "@/components/partners/PortalShell";
 import { getSession } from "@/lib/auth/session";
 
@@ -24,5 +25,9 @@ export const metadata: Metadata = {
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
 
-  return <PortalShell session={session}>{children}</PortalShell>;
+  return (
+    <MotionProvider>
+      <PortalShell session={session}>{children}</PortalShell>
+    </MotionProvider>
+  );
 }

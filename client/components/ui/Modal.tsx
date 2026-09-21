@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 
@@ -99,7 +99,7 @@ export function Modal({
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-100 flex items-end justify-center p-0 sm:items-center sm:p-6">
-          <motion.div
+          <m.div
             className="absolute inset-0 bg-ink/70 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -108,7 +108,7 @@ export function Modal({
             onClick={onClose}
             aria-hidden
           />
-          <motion.div
+          <m.div
             ref={panelRef}
             role="dialog"
             aria-modal="true"
@@ -146,7 +146,7 @@ export function Modal({
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-          </motion.div>
+          </m.div>
         </div>
       )}
     </AnimatePresence>
