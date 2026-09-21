@@ -8,10 +8,10 @@ import type { Session } from "@/types/auth";
 /**
  * Who the viewer is, from the browser.
  *
- * The public site is deliberately *not* session-aware on the server: calling
- * `cookies()` in the site layout would make every marketing page dynamic, and
- * the home page is currently static. So the one place the site needs to know
- * who is signed in — the link into the staff surfaces — asks after hydration
+ * The site layout is deliberately *not* session-aware on the server: reading
+ * `cookies()` there would put the session in front of every marketing page's
+ * shell, chrome included. So the one place the chrome needs to know who is
+ * signed in — the link into the staff surfaces — asks after hydration
  * instead, and renders a sensible signed-out default until the answer arrives.
  *
  * The promise is cached at module scope, so a page with several consumers, and

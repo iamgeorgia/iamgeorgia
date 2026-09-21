@@ -20,18 +20,17 @@ export default async function HotelDetailsPage({
   const { slug } = await params;
   const { path } = await getI18n();
 
-  let hotel;
-
-  try {
-    hotel = await getHotel(slug);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) notFound();
-    throw error;
-  }
-
   // The whole vocabulary: HOTEL-scoped and BOTH-scoped amenities. Room-only
-  // ones (a kitchenette, a workspace) belong on the rooms screen instead.
-  const { data: vocabulary } = await listAmenities({ scope: "HOTEL" });
+  // ones (a kitchenette, a workspace) belong on the rooms screen instead. It
+  // does not depend on the hotel, so both reads go out together.
+  const [hotel, { data: vocabulary }] = await Promise.all([
+    getHotel(slug).catch((error: unknown) => {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }),
+    listAmenities({ scope: "HOTEL" }),
+  ]);
+  if (!hotel) notFound();
 
   return (
     <AdminContainer>

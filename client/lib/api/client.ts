@@ -208,6 +208,20 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
 export const apiFetch = request;
 
 /**
+ * Options for a public read that may be served from Next's data cache.
+ *
+ * Only for endpoints whose answer does not depend on who is asking — the
+ * destination tree, transfer points and routes — and only through `apiFetch`,
+ * because a forwarded cookie would make one visitor's answer everyone's.
+ * The session-dependent catalogue (hotels, tours, packages, vehicles) must
+ * keep going through `serverFetch` with its default `no-store`.
+ */
+export const cachedFor = (seconds: number): RequestOptions => ({
+  cache: "force-cache",
+  next: { revalidate: seconds },
+});
+
+/**
  * Server-side call, forwarding the viewer's cookies.
  *
  * `next/headers` is imported lazily so this module stays importable from

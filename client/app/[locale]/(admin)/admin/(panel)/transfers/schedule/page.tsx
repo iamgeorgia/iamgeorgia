@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { ScheduleView } from "@/components/admin/ScheduleView";
+import { driverDisplayName, fleetVehicleLabel } from "@/lib/admin/fleet";
 import { listBlocks, listOccupancy } from "@/lib/api/dispatch";
 import { listDrivers } from "@/lib/api/drivers";
 import { listFleetVehicles } from "@/lib/api/fleet";
@@ -44,8 +45,8 @@ export default async function AdminSchedulePage({
 
       <div className="mt-8">
         <ScheduleView
-          drivers={drivers.data}
-          fleet={fleet.data}
+          drivers={drivers.data.map((driver) => ({ id: driver.id, label: driverDisplayName(driver) }))}
+          fleet={fleet.data.map((car) => ({ id: car.id, label: fleetVehicleLabel(car) }))}
           rows={occupancy.data}
           blocks={blocks.data}
           from={from}

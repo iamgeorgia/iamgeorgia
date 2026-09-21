@@ -20,16 +20,16 @@ export default async function TourOptionsPage({ params }: PageProps<"/[locale]/a
   const { slug } = await params;
   const { path } = await getI18n();
 
-  let tour;
-
-  try {
-    tour = await getTour(slug);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) notFound();
-    throw error;
-  }
-
-  const policies = await listTourCancellationPolicies();
+  // Independent reads, so they go out together; the 404 is decided once both
+  // are back rather than costing the policies a round trip of their own.
+  const [tour, policies] = await Promise.all([
+    getTour(slug).catch((error: unknown) => {
+      if (error instanceof ApiError && error.status === 404) return null;
+      throw error;
+    }),
+    listTourCancellationPolicies(),
+  ]);
+  if (!tour) notFound();
 
   return (
     <AdminContainer>

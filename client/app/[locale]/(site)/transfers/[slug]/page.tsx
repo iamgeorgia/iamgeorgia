@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { Briefcase, Check, Clock, Info, MapPin, Route, Users, X } from "lucide-react";
 
 import { MobileBookingBar } from "@/components/booking/MobileBookingBar";
@@ -48,14 +49,14 @@ import type { TransferOffer, TransferQuoteResult, TransferVehicle } from "@/type
  * because the endpoint will not return it, which is a stronger guarantee than
  * a flag checked here would be.
  */
-const loadVehicle = async (slug: string, locale: string): Promise<TransferVehicle | null> => {
+const loadVehicle = cache(async (slug: string, locale: string): Promise<TransferVehicle | null> => {
   try {
     return await getTransferVehicle(slug, locale);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
-};
+});
 
 export async function generateMetadata(
   props: PageProps<"/[locale]/transfers/[slug]">,

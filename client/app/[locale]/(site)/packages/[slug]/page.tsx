@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { BedDouble, CalendarRange, CarFront, Compass, ConciergeBell, Layers, MapPin, Moon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -42,14 +43,14 @@ const SLOT_ICONS: Record<PackageComponent["componentType"], LucideIcon> = {
  * for an anonymous visitor and a normal page for a signed-in partner. No
  * static params — the catalogue changes under this route.
  */
-const loadPackage = async (slug: string, locale: string): Promise<PackageDetail | null> => {
+const loadPackage = cache(async (slug: string, locale: string): Promise<PackageDetail | null> => {
   try {
     return await getPublicPackage(slug, { locale });
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
-};
+});
 
 /**
  * The trip priced for the party in the URL.

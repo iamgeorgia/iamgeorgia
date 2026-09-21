@@ -1,4 +1,4 @@
-import { apiFetch, serverFetch, type RequestOptions } from "./client";
+import { apiFetch, cachedFor, serverFetch, type RequestOptions } from "./client";
 import { toQueryString, type QueryValue } from "./query";
 import type { HotelAvailability, Offer, SearchResponse, StayQuery } from "@/types/booking";
 import type {
@@ -80,3 +80,11 @@ export const getPublicHotel = (slug: string, query: { locale?: string } = {}) =>
 
 export const getPublicDestinations = (query: Record<string, QueryValue> = {}) =>
   serverFetch<{ data: DestinationNode[] }>(`/api/destinations${toQueryString(query)}`);
+
+/**
+ * The same tree without the viewer's cookies, cached for ten minutes. The
+ * endpoint never looks at the session, so there is nothing to forward and no
+ * reason to ask the API on every page view.
+ */
+export const getPublicDestinationsCached = (query: Record<string, QueryValue> = {}) =>
+  apiFetch<{ data: DestinationNode[] }>(`/api/destinations${toQueryString(query)}`, cachedFor(600));

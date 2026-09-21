@@ -1,4 +1,4 @@
-import { apiFetch, serverFetch, type RequestOptions } from "./client";
+import { apiFetch, cachedFor, serverFetch, type RequestOptions } from "./client";
 import { toQueryString } from "./query";
 import type { AvailableDrivers } from "@/types/driver";
 import type { Paginated } from "@/types/partner";
@@ -76,6 +76,36 @@ export interface TransferRouteQuery {
 export const listTransferPoints = (
   query: { search?: string; kind?: TransferPointKind; popular?: boolean; locale?: string } = {},
 ) => serverFetch<{ data: TransferPoint[] }>(`/api/transfers/points${toQueryString(query)}`);
+
+/**
+ * Public reads that do not depend on the viewer, served from Next's data cache.
+ *
+ * The points list and the route catalogue are the same answer for an
+ * anonymous visitor and a signed-in partner (only an admin sees extra fields,
+ * and no public page reads those), so the landing pages ask without cookies
+ * and keep the answer for a while instead of a round trip per page view.
+ */
+const CATALOGUE_TTL = 600;
+
+export const listTransferPointsCached = (
+  query: { kind?: TransferPointKind; popular?: boolean; locale?: string } = {},
+) =>
+  apiFetch<{ data: TransferPoint[] }>(
+    `/api/transfers/points${toQueryString(query)}`,
+    cachedFor(CATALOGUE_TTL),
+  );
+
+export const listTransferRoutesCached = (query: TransferRouteQuery = {}) =>
+  apiFetch<Paginated<TransferRoute>>(
+    `/api/transfers/routes${toQueryString(query)}`,
+    cachedFor(CATALOGUE_TTL),
+  );
+
+export const getTransferRouteCached = (slug: string, locale?: string) =>
+  apiFetch<TransferRoute>(
+    `/api/transfers/routes/${slug}${toQueryString({ locale })}`,
+    cachedFor(CATALOGUE_TTL),
+  );
 
 /** The picker, called from the browser as the traveller types. */
 export const searchTransferPoints = (search: string, locale?: string) =>

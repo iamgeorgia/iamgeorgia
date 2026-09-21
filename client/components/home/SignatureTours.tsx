@@ -12,8 +12,9 @@ import type { TourSummary } from "@/types/tour";
 /**
  * The homepage's tour rail, from the live catalogue.
  *
- * Featured journeys first, topped up from the rest of the programme when
- * fewer than three are flagged. Guarded: the homepage must not fall over
+ * Featured journeys first, topped up from the rest of the programme: the API
+ * sorts featured tours to the front, so one page of three is the whole
+ * answer. Guarded: the homepage must not fall over
  * because one rail could not load — an empty rail simply renders nothing.
  *
  * `unstable_rethrow` first, because the catch must not swallow Next's own
@@ -27,14 +28,8 @@ export async function SignatureTours() {
   let tours: TourSummary[] = [];
 
   try {
-    const { data: featured } = await listPublicTours({ featured: true, locale, pageSize: 3 });
-    tours = featured;
-
-    if (tours.length < 3) {
-      const { data: rest } = await listPublicTours({ locale, pageSize: 6 });
-      const seen = new Set(tours.map((tour) => tour.id));
-      tours = [...tours, ...rest.filter((tour) => !seen.has(tour.id))].slice(0, 3);
-    }
+    const { data } = await listPublicTours({ locale, pageSize: 3 });
+    tours = data;
   } catch (error) {
     unstable_rethrow(error);
     console.error("Signature tours failed:", error);

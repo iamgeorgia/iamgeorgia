@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { cache } from "react";
 import { ArrowRight, Clock, MapPin, Route as RouteIcon } from "lucide-react";
 
 import { TransferSearch } from "@/components/transfers/TransferSearch";
@@ -11,8 +12,8 @@ import { Container } from "@/components/ui/Container";
 import { PageHero } from "@/components/ui/PageHero";
 import { ApiError } from "@/lib/api/client";
 import {
-  getTransferRoute,
-  listTransferPoints,
+  getTransferRouteCached,
+  listTransferPointsCached,
   listTransferRoutesForBuild,
 } from "@/lib/api/transfers";
 import { getI18n } from "@/lib/i18n/server";
@@ -29,15 +30,29 @@ import { emptyQuery, formatDuration, serializeTransferQuery } from "@/lib/transf
  * Gudauri transfer" is a thing people search for, and there are a few hundred
  * such pairs. Each gets a URL, translated copy and a price.
  *
- * Rendered on demand and cached for an hour, like every other detail page in
- * this tree. `generateStaticParams` names Tier 1 and Tier 2 so the build can
- * prerender them if the route tree ever allows it — today it does not, because
- * the locale is a root param resolved per request, and every `[slug]` page here
- * is dynamic for the same reason. Tier 3 is the long tail and would not be
- * worth prerendering regardless.
+ * Nothing here reads the session: the route and the point list are public and
+ * fetched without cookies, so the page is prerendered and revalidated on a
+ * timer rather than rendered per request. `generateStaticParams` names Tier 1
+ * and Tier 2 for the build; Tier 3 is the long tail, rendered on first visit
+ * and kept. The fetches themselves are cached for the same period in
+ * `lib/api/transfers.ts`, so the two figures should move together.
  */
-export const revalidate = 3600;
+export const revalidate = 600;
 export const dynamicParams = true;
+
+/**
+ * The route, or nothing. Memoised per request so `generateMetadata` and the
+ * page share one read — the fetch itself cannot be deduplicated because every
+ * call carries a timeout signal.
+ */
+const loadRoute = cache(async (slug: string, locale: string) => {
+  try {
+    return await getTransferRouteCached(slug, locale);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
+});
 
 export async function generateStaticParams() {
   try {
@@ -62,28 +77,25 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const [{ slug }, { t, locale, fill }] = await Promise.all([props.params, getI18n()]);
 
-  try {
-    const route = await getTransferRoute(slug, locale);
-    const title =
-      route.title ??
-      fill(t.transfers.routes.metaTitle, { from: route.from.name, to: route.to.name });
+  const route = await loadRoute(slug, locale);
+  if (!route) return { title: t.transfers.detail.notFound, robots: { index: false, follow: true } };
 
-    return pageMetadata({
-      path: `/transfers/routes/${slug}`,
-      title,
-      description:
-        route.summary ??
-        fill(t.transfers.routes.metaDescription, {
-          from: route.from.name,
-          to: route.to.name,
-          distance: String(route.distanceKm),
-        }),
-      image: route.heroImage,
-      imageAlt: title,
-    });
-  } catch {
-    return { title: t.transfers.detail.notFound, robots: { index: false, follow: true } };
-  }
+  const title =
+    route.title ?? fill(t.transfers.routes.metaTitle, { from: route.from.name, to: route.to.name });
+
+  return pageMetadata({
+    path: `/transfers/routes/${slug}`,
+    title,
+    description:
+      route.summary ??
+      fill(t.transfers.routes.metaDescription, {
+        from: route.from.name,
+        to: route.to.name,
+        distance: String(route.distanceKm),
+      }),
+    image: route.heroImage,
+    imageAlt: title,
+  });
 }
 
 export default async function TransferRoutePage(
@@ -94,16 +106,11 @@ export default async function TransferRoutePage(
     getI18n(),
   ]);
 
-  let route;
-
-  try {
-    route = await getTransferRoute(slug, locale);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) notFound();
-    throw error;
-  }
-
-  const { data: points } = await listTransferPoints({ popular: true, locale });
+  const [route, { data: points }] = await Promise.all([
+    loadRoute(slug, locale),
+    listTransferPointsCached({ popular: true, locale }),
+  ]);
+  if (!route) notFound();
 
   const query = {
     ...emptyQuery,

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import { Check, MapPin, Navigation } from "lucide-react";
 
 import { MobileBookingBar } from "@/components/booking/MobileBookingBar";
@@ -47,14 +47,14 @@ import type { HotelAvailability, Offer, StayQuery } from "@/types/booking";
  * on this page for an anonymous visitor and a normal page for a signed-in
  * partner. No static params — the catalogue changes under this route.
  */
-const loadHotel = async (slug: string) => {
+const loadHotel = cache(async (slug: string) => {
   try {
     return await getPublicHotel(slug);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
-};
+});
 
 /**
  * What can be sold here, on these dates, to this party.
@@ -253,7 +253,9 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
                 : null,
             // The rows the page renders, with the API's ISO dates rather than
             // the "March 2024" the component displays.
-            reviews: (api.reviews ?? []).map((review) => ({
+            // Capped: every review is already in the markup, and the JSON-LD
+            // would otherwise double the HTML for a well-reviewed property.
+            reviews: (api.reviews ?? []).slice(0, 10).map((review) => ({
               author: review.author,
               datePublished: review.date,
               score: review.score,

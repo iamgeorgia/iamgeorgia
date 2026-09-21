@@ -5,6 +5,7 @@ import { MapPin } from "lucide-react";
 
 import { Reveal, RevealGroup, RevealItem } from "@/components/motion/Reveal";
 import { Container } from "@/components/ui/Container";
+import { CardSkeleton, Skeleton } from "@/components/ui/Skeleton";
 import { Stars } from "@/components/ui/Rating";
 import { SectionHeading } from "@/components/ui/SectionHeading";
 import { listPublicHotels } from "@/lib/api/search";
@@ -18,13 +19,12 @@ const LIMIT = 4;
 /**
  * The homepage's hotel rail, from the live catalogue.
  *
- * Featured properties first, topped up from the rest of the catalogue when
- * fewer than four are flagged — the same shape as `SignatureTours`. The API
- * already sorts featured properties to the front, so one page of four is
- * usually all it takes; the second call only runs when the featured set is
- * short. Guarded: a rail that cannot load renders nothing rather than a
- * fixture, because a card that links to a property which does not exist is
- * worse than no card.
+ * Featured properties first, topped up from the rest of the catalogue — the
+ * same shape as `SignatureTours`. The API sorts featured properties to the
+ * front unconditionally, so one page of four is the whole answer: no second
+ * call, no waterfall. Guarded: a rail that cannot load renders nothing rather
+ * than a fixture, because a card that links to a property which does not
+ * exist is worse than no card.
  *
  * `unstable_rethrow` first, so the catch never swallows Next's own
  * dynamic-usage signal (the session cookie is read inside `serverFetch`).
@@ -35,18 +35,8 @@ export async function FeaturedHotels() {
   let hotels: HotelSummary[] = [];
 
   try {
-    const { data: featured } = await listPublicHotels({
-      featured: true,
-      locale,
-      pageSize: LIMIT,
-    });
-    hotels = featured;
-
-    if (hotels.length < LIMIT) {
-      const { data: rest } = await listPublicHotels({ locale, pageSize: LIMIT * 2 });
-      const seen = new Set(hotels.map((hotel) => hotel.id));
-      hotels = [...hotels, ...rest.filter((hotel) => !seen.has(hotel.id))].slice(0, LIMIT);
-    }
+    const { data } = await listPublicHotels({ locale, pageSize: LIMIT });
+    hotels = data;
   } catch (error) {
     unstable_rethrow(error);
     console.error("Featured hotels failed:", error);
@@ -129,6 +119,25 @@ export async function FeaturedHotels() {
             );
           })}
         </RevealGroup>
+      </Container>
+    </section>
+  );
+}
+
+/** The rail's silhouette while the catalogue answers, so the hero ships first. */
+export function FeaturedHotelsFallback() {
+  return (
+    <section className="bg-surface-earth py-16 sm:py-24 lg:py-32">
+      <Container>
+        <Skeleton className="h-3 w-28" />
+        <Skeleton className="mt-5 h-10 w-2/3 max-w-lg" />
+        <Skeleton className="mt-4 h-3 w-1/2 max-w-md" />
+
+        <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: LIMIT }, (_, index) => (
+            <CardSkeleton key={index} />
+          ))}
+        </div>
       </Container>
     </section>
   );

@@ -12,7 +12,11 @@ import { SectionHeading } from "@/components/ui/SectionHeading";
 import { plural } from "@/lib/i18n/plural";
 import { getI18n } from "@/lib/i18n/server";
 import { pageMetadata } from "@/lib/seo/metadata";
-import { listTransferPoints, listTransferRoutes, listTransferVehicles } from "@/lib/api/transfers";
+import {
+  listTransferPointsCached,
+  listTransferRoutesCached,
+  listTransferVehicles,
+} from "@/lib/api/transfers";
 import { emptyQuery, formatDuration, serializeTransferQuery } from "@/lib/transfers/query";
 import { formatMoney } from "@/lib/money";
 
@@ -36,16 +40,19 @@ export async function generateMetadata(): Promise<Metadata> {
  *
  * The whole page is one render because all three reads are independent; running
  * them in sequence would be three round trips for one screen.
+ *
+ * The route and point lists are cached per call (`lib/api/transfers.ts`); the
+ * vehicle list is channel-aware and read fresh. A segment-level `revalidate`
+ * would do nothing here — the vehicle read forwards cookies.
  */
-export const revalidate = 300;
 
 export default async function TransfersPage() {
   const { t, path, locale, intlLocale, fill } = await getI18n();
 
   const [routeList, vehicleList, pointList] = await Promise.all([
-    listTransferRoutes({ tier: "TIER_1", locale, pageSize: 6 }),
+    listTransferRoutesCached({ tier: "TIER_1", locale, pageSize: 6 }),
     listTransferVehicles({ locale }),
-    listTransferPoints({ popular: true, locale }),
+    listTransferPointsCached({ popular: true, locale }),
   ]);
 
   const sampleQuery = { ...emptyQuery, adults: 2, children: 0, luggage: 2 };

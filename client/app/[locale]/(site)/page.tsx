@@ -3,7 +3,7 @@ import { Suspense } from "react";
 
 import { CTASection } from "@/components/home/CTASection";
 import { CultureStory } from "@/components/home/CultureStory";
-import { FeaturedHotels } from "@/components/home/FeaturedHotels";
+import { FeaturedHotels, FeaturedHotelsFallback } from "@/components/home/FeaturedHotels";
 import { Hero } from "@/components/home/Hero";
 import { SignatureTours, SignatureToursFallback } from "@/components/home/SignatureTours";
 import { Statement } from "@/components/home/Statement";
@@ -33,12 +33,12 @@ export async function generateMetadata(): Promise<Metadata> {
  * keeps a long homepage from feeling like a template. The page sells only what
  * the platform sells — hotels, tours and transfers.
  *
- * `SignatureTours` is the one section that reads the API, and it reads it
- * through the session cookie — so this page renders on demand. Without a
- * boundary around it the whole document, hero included, waits on that call
- * before a single byte is flushed, which puts an API round-trip in front of
- * the LCP element. Behind Suspense the hero ships immediately and the rail
- * streams in after it.
+ * `SignatureTours` and `FeaturedHotels` read the API, and read it through the
+ * session cookie — so this page renders on demand. Without a boundary around
+ * each of them the whole document, hero included, waits on those calls before
+ * a single byte is flushed, which puts an API round-trip in front of the LCP
+ * element. Behind Suspense the hero ships immediately and the rails stream in
+ * after it.
  */
 export default function HomePage() {
   return (
@@ -49,7 +49,9 @@ export default function HomePage() {
         <SignatureTours />
       </Suspense>
       <CultureStory />
-      <FeaturedHotels />
+      <Suspense fallback={<FeaturedHotelsFallback />}>
+        <FeaturedHotels />
+      </Suspense>
       <WhyIamGeorgia />
       <CTASection />
     </>

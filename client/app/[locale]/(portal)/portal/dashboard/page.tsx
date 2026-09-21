@@ -59,32 +59,33 @@ export default async function PortalDashboardPage() {
   // Guarded, because this list is the secondary panel: the dashboard above is
   // the page, and a partner should still see their numbers when the bookings
   // query is the one thing that fell over. Null renders as "could not load".
-  let recent: Paginated<BookingSummary> | null = null;
-
-  try {
-    recent = await listPartnerBookings({ pageSize: 5 });
-  } catch (error) {
-    console.error("Portal recent bookings failed:", error);
-  }
-
-  /**
-   * Orders, counted off their own register: the dashboard endpoint predates
-   * them and knows only about stays. Two queries for two totals is cheaper
-   * than a second shape on the server, and a failure shows a dash rather than
-   * taking the page down — the same treatment the list below gets.
-   */
-  let orders: { total: number; awaiting: number } | null = null;
-
-  try {
-    const [all, awaiting] = await Promise.all([
+  //
+  // Orders are counted off their own register: the dashboard endpoint predates
+  // them and knows only about stays. Two queries for two totals is cheaper
+  // than a second shape on the server, and a failure shows a dash rather than
+  // taking the page down — the same treatment the list gets.
+  //
+  // The three reads are independent of each other, so they go out together;
+  // each keeps its own fallback so one failing does not blank the others.
+  const [recent, orders] = await Promise.all([
+    listPartnerBookings({ pageSize: 5 }).catch((error: unknown): Paginated<BookingSummary> | null => {
+      console.error("Portal recent bookings failed:", error);
+      return null;
+    }),
+    Promise.all([
       listPartnerOrders({ pageSize: 1 }),
       listPartnerOrders({ status: "PENDING_CONFIRMATION", pageSize: 1 }),
-    ]);
-
-    orders = { total: all.total, awaiting: awaiting.total };
-  } catch (error) {
-    console.error("Portal order counts failed:", error);
-  }
+    ]).then(
+      ([all, awaiting]): { total: number; awaiting: number } | null => ({
+        total: all.total,
+        awaiting: awaiting.total,
+      }),
+      (error: unknown) => {
+        console.error("Portal order counts failed:", error);
+        return null;
+      },
+    ),
+  ]);
 
   return (
     <Container className="py-12 sm:py-16">

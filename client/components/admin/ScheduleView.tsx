@@ -9,8 +9,13 @@ import { FormError, SelectInput, SubmitButton, TextArea, TextInput } from "./For
 import { describeError } from "@/lib/api/client";
 import { createBlock, deleteBlock } from "@/lib/api/dispatch";
 import { blockReasonLabels, formatPickup } from "@/lib/admin/dispatch";
-import { driverDisplayName, fleetVehicleLabel } from "@/lib/admin/fleet";
-import type { BlockReason, DriverAdmin, FleetVehicleAdmin, OccupancyRow, ResourceBlock } from "@/types/driver";
+import type { BlockReason, OccupancyRow, ResourceBlock } from "@/types/driver";
+
+/** One entry of the resource picker — the page labels it; this only lists it. */
+interface ResourceOption {
+  id: string;
+  label: string;
+}
 
 /**
  * A driver's or a car's diary for a window: every job and every block, from
@@ -28,8 +33,8 @@ export function ScheduleView({
   driverId,
   fleetVehicleId,
 }: {
-  drivers: DriverAdmin[];
-  fleet: FleetVehicleAdmin[];
+  drivers: ResourceOption[];
+  fleet: ResourceOption[];
   rows: OccupancyRow[];
   blocks: ResourceBlock[];
   from: string;
@@ -122,14 +127,14 @@ export function ScheduleView({
               <optgroup label="Drivers">
                 {drivers.map((driver) => (
                   <option key={driver.id} value={`driver:${driver.id}`}>
-                    {driverDisplayName(driver)}
+                    {driver.label}
                   </option>
                 ))}
               </optgroup>
               <optgroup label="Cars">
                 {fleet.map((car) => (
                   <option key={car.id} value={`vehicle:${car.id}`}>
-                    {fleetVehicleLabel(car)}
+                    {car.label}
                   </option>
                 ))}
               </optgroup>

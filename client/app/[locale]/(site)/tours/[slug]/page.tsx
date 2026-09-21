@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, cache } from "react";
 import { Check, Clock, Gauge, MapPin, Minus, Users } from "lucide-react";
 
 import { MobileBookingBar } from "@/components/booking/MobileBookingBar";
@@ -44,14 +44,14 @@ const NATURE_CATEGORIES = new Set<TourCategory>(["nature", "adventure"]);
  * prerendered shell would bake a gated tour's content into the HTML before
  * the gate ever ran.
  */
-const loadTour = async (slug: string, locale: string): Promise<Tour | null> => {
+const loadTour = cache(async (slug: string, locale: string): Promise<Tour | null> => {
   try {
     return await getPublicTour(slug, { locale });
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
   }
-};
+});
 
 /**
  * Every departure in the two weeks from the chosen date, priced for the party.

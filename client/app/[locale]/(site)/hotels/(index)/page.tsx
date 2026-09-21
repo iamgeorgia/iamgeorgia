@@ -7,7 +7,7 @@ import { HotelExplorer } from "@/components/hotels/HotelExplorer";
 import { Container } from "@/components/ui/Container";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageHero } from "@/components/ui/PageHero";
-import { listPublicHotels, getPublicDestinations, searchHotels } from "@/lib/api/search";
+import { listPublicHotels, getPublicDestinationsCached, searchHotels } from "@/lib/api/search";
 import { stayWindowIssue } from "@/lib/booking/errors";
 import { adaptHotelSummary } from "@/lib/site/hotelAdapter";
 import { nightsBetween, stayFromParams, stayToParams } from "@/lib/booking/stay";
@@ -77,7 +77,7 @@ export default async function HotelsPage(props: PageProps<"/[locale]/hotels">) {
    * destination list down with it.
    */
   const [{ data: destinationTree }, search, catalogue] = await Promise.all([
-    getPublicDestinations(),
+    getPublicDestinationsCached(),
     stay
       ? searchHotels({ ...stayToParams(stay), destinationSlug, locale, pageSize: 24 }).then(
           (page) => ({ page, issue: null }),
