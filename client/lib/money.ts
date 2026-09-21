@@ -10,6 +10,8 @@
  * divisor is looked up rather than assumed to be 100.
  */
 
+import { numberFormat } from "./intl";
+
 const ZERO_DECIMAL = new Set(["JPY", "KRW", "VND", "CLP", "ISK", "UGX", "XOF", "XAF"]);
 
 const minorUnits = (currency: string) => (ZERO_DECIMAL.has(currency.toUpperCase()) ? 1 : 100);
@@ -23,11 +25,9 @@ export function formatMoney(
 ): string {
   const divisor = minorUnits(currency);
 
-  return new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-    ...options,
-  }).format(amountCents / divisor);
+  return numberFormat(locale, { style: "currency", currency, ...options }).format(
+    amountCents / divisor,
+  );
 }
 
 /** No decimals — for dashboard tiles and chart axes where they are noise. */

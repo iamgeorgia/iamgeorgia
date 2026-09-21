@@ -1,3 +1,5 @@
+import { numberFormat } from "./intl";
+
 /** Small, dependency-free helpers shared across components. */
 
 /** Joins conditional class names. Deliberately tiny — no runtime class merging. */
@@ -22,11 +24,9 @@ export function formatPrice(
   // pretending two currencies coexist on one site.
   currency = "GEL",
 ): string {
-  return new Intl.NumberFormat(intlLocale, {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return numberFormat(intlLocale, { style: "currency", currency, maximumFractionDigits: 0 }).format(
+    amount,
+  );
 }
 
 /** Turns a 10-point guest score into the wording travellers expect. */

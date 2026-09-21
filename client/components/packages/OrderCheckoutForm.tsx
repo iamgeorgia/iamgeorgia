@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { AlertCircle, Clock, Info, Minus, Plus, Timer } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { OrderCheckoutSummary } from "./OrderCheckoutSummary";
+import { HoldCountdown } from "@/components/booking/HoldCountdown";
 import { MobileCheckoutSummary } from "@/components/booking/MobileCheckoutSummary";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -26,13 +27,6 @@ import type { OrderPriceChangedDetails, OrderTraveller, OrderUnavailableDetails 
 import { cn } from "@/lib/utils";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** mm:ss, and never negative — an expired hold has its own panel. */
-const countdown = (msLeft: number): string => {
-  const total = Math.max(0, Math.floor(msLeft / 1000));
-
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
-};
 
 /**
  * The details, and the button that commits four bookings at once.
@@ -60,7 +54,11 @@ export function OrderCheckoutForm() {
   const draft = stored.draft;
   const hydrated = stored.ready;
 
-  const [now, setNow] = useState(() => Date.now());
+  // Set once, by the countdown, when the hold lapses; the synchronous check
+  // covers a draft that was already stale when the page loaded, so the
+  // expired panel shows on the first render rather than a frame later.
+  const [lapsed, setLapsed] = useState(false);
+  const [openedAt] = useState(() => Date.now());
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -80,15 +78,7 @@ export function OrderCheckoutForm() {
   const [fallbackKey] = useState(newIdempotencyKey);
 
   const expiresAt = draft?.holdExpiresAt ? Date.parse(draft.holdExpiresAt) : null;
-  const expired = expiresAt !== null && expiresAt <= now;
-
-  useEffect(() => {
-    if (expiresAt === null || expired) return;
-
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-
-    return () => window.clearInterval(id);
-  }, [expiresAt, expired]);
+  const expired = lapsed || (expiresAt !== null && expiresAt <= openedAt);
 
   const backHref = draft ? path(`/packages/${draft.packageSlug}`) : path("/packages");
 
@@ -335,7 +325,11 @@ export function OrderCheckoutForm() {
               <span>
                 {t.orders.checkout.heldNotice} ·{" "}
                 <span className="font-medium tabular-nums">
-                  {fill(t.booking.checkout.expiresIn, { time: countdown(expiresAt - now) })}
+                  <HoldCountdown
+                    expiresAt={expiresAt}
+                    template={t.booking.checkout.expiresIn}
+                    onExpire={() => setLapsed(true)}
+                  />
                 </span>
               </span>
             </p>

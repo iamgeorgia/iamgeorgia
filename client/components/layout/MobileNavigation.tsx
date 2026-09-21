@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ArrowUpRight, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useEffectEvent } from "react";
 
 import { AccountNavRow } from "./AccountNav";
 import { LanguageMenuRow } from "./LanguageMenu";
@@ -27,10 +27,14 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
   const { t } = useI18n();
   const path = useLocalePath();
 
+  // `onClose` is an inline arrow from the header, so as a dependency it would
+  // re-run both effects on every header render; as an effect event it is
+  // always the latest one and never a reason to run.
+  const close = useEffectEvent(() => onClose());
+
   // Close on navigation so the menu never survives a route change.
   useEffect(() => {
-    onClose();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    close();
   }, [pathname]);
 
   useEffect(() => {
@@ -38,14 +42,14 @@ export function MobileNavigation({ open, onClose }: MobileNavigationProps) {
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") close();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.body.style.overflow = overflow;
       document.removeEventListener("keydown", onKeyDown);
     };
-  }, [open, onClose]);
+  }, [open]);
 
   return (
     <AnimatePresence>

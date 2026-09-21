@@ -1,5 +1,3 @@
-"use client";
-
 import Image from "next/image";
 import Link from "next/link";
 import { MapPin, ShieldCheck, Utensils } from "lucide-react";
@@ -10,7 +8,7 @@ import { ScoreBadge, Stars } from "@/components/ui/Rating";
 import { stayQueryString } from "@/lib/booking/stay";
 import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
-import { useI18n, useLocalePath } from "@/lib/i18n/provider";
+import { getI18n } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
 import type { SearchResult, StayQuery } from "@/types/booking";
 import { cn } from "@/lib/utils";
@@ -35,9 +33,10 @@ interface StayResultCardProps {
  * The stay travels on every link out of here, so choosing a property never
  * loses the dates the traveller has already given us.
  */
-export function StayResultCard({ result, stay, nights, eager }: StayResultCardProps) {
-  const { t, locale, intlLocale } = useI18n();
-  const path = useLocalePath();
+export async function StayResultCard({ result, stay, nights, eager }: StayResultCardProps) {
+  // A Server Component: the card is only ever rendered by the search page,
+  // and it has nothing to do in the browser.
+  const { t, locale, intlLocale, path } = await getI18n();
 
   const href = path(`/hotels/${result.slug}${stayQueryString(stay)}`);
   const { startingFrom } = result;

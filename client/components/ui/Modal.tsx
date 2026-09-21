@@ -2,7 +2,7 @@
 
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useEffectEvent, useRef } from "react";
 
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
@@ -46,31 +46,34 @@ export function Modal({
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const reduceMotion = useReducedMotion();
 
-  const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab" || !panelRef.current) return;
+  // An effect event rather than a dependency: every caller passes an inline
+  // `onClose`, and with it in the effect's dependencies the whole open/close
+  // routine — scroll lock, focus move, and the focus *return* in the cleanup —
+  // re-ran on every parent render while the dialog was open. Toggling a
+  // filter inside the filters dialog sent focus back to the opener and then
+  // into the dialog again on each click.
+  const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab" || !panelRef.current) return;
 
-      const focusable = Array.from(
-        panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE),
-      ).filter((element) => element.offsetParent !== null);
-      if (focusable.length === 0) return;
+    const focusable = Array.from(
+      panelRef.current.querySelectorAll<HTMLElement>(FOCUSABLE),
+    ).filter((element) => element.offsetParent !== null);
+    if (focusable.length === 0) return;
 
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    },
-    [onClose],
-  );
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -78,6 +81,7 @@ export function Modal({
     returnFocusRef.current = document.activeElement as HTMLElement | null;
     const { overflow } = document.body.style;
     document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => onKeyDown(event);
     document.addEventListener("keydown", handleKeyDown);
 
     // Move focus into the dialog once it has mounted.
@@ -93,7 +97,7 @@ export function Modal({
       document.body.style.overflow = overflow;
       returnFocusRef.current?.focus();
     };
-  }, [open, handleKeyDown]);
+  }, [open]);
 
   return (
     <AnimatePresence>

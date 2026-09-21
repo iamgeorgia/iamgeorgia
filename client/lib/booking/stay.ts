@@ -1,4 +1,5 @@
 import type { StayQuery } from "@/types/booking";
+import { dateTimeFormat } from "@/lib/intl";
 
 /**
  * The stay a visitor is shopping for: dates, party, room count.
@@ -175,7 +176,7 @@ export const formatNightDate = (dateOnly: string, intlLocale = "en-GB"): string 
 /** An actual instant — a hold expiry, a cancellation deadline. */
 export const formatInstant = (value: string | null | undefined, intlLocale = "en-GB"): string =>
   value
-    ? new Intl.DateTimeFormat(intlLocale, {
+    ? dateTimeFormat(intlLocale, {
         day: "numeric",
         month: "short",
         year: "numeric",

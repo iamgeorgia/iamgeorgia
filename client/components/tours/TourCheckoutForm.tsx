@@ -2,9 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, Clock, Info, Minus, Plus, ShieldCheck, Timer } from "lucide-react";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { TourCheckoutSummary } from "./TourCheckoutSummary";
+import { HoldCountdown } from "@/components/booking/HoldCountdown";
 import { MobileCheckoutSummary } from "@/components/booking/MobileCheckoutSummary";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -33,13 +34,6 @@ interface TourCheckoutFormProps {
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** mm:ss, and never negative — an expired hold has its own panel. */
-const countdown = (msLeft: number): string => {
-  const total = Math.max(0, Math.floor(msLeft / 1000));
-
-  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
-};
-
 /**
  * Traveller details, and the button that commits the seats.
  *
@@ -66,7 +60,11 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
   const draft = stored.draft?.holdToken === holdToken ? stored.draft : null;
   const hydrated = stored.ready;
 
-  const [now, setNow] = useState(() => Date.now());
+  // Set once, by the countdown, when the hold lapses; the synchronous check
+  // covers a draft that was already stale when the page loaded, so the
+  // expired panel shows on the first render rather than a frame later.
+  const [lapsed, setLapsed] = useState(false);
+  const [openedAt] = useState(() => Date.now());
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -83,17 +81,9 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
   const [fallbackKey] = useState(newIdempotencyKey);
 
   const expiresAt = draft ? Date.parse(draft.hold.expiresAt) : null;
-  const expired = expiresAt !== null && expiresAt <= now;
+  const expired = lapsed || (expiresAt !== null && expiresAt <= openedAt);
   const onRequest =
     (draft?.hold.confirmationMode ?? draft?.option.confirmationMode) === "ON_REQUEST";
-
-  useEffect(() => {
-    if (expiresAt === null || expired) return;
-
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-
-    return () => window.clearInterval(id);
-  }, [expiresAt, expired]);
 
   const backHref = draft ? path(`/tours/${draft.tourSlug}`) : path("/tours");
 
@@ -275,7 +265,11 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
               <span>
                 {t.tours.checkout.heldNotice} ·{" "}
                 <span className="font-medium tabular-nums">
-                  {fill(t.booking.checkout.expiresIn, { time: countdown(expiresAt - now) })}
+                  <HoldCountdown
+                    expiresAt={expiresAt}
+                    template={t.booking.checkout.expiresIn}
+                    onExpire={() => setLapsed(true)}
+                  />
                 </span>
               </span>
             </p>

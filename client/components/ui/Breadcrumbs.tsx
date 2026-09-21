@@ -1,9 +1,7 @@
-"use client";
-
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
-import { useI18n } from "@/lib/i18n/provider";
+import { getI18n } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
 export interface Crumb {
@@ -17,8 +15,12 @@ interface BreadcrumbsProps {
   className?: string;
 }
 
-export function Breadcrumbs({ items, tone = "dark", className }: BreadcrumbsProps) {
-  const { t } = useI18n();
+/**
+ * A Server Component: it has no state and every importer is a server page or
+ * layout, so it renders once on the server and ships no JavaScript.
+ */
+export async function Breadcrumbs({ items, tone = "dark", className }: BreadcrumbsProps) {
+  const { t } = await getI18n();
 
   return (
     <nav aria-label={t.a11y.breadcrumb} className={className}>

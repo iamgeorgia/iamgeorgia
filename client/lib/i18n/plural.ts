@@ -1,4 +1,5 @@
 import { localeMeta, type Locale } from "./config";
+import { numberFormat } from "@/lib/intl";
 
 /**
  * Plural selection.
@@ -64,6 +65,6 @@ export function pluralForm(locale: Locale, count: number, forms: PluralForms): s
  * 1,240 in English and 1 240 in Russian.
  */
 export function plural(locale: Locale, count: number, forms: PluralForms): string {
-  const value = new Intl.NumberFormat(localeMeta[locale].intlLocale).format(count);
+  const value = numberFormat(localeMeta[locale].intlLocale).format(count);
   return `${value} ${pluralForm(locale, count, forms)}`;
 }
