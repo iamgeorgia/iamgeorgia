@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@vercel/speed-insights": "^2.0.0",
     "framer-motion": "^13.1.0",
     "leaflet": "^1.9.4",
     "lucide-react": "^1.31.0",

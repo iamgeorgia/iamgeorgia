@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter, Noto_Sans_Georgian, Noto_Sans_Hebrew } from "next/font/google";
 import { notFound } from "next/navigation";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import "../globals.css";
 import { site } from "@/constants/site";
@@ -139,6 +140,7 @@ export default async function RootLayout(props: LayoutProps<"/[locale]">) {
       */}
       <body className="flex min-h-full flex-col">
         <LocaleProvider locale={locale}>{props.children}</LocaleProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
