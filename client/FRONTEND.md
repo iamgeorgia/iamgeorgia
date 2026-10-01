@@ -24,6 +24,7 @@ Everything changed on the front end, why it changed, and what is still outstandi
 12. [Packages and orders went live](#12-packages-and-orders-went-live)
 13. [Responsive audit](#13-responsive-audit)
 14. [SEO, sharing and public URLs](#14-seo-sharing-and-public-urls)
+15. [Admin help and tutorials](#15-admin-help-and-tutorials)
 
 ---
 
@@ -866,6 +867,84 @@ trees at all four prefixes.
 - **Dedicated per-entity preview cards** (name over the cover photograph via
   `ImageResponse`) would sharpen previews for entities without a photograph;
   the vehicle classes are the only such case today and get the brand card.
+
+---
+
+## 15. Admin help and tutorials
+
+The panel had grown to sixty-four screens and explained none of them beyond
+a panel subtitle and the odd form hint; a new administrator needed a
+developer beside them. The manual now lives inside the panel, documents only
+what exists, and is checked against the page tree in CI.
+
+### The shape
+
+- **Content is data, not markup.** `lib/admin/help/articles/<area>/<name>.ts`
+  each export one `HelpArticle` — a list of typed blocks (paragraph, heading,
+  steps, list, callout, table, definitions, where, links) rendered by one
+  component, `components/admin/help/HelpBlocks.tsx`. Inline markup is limited
+  to `**bold**` for a control's label and `` `code` `` for a status or a URL;
+  `HelpInline.tsx` interprets those two forms and nothing else. No markdown
+  library, no MDX, no sanitiser to get wrong.
+- **Fourteen areas, eighty-one articles**, in `lib/admin/help/categories.ts`
+  and the folders beside it. `index.ts` assembles the registry and filters it
+  by the two audiences: `SUPER_ADMIN`/`ADMIN` read as `ADMIN`, `DISPATCHER`
+  sees only what their sidebar reaches. An article a role may not read
+  answers not-found, matching the 403 its screen would give.
+- **Routes → articles.** Each article lists the screens it is the help for,
+  in the page tree's own bracket form (`/admin/hotels/[slug]/rooms`), with an
+  optional `#section`. `routes.ts` resolves a canonical path (locale stripped,
+  as the sidebar does) to the most specific claim.
+- **Three surfaces.** The hub at `/admin/help` (search, the role's Quick
+  Start, the areas, "read before you click"), an area page, and an article
+  page at reading width. Sidebar entry: a final `Support` group, `ops: true`
+  so a dispatcher keeps it.
+- **A Help button on every screen**, rendered by `AdminPageHeader` itself
+  rather than by sixty-four pages. It imports the registry on click, never
+  with the screen, resolves the article for the path and opens it in
+  `ui/Modal` scrolled to the mapped section, with "Open as a page". A page can
+  name its article (`help="ht-kosher"`) or opt out (`help={false}`). The
+  viewer's role reaches it through `AdminViewerContext`, set once in the shell.
+- **Quick Start** on the Overview (administrators) and on the dispatch board
+  (dispatchers, whose Overview redirects). Ticks and dismissal live in
+  `localStorage` through `useSyncExternalStore`, the cookie-notice pattern;
+  the hub keeps an un-dismissable copy.
+
+### What keeps it honest
+
+`test/help-registry.test.ts` runs under plain Node (`npm test`, no runner
+installed): ids unique and prefixed by area, every `related` id resolves to
+something the reader may open, every route section is a heading in its
+article, no two articles claim one screen, every `where` path names a real
+sidebar group and entry — and every `page.tsx` under `(panel)` resolves to an
+article or is listed in `HELP_ROUTE_EXEMPTIONS`. A new screen without help
+fails CI. `scripts/ts-resolve-hook.mjs` lets Node find `./types` and `@/…`
+the way the bundler does; the help data tree therefore uses `import type`
+and relative imports only, and no `enum`.
+
+### Deliberately not built
+
+- Guided spotlight tours: no popover primitive exists, and every panel screen
+  re-renders on `router.refresh()` after a mutation, which would unmount a
+  tour mid-step. "Where" chips and numbered steps carry the same information.
+- Screenshots: they go stale with every UI change. The `figure` block is
+  reserved in the schema and rendered as nothing, so a capture pipeline can
+  land later without a content migration.
+- Localised help: the panel is English, so the manual is.
+- Server-side onboarding state: no preferences table exists; per-browser is
+  fine for a first-visit card.
+
+### What the audit turned up, and left alone
+
+Writing the manual meant reading every screen, and the articles say plainly
+where a control acts without asking: the dispatch **Mark as…** select, the
+**Confirm** buttons on requirements, order parts and tour requests, package
+**Archive** and **Delete**, **Remove block**, blackout **Reopen**, the bulk
+pricer's **Overwrite**. `rf-dangerous-actions` is the consolidated list. A
+shared confirmation dialog on `ui/Modal` replacing those and the remaining
+`window.confirm`/`window.prompt` calls is the obvious next piece of work; the
+manual's wording changes from "fires immediately" to "asks first" when it
+lands.
 
 ---
 

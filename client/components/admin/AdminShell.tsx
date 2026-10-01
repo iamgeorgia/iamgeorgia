@@ -5,6 +5,7 @@ import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 
 import { AdminSidebar } from "./AdminSidebar";
+import { AdminViewerProvider } from "./AdminViewerContext";
 import { NavigationProgressBar, NavigationProgressProvider } from "./NavigationProgress";
 import { signOut } from "@/lib/api/partners";
 import { NO_BADGES } from "@/lib/api/admin";
@@ -258,7 +259,7 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
           </header>
 
           <main id="admin-main" className="min-w-0 flex-1">
-            {children}
+            <AdminViewerProvider user={user}>{children}</AdminViewerProvider>
           </main>
         </div>
       </div>

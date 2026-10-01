@@ -3,9 +3,12 @@ import { CalendarClock, UserPlus, Users } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { DispatchBoard } from "@/components/admin/DispatchBoard";
+import { QuickStartCard } from "@/components/admin/help/QuickStartCard";
 import { StatCard } from "@/components/admin/StatCard";
 import { listDispatchLegs } from "@/lib/api/dispatch";
+import { getSession } from "@/lib/auth/session";
 import { dispatchQueryFromParams } from "@/lib/admin/dispatch";
+import { quickStartFor } from "@/lib/admin/help";
 
 export const metadata: Metadata = { title: "Dispatch" };
 
@@ -22,10 +25,11 @@ export default async function AdminDispatchPage({
   const params = await searchParams;
   const query = dispatchQueryFromParams(params);
 
-  const [result, unassigned, offered] = await Promise.all([
+  const [result, unassigned, offered, session] = await Promise.all([
     listDispatchLegs(query),
     listDispatchLegs({ from: query.from, to: query.to, legStatus: "UNASSIGNED", pageSize: 1 }),
     listDispatchLegs({ from: query.from, to: query.to, legStatus: "ASSIGNED", pageSize: 1 }),
+    getSession(),
   ]);
 
   return (
@@ -34,6 +38,14 @@ export default async function AdminDispatchPage({
         title="Dispatch"
         description="Every leg, who is on it, and what happens next. Narrow by date, status or search."
       />
+
+      {/* This is a dispatcher's landing screen — the overview redirects them
+          here — so their first-visit checklist lives here rather than there. */}
+      {session?.user.role === "DISPATCHER" && (
+        <div className="mt-8">
+          <QuickStartCard role="DISPATCHER" steps={quickStartFor("DISPATCHER")} dismissable />
+        </div>
+      )}
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard label={query.from || query.to ? "Legs in window" : "Legs"} value={String(result.total)} icon={CalendarClock} />

@@ -2,7 +2,8 @@
 
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { X } from "lucide-react";
-import { useEffect, useEffectEvent, useRef } from "react";
+import { useEffect, useEffectEvent, useRef, useSyncExternalStore } from "react";
+import { createPortal } from "react-dom";
 
 import { useI18n } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
@@ -28,9 +29,18 @@ const sizes = {
 const FOCUSABLE =
   'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])';
 
+const noSubscription = () => () => {};
+
 /**
  * Accessible dialog: labelled, focus-trapped, Escape to dismiss, scroll-locked,
  * and it returns focus to whatever opened it.
+ *
+ * Rendered into `document.body` through a portal, not where the caller sits.
+ * Inline, `z-100` only ranked the dialog inside whatever stacking context
+ * held its opener: a map's panes and controls (the Google map's stack a few
+ * hundred deep, as the Leaflet map's before it) sat above it, and a wheel
+ * over the backdrop scrolled the nearest scrolling
+ * ancestor instead of stopping at the scroll-locked body.
  */
 export function Modal({
   open,
@@ -45,6 +55,9 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const reduceMotion = useReducedMotion();
+  // False during the server render and hydration, true after: the portal
+  // needs `document`, and a dialog is never open on first paint anyway.
+  const mounted = useSyncExternalStore(noSubscription, () => true, () => false);
 
   // An effect event rather than a dependency: every caller passes an inline
   // `onClose`, and with it in the effect's dependencies the whole open/close
@@ -99,7 +112,9 @@ export function Modal({
     };
   }, [open]);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <AnimatePresence>
       {open && (
         <div className="fixed inset-0 z-100 flex items-end justify-center p-0 sm:items-center sm:p-6">
@@ -131,7 +146,7 @@ export function Modal({
             <div
               className={cn(
                 "flex items-start justify-between gap-4 px-6 pt-6",
-                hideTitle && "absolute end-0 top-0 z-10 pe-4 pt-4",
+                hideTitle && "absolute end-0 top-0 z-20 pe-3 pt-3 sm:pe-5 sm:pt-4",
               )}
             >
               {!hideTitle && <h2 className="type-h3 pe-4">{title}</h2>}
@@ -139,20 +154,16 @@ export function Modal({
                 type="button"
                 onClick={onClose}
                 aria-label={t.a11y.closeDialog}
-                className={cn(
-                  "flex size-9 shrink-0 items-center justify-center rounded-full transition-colors",
-                  hideTitle
-                    ? "bg-ink/60 text-on-dark hover:bg-ink/80"
-                    : "text-muted hover:bg-surface-soft hover:text-ink",
-                )}
+                className="flex size-9 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-soft hover:text-ink"
               >
                 <X size={18} aria-hidden />
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">{children}</div>
           </m.div>
         </div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body,
   );
 }

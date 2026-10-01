@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 
+import { ContextualHelpButton } from "@/components/admin/help/ContextualHelpButton";
 import { cn } from "@/lib/utils";
 
 /**
@@ -65,16 +66,28 @@ export function AdminBreadcrumbs({ items }: { items: AdminCrumb[] }) {
   );
 }
 
+/**
+ * The title row of every screen.
+ *
+ * It also carries the screen's Help button, automatically: the manual maps
+ * articles to routes, so the button can find its own page from the address
+ * and no screen has to remember to render one. A screen whose address is
+ * not enough names its article with `help`; the manual's own pages pass
+ * `false`, since a Help button on the manual would open the manual.
+ */
 export function AdminPageHeader({
   title,
   description,
   actions,
+  help,
   className,
 }: {
   title: string;
   description?: string;
   /** Primary and secondary buttons for the screen. */
   actions?: React.ReactNode;
+  /** An article id to open instead of the one mapped to the route, or `false` for no button. */
+  help?: string | false;
   className?: string;
 }) {
   return (
@@ -94,7 +107,12 @@ export function AdminPageHeader({
           </p>
         )}
       </div>
-      {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      {(actions || help !== false) && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {actions}
+          {help !== false && <ContextualHelpButton articleId={help || undefined} />}
+        </div>
+      )}
     </div>
   );
 }

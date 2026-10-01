@@ -38,6 +38,9 @@ jobs:
       # checkout cannot find them.
       - run: npm run typecheck
       - run: npm run lint
+      # The help registry against the page tree: a screen with no help
+      # article fails here. Plain Node, no test runner to install.
+      - run: npm test
       - run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:5000

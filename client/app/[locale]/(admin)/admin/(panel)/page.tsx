@@ -4,7 +4,9 @@ import { ArrowRight, CalendarCheck, CheckCircle2, Handshake, Wallet } from "luci
 
 import { AdminContainer, AdminPageHeader, AdminPanel } from "@/components/admin/AdminPage";
 import { Cell, DataTable, EmptyRow, Row } from "@/components/admin/DataTable";
+import { QuickStartCard } from "@/components/admin/help/QuickStartCard";
 import { StatCard } from "@/components/admin/StatCard";
+import { quickStartFor } from "@/lib/admin/help";
 import { BookingStatusBadge, PartnerStatusBadge } from "@/components/admin/StatusBadge";
 import { listPartners } from "@/lib/api/partners";
 import { getSession } from "@/lib/auth/session";
@@ -62,6 +64,12 @@ export default async function AdminOverviewPage() {
         title={`Good morning, ${session?.user.firstName ?? "there"}`}
         description="What is live, what is arriving, and what needs a decision."
       />
+
+      {/* The first-visit checklist. Dismissable, and remembered per browser;
+          the help hub keeps an un-dismissable copy. */}
+      <div className="mt-8">
+        <QuickStartCard role="ADMIN" steps={quickStartFor("ADMIN")} dismissable />
+      </div>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard

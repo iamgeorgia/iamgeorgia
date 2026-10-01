@@ -6,6 +6,7 @@ import {
   CalendarRange,
   Car,
   CarFront,
+  CircleHelp,
   Coins,
   Compass,
   ConciergeBell,
@@ -239,6 +240,13 @@ export const adminNavigation: AdminNavGroup[] = [
         badgeKey: "pendingPartners",
       },
     ],
+  },
+  {
+    // Last, and small: the manual is reached far less often than any queue,
+    // but it must be reachable by everyone, so the item is `ops` and a
+    // dispatcher's sidebar keeps it.
+    title: "Support",
+    entries: [{ label: "Help & tutorials", href: "/admin/help", icon: CircleHelp, ops: true }],
   },
 ];
 
