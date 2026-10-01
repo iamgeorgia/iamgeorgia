@@ -10,26 +10,13 @@ import {
     timezoneField
 } from './normalize.js';
 import { SUPPORTED_LOCALES } from '../lib/locales.js';
-import { galleryImageSchema, attractionSchema, travelInfoSchema } from './domain.js';
+import { galleryImageSchema, attractionSchema, placeRefSchema, travelInfoSchema } from './domain.js';
+import { withCoordinatePair } from './location.js';
 
 const DESTINATION_TYPES = ['COUNTRY', 'REGION', 'CITY', 'RESORT'];
 
 export const idParamSchema = z.object({ id: z.string().min(1) });
 export const slugParamSchema = z.object({ slug: slugField });
-
-/**
- * Coordinates are a pair or nothing.
- *
- * The database says the same thing in a CHECK constraint, but a 400 naming the
- * field is a better answer than a 409 quoting a constraint name, and the two
- * agreeing is the point — the constraint is there for writers that never went
- * through a route.
- */
-const withCoordinatePair = (schema) =>
-    schema.refine(
-        (value) => (value.latitude === undefined) === (value.longitude === undefined),
-        { message: 'Provide both latitude and longitude, or neither', path: ['latitude'] }
-    );
 
 const editorialFields = {
     tagline: textField(200).nullish(),
@@ -54,8 +41,11 @@ const baseFields = {
     // Inherited from the parent when omitted, so only a root really needs it.
     countryCode: countryField.optional(),
     timezone: timezoneField.optional(),
-    latitude: latitudeField.optional(),
-    longitude: longitudeField.optional(),
+    // Nullable, so an update can take a destination off the map again. The
+    // pair rule (see withCoordinatePair) treats null exactly like absent.
+    latitude: latitudeField.nullish(),
+    longitude: longitudeField.nullish(),
+    place: placeRefSchema.nullish(),
     ...editorialFields
 };
 

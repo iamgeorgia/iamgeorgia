@@ -1,4 +1,5 @@
 import type { BookingSummary, LeadGuest } from "./booking";
+import type { PlacedLocation } from "./geo";
 import type { PackageComponentType } from "./package";
 import type { ServiceBookingSummary } from "./service";
 import type { TourBookingSummary } from "./tour";
@@ -151,6 +152,8 @@ export interface ConfirmOrderInput {
   requests?: OrderRequestInput[];
   flightNumber?: string;
   pickupAddress?: string;
+  /** The searched pick-up door for the order's transfer, when there is one. */
+  pickupPlace?: PlacedLocation;
   preferredDriverId?: string;
   preferredFleetVehicleId?: string;
   source?: "web" | "partner" | "admin";

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 import { countryField, emailField, nameField, phoneField, textField } from './normalize.js';
 import { dateOnlyField } from './ratePlan.js';
+import { placedLocationSchema } from './domain.js';
 
 const ORDER_STATUSES = ['PENDING_CONFIRMATION', 'CONFIRMED', 'PARTIALLY_CANCELLED', 'CANCELLED', 'COMPLETED'];
 const TRAVELLER_TYPES = ['ADULT', 'CHILD', 'INFANT'];
@@ -51,6 +52,7 @@ export const confirmOrderSchema = z
         requests: z.array(z.object({ code: z.string().trim().min(1).max(60), note: textField(500).nullish() }).strict()).max(20).optional(),
         flightNumber: textField(20).optional(),
         pickupAddress: textField(300).optional(),
+        pickupPlace: placedLocationSchema.optional(),
         preferredDriverId: z.string().min(1).optional(),
         preferredFleetVehicleId: z.string().min(1).optional(),
         source: z.enum(['web', 'partner', 'admin']).default('web'),

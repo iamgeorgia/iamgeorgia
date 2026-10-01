@@ -20,7 +20,12 @@ RUN npm ci
 # --- build -------------------------------------------------------------------
 FROM deps AS build
 ARG NEXT_PUBLIC_API_URL
+# Optional: without a key the location screens fall back to typed coordinates.
+ARG NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
+ARG NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
+    NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=${NEXT_PUBLIC_GOOGLE_MAPS_API_KEY} \
+    NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID=${NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID} \
     NEXT_TELEMETRY_DISABLED=1
 COPY . .
 RUN npm run build

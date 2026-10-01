@@ -77,6 +77,10 @@ export default async function AdminTransferPointPage({
                 { label: "Status", value: point.status ?? "ACTIVE" },
                 { label: "Time zone", value: point.timezone },
                 {
+                  label: "Address",
+                  value: point.place?.formattedAddress ?? point.place?.name ?? "Pin placed by hand",
+                },
+                {
                   label: "Coordinates",
                   value: `${point.latitude.toFixed(4)}, ${point.longitude.toFixed(4)}`,
                 },

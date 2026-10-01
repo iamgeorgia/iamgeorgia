@@ -681,6 +681,12 @@ model Destination {
   /// columns it is derived from.
   geo Unsupported("geography(Point, 4326)")?
 
+  /// PlaceRef — what Google Places said about this position when it was
+  /// chosen: place id, formatted address, city, country. Read whole and never
+  /// queried; null for a pin placed by hand or before place search existed.
+  /// The coordinates above stay the source of truth for everything geographic.
+  place Json?
+
   /// IANA, e.g. `Asia/Tbilisi`. Hotels inherit this unless they override it,
   /// and it is what turns a cancellation deadline into an absolute instant.
   timezone String @default("Asia/Tbilisi")
@@ -755,6 +761,9 @@ model Hotel {
   latitude  Float?
   longitude Float?
   geo       Unsupported("geography(Point, 4326)")?
+  /// PlaceRef, as on Destination. `address` stays the operator's own wording
+  /// of the door; this is what the place search returned.
+  place     Json?
 
   /// Wall-clock times at the property, `HH:MM`. Deliberately not timestamps:
   /// "check-in from 14:00" is a local fact, not an instant.
@@ -3745,6 +3754,10 @@ model TransferPoint {
   /// geographic query is raw SQL.
   geo Unsupported("geography(Point, 4326)")?
 
+  /// PlaceRef, as on Destination. Its place id is what stops the same airport
+  /// being registered twice under two slugs.
+  place Json?
+
   /// IANA. A pick-up time is a wall clock reading at the pick-up point, and
   /// this is what turns it into an instant — which is what a cancellation
   /// deadline and a driver roster both need.
@@ -4120,6 +4133,11 @@ model TransferBooking {
   /// what the driver needs and what the traveller can supply.
   pickupAddress   String? @map("pickup_address")
   dropoffAddress  String? @map("dropoff_address")
+  /// The same doors as a searched place — coordinates plus a PlaceRef — when
+  /// the traveller picked one. What a driver navigates to; the text above is
+  /// what they read. Null for bookings made before place search existed.
+  pickupPlace     Json?   @map("pickup_place")
+  dropoffPlace    Json?   @map("dropoff_place")
   specialRequests String? @map("special_requests")
 
   /// The journey and the vehicle as they were sold. A voucher printed next

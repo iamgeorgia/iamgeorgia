@@ -92,6 +92,46 @@ export const nearbyPlaceSchema = z.object({
     walkingMinutes: z.number().int().min(0).max(600).optional()
 });
 
+/**
+ * What Google Places said about a position when somebody chose it.
+ *
+ * Stored beside `latitude`/`longitude` on destinations, hotels and pick-up
+ * points, never instead of them: the coordinates remain what pricing, sunset
+ * times and the PostGIS trigger read. This is display data — an address in
+ * place of a pair of numbers — plus the place id, which is the one field
+ * anything looks at again (a second point registered for the same airport).
+ *
+ * Every field but the id is nullable because Google does not promise any of
+ * them: a trailhead has no city, and a country border post may have no
+ * formatted address. Mirrors `PlaceRef` in client/types/geo.ts.
+ */
+export const placeRefSchema = z
+    .object({
+        placeId: z.string().trim().min(1).max(300),
+        name: z.string().trim().max(300).nullable(),
+        formattedAddress: z.string().trim().max(300).nullable(),
+        city: z.string().trim().max(120).nullable(),
+        region: z.string().trim().max(120).nullable(),
+        countryCode: z.string().trim().toUpperCase().length(2).nullable(),
+        /// Google's place types, e.g. `airport`, `lodging`. Kept so the panel
+        /// can suggest a point kind; never trusted for anything else.
+        types: z.array(z.string().trim().min(1).max(60)).max(20)
+    })
+    .strict();
+
+/**
+ * A searched door on a booking: where it is, plus what it is called. The
+ * coordinates are required here, unlike on a catalogue row, because a place
+ * without a position is nothing a driver can navigate to.
+ */
+export const placedLocationSchema = z
+    .object({
+        latitude: z.number().min(-90).max(90),
+        longitude: z.number().min(-180).max(180),
+        place: placeRefSchema.nullable()
+    })
+    .strict();
+
 export const expectationStepSchema = z.object({
     title: z.string().min(1),
     description: z.string().min(1)
@@ -140,12 +180,14 @@ export const jsonFieldSchemas = {
         // Nullable, not optional: the extension skips `undefined` but does
         // validate an explicit null, and a destination can exist before anyone
         // has written its editorial travel notes.
-        travelInfo: travelInfoSchema.nullable()
+        travelInfo: travelInfoSchema.nullable(),
+        place: placeRefSchema.nullable()
     },
     Hotel: {
         categoryScores: z.array(reviewCategoryScoreSchema),
         policies: hotelPoliciesSchema,
         nearby: z.array(nearbyPlaceSchema),
+        place: placeRefSchema.nullable(),
         // Whatever the availability provider needs to identify this property
         // upstream. Shapeless by nature — one channel manager's identifiers are
         // not another's — so it is constrained to an object and no further.
@@ -186,6 +228,13 @@ export const jsonFieldSchemas = {
     },
     KosherPackageProfile: {
         extraRestDays: z.array(restDaySchema)
+    },
+    TransferPoint: {
+        place: placeRefSchema.nullable()
+    },
+    TransferBooking: {
+        pickupPlace: placedLocationSchema.nullable(),
+        dropoffPlace: placedLocationSchema.nullable()
     },
     Order: {
         packageSnapshot: openObjectSchema

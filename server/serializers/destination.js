@@ -31,6 +31,7 @@ export const toDestinationSummary = (destination, locale) => {
         timezone: value.timezone,
         latitude: value.latitude ?? null,
         longitude: value.longitude ?? null,
+        place: value.place ?? null,
         coverImage: value.coverImage ?? null,
         featured: value.featured,
         ...(value._count ? { hotelCount: value._count.hotels ?? 0, childCount: value._count.children ?? 0 } : {})

@@ -12,6 +12,7 @@ import {
     makeHotel,
     makePartner,
     makePartnerUser,
+    placeRef,
     signIn,
     unique
 } from './support/factories.js';
@@ -273,6 +274,19 @@ describe('destinations', { skip: dbAvailable ? false : 'Postgres is not reachabl
             assert.match(response.body.error.message, /Invalid request body/);
         });
 
+        it('rejects a place with no position to attach it to', async () => {
+            const response = await post({
+                slug: unique('placeless'),
+                name: 'Placeless',
+                type: 'COUNTRY',
+                countryCode: 'GE',
+                place: placeRef()
+            });
+
+            assert.equal(response.status, 400);
+            assert.equal(response.body.error.details[0].path[0], 'place');
+        });
+
         it('rejects a time zone the runtime cannot resolve', async () => {
             const response = await post({
                 slug: unique('tz'),
@@ -380,6 +394,42 @@ describe('destinations', { skip: dbAvailable ? false : 'Postgres is not reachabl
             assert.equal(response.body.latitude, 41.7497);
             assert.equal(response.body.longitude, 43.5322);
             assert.equal(response.body.geo, undefined);
+        });
+
+        it('keeps what the place search said beside the coordinates, and drops it with the pin', async () => {
+            const place = placeRef({ name: 'Kazbegi', types: ['locality', 'political'] });
+            const created = await post({
+                slug: unique('placed'),
+                name: 'Kazbegi',
+                type: 'COUNTRY',
+                countryCode: 'GE',
+                latitude: 42.6569,
+                longitude: 44.6427,
+                place
+            });
+
+            assert.equal(created.status, 201);
+            assert.deepEqual(created.body.place, place);
+
+            const shown = await request(app).get(`/api/destinations/${created.body.slug}`);
+            assert.equal(shown.body.place.placeId, place.placeId, 'the public read carries the address too');
+
+            // Taking the pin off the map: the coordinates go, the PostGIS
+            // point goes with them, and so does the address that described
+            // the position that no longer exists.
+            const cleared = await request(app)
+                .patch(`/api/admin/destinations/${created.body.id}`)
+                .set('Cookie', adminCookie)
+                .send({ latitude: null, longitude: null });
+
+            assert.equal(cleared.status, 200);
+            assert.equal(cleared.body.latitude, null);
+            assert.equal(cleared.body.place, null);
+
+            const [row] = await prisma.$queryRaw`
+                SELECT geo IS NULL AS empty FROM destinations WHERE id = ${created.body.id}
+            `;
+            assert.equal(row.empty, true);
         });
     });
 });

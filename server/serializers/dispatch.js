@@ -52,6 +52,10 @@ const toPassengerBlock = (booking) => ({
     flightNumber: booking.flightNumber ?? null,
     pickupAddress: booking.pickupAddress ?? null,
     dropoffAddress: booking.dropoffAddress ?? null,
+    // Coordinates for the driver's navigation app; the text above is what
+    // they read out to the passenger.
+    pickupPlace: booking.pickupPlace ?? null,
+    dropoffPlace: booking.dropoffPlace ?? null,
     specialRequests: booking.specialRequests ?? null,
     vehicleClassName: booking.vehicleSnapshot?.name ?? booking.vehicle?.name ?? null,
     extras: (booking.extras ?? []).map((extra) => ({ code: extra.code, name: extra.name, quantity: extra.quantity }))

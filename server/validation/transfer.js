@@ -12,6 +12,7 @@ import {
     timezoneField
 } from './normalize.js';
 import { dateOnlyField } from './ratePlan.js';
+import { placedLocationSchema, placeRefSchema } from './domain.js';
 import { SUPPORTED_LOCALES } from '../lib/locales.js';
 
 /**
@@ -191,6 +192,11 @@ export const confirmTransferSchema = z
         flightNumber: z.string().trim().min(2).max(16).optional(),
         pickupAddress: textField(300).optional(),
         dropoffAddress: textField(300).optional(),
+        // The same doors as a searched place, when the traveller picked one
+        // rather than typing. Optional: "Terminal 1, arrivals" is still a
+        // perfectly good pick-up address.
+        pickupPlace: placedLocationSchema.optional(),
+        dropoffPlace: placedLocationSchema.optional(),
         specialRequests: textField(1000).optional(),
 
         source: z.enum(['web', 'partner', 'admin']).default('web'),
@@ -236,6 +242,8 @@ export const amendTransferSchema = z
         flightNumber: z.string().trim().min(2).max(16).nullish(),
         pickupAddress: textField(300).nullish(),
         dropoffAddress: textField(300).nullish(),
+        pickupPlace: placedLocationSchema.nullish(),
+        dropoffPlace: placedLocationSchema.nullish(),
         specialRequests: textField(1000).nullish(),
         email: emailField.optional()
     })
@@ -270,6 +278,11 @@ export const createPointSchema = z
         destinationId: z.string().min(1).max(64).nullish(),
         latitude: latitudeField,
         longitude: longitudeField,
+        // What the place search said. Nullish rather than required because a
+        // point placed by clicking the map has none, and that is still a
+        // point. Never optional *instead of* the coordinates: a point without
+        // a position cannot be priced against.
+        place: placeRefSchema.nullish(),
         timezone: timezoneField.optional(),
         popular: z.boolean().optional(),
         image: z.string().trim().max(500).nullish()

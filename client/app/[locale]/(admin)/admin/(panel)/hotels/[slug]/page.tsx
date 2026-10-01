@@ -113,7 +113,9 @@ export default async function AdminHotelPage({
       icon: MapPin,
       title: "Location",
       description:
-        hotel.latitude !== null ? (hotel.address ?? "On the map, no address") : "Not placed on the map yet",
+        hotel.latitude !== null
+          ? (hotel.address ?? hotel.place?.formattedAddress ?? "On the map, no address")
+          : "Not placed on the map yet",
     },
     {
       // Always present, unlike the panel it leads to. An operator has to be

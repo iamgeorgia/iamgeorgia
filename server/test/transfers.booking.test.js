@@ -14,6 +14,7 @@ import {
     makeTransferPrice,
     makeTransferRoute,
     makeTransferVehicle,
+    placeRef,
     signIn,
     unique
 } from './support/factories.js';
@@ -109,7 +110,8 @@ describe('transfer bookings', { skip: dbAvailable ? false : 'Postgres is not rea
                 quoteToken: offer.token,
                 leadPassenger: passenger,
                 flightNumber: 'TK378',
-                pickupAddress: 'Terminal 1, arrivals'
+                pickupAddress: 'Terminal 1, arrivals',
+                pickupPlace: { latitude: 41.6692, longitude: 44.9547, place: placeRef() }
             });
 
         assert.equal(res.status, 201);
@@ -117,6 +119,11 @@ describe('transfer bookings', { skip: dbAvailable ? false : 'Postgres is not rea
         assert.equal(res.body.status, 'CONFIRMED');
         assert.equal(res.body.totalCents, offer.quote.totals.sellCents);
         assert.equal(res.body.legs.length, 1);
+        // The searched door travels with the booking: it is what a driver
+        // navigates to, where the address text is what they read.
+        assert.equal(res.body.pickupPlace.latitude, 41.6692);
+        assert.equal(res.body.pickupPlace.place.city, 'Tbilisi');
+        assert.equal(res.body.dropoffPlace, null);
 
         // The snapshot, not the live route: this is what a voucher reads.
         assert.equal(res.body.route.fromName, 'Test Airport');
@@ -255,12 +262,20 @@ describe('transfer bookings', { skip: dbAvailable ? false : 'Postgres is not rea
             .send({
                 email: passenger.email,
                 flightNumber: 'TK379',
-                pickupAddress: 'Terminal 2, arrivals'
+                pickupAddress: 'Terminal 2, arrivals',
+                dropoffPlace: { latitude: 42.4781, longitude: 44.4783, place: null }
             });
 
         assert.equal(amended.status, 200);
         assert.equal(amended.body.flightNumber, 'TK379');
         assert.equal(amended.body.totalCents, totalCents, 'nothing priced moved');
+        assert.equal(amended.body.dropoffPlace.longitude, 44.4783, 'a pin dropped by hand is still a door');
+
+        const placeless = await request(app)
+            .patch(`/api/transfers/bookings/${reference}`)
+            .send({ email: passenger.email, dropoffPlace: { place: placeRef() } });
+
+        assert.equal(placeless.status, 400, 'a door with no position is nothing to drive to');
 
         const priced = await request(app)
             .patch(`/api/transfers/bookings/${reference}`)

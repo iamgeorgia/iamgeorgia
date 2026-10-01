@@ -1,4 +1,5 @@
 import type { ImageAsset } from "./catalogue";
+import type { PlacedLocation } from "./geo";
 import type {
   TransferAssignmentStatus,
   TransferLegDirection,
@@ -247,6 +248,9 @@ export interface PassengerBlock {
   flightNumber: string | null;
   pickupAddress: string | null;
   dropoffAddress: string | null;
+  /** Coordinates for the navigation app; the text above is what to read out. */
+  pickupPlace: PlacedLocation | null;
+  dropoffPlace: PlacedLocation | null;
   specialRequests: string | null;
   vehicleClassName: string | null;
   extras: Array<{ code: string; name: string; quantity: number }>;

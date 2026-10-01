@@ -18,6 +18,7 @@
  * compute fares from coordinates; it now asks and is told. A price the browser
  * computes is a price the browser can change.
  */
+import type { PlaceRef, PlacedLocation } from "./geo";
 
 export type TransferPointKind = "AIRPORT" | "CITY" | "RESORT" | "HOTEL" | "LANDMARK" | "STATION";
 
@@ -76,6 +77,8 @@ export interface TransferPoint {
   region: string;
   latitude: number;
   longitude: number;
+  /** What the place search said when the pin was set; null for a pin placed by hand. */
+  place: PlaceRef | null;
   /** IANA. A pick-up time is a wall clock reading here. */
   timezone: string;
   /** Surfaced first in the picker before the traveller types anything. */
@@ -389,6 +392,9 @@ export interface TransferBooking extends TransferBookingSummary {
   flightNumber: string | null;
   pickupAddress: string | null;
   dropoffAddress: string | null;
+  /** The searched doors, when the traveller picked them: what a driver navigates to. */
+  pickupPlace: PlacedLocation | null;
+  dropoffPlace: PlacedLocation | null;
   specialRequests: string | null;
   cancellation: {
     freeUntil: string | null;
@@ -419,6 +425,8 @@ export interface ConfirmTransferInput {
   flightNumber?: string;
   pickupAddress?: string;
   dropoffAddress?: string;
+  pickupPlace?: PlacedLocation;
+  dropoffPlace?: PlacedLocation;
   specialRequests?: string;
   idempotencyKey?: string;
   /**
@@ -441,6 +449,8 @@ export interface AmendTransferInput {
   flightNumber?: string | null;
   pickupAddress?: string | null;
   dropoffAddress?: string | null;
+  pickupPlace?: PlacedLocation | null;
+  dropoffPlace?: PlacedLocation | null;
   specialRequests?: string | null;
   email?: string;
 }

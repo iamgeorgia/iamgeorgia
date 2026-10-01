@@ -100,6 +100,14 @@ export default async function AdminDestinationPage({
                 },
                 { label: "Country", value: destination.countryCode },
                 { label: "Time zone", value: destination.timezone },
+                ...(destination.place
+                  ? [
+                      {
+                        label: "Address",
+                        value: destination.place.formattedAddress ?? destination.place.name ?? "—",
+                      },
+                    ]
+                  : []),
                 {
                   label: "Coordinates",
                   value:

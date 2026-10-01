@@ -5,22 +5,23 @@ import { useState } from "react";
 
 import {
   CheckboxField,
-  Field,
   FormError,
-  NumberInput,
   SelectInput,
   SubmitButton,
   TextInput,
 } from "./FormControls";
-import { TransferPointMap } from "./TransferPointMap";
+import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
+import { LocationField } from "@/components/geo/LocationField";
 import { ApiError, describeError } from "@/lib/api/client";
 import {
   createTransferPoint,
   updateTransferPoint,
   type TransferPointInput,
 } from "@/lib/api/transfers";
+import { isPlaced, locationOf, suggestPointKind } from "@/lib/geo/place";
 import { pointKindOptions, slugify, timezoneOptions } from "@/lib/admin/transfers";
 import { useLocalePath } from "@/lib/i18n/provider";
+import { EMPTY_LOCATION, type LocationValue } from "@/types/geo";
 import type { TransferPoint, TransferPointKind } from "@/types/transfer";
 
 /**
@@ -35,17 +36,21 @@ import type { TransferPoint, TransferPointKind } from "@/types/transfer";
  * left alone entirely. It is part of a URL that has already been linked to,
  * and quietly renaming it from a form that looks like a copy editor is how a
  * live page turns into a 404.
+ *
+ * The position comes from the place search, and a searched place fills in
+ * what it can — the name, the region, whether it is an airport — but only
+ * into fields still standing empty. An operator who has typed "TBS Arrivals"
+ * did not ask to have it replaced with what Google calls the terminal.
  */
 
-/** The form's own shape: every field a string, as the inputs hold them. */
+/** The form's own shape: every text field a string, as the inputs hold them. */
 interface Values {
   slug: string;
   name: string;
   kind: TransferPointKind;
   iataCode: string;
   regionLabel: string;
-  latitude: string;
-  longitude: string;
+  location: LocationValue;
   timezone: string;
   popular: boolean;
 }
@@ -56,15 +61,20 @@ const initial = (point?: TransferPoint): Values => ({
   kind: point?.kind ?? "CITY",
   iataCode: point?.code ?? "",
   regionLabel: point?.region ?? "",
-  // `toFixed(6)` rather than `String()`: six decimals is roughly 10cm, and a
-  // round-trip through the form should not lengthen the number it was given.
-  latitude: point ? point.latitude.toFixed(6) : "",
-  longitude: point ? point.longitude.toFixed(6) : "",
+  location: point ? locationOf(point) : EMPTY_LOCATION,
   timezone: point?.timezone ?? "Asia/Tbilisi",
   popular: point?.popular ?? false,
 });
 
 export function TransferPointForm({ point }: { point?: TransferPoint }) {
+  return (
+    <GoogleMapsProvider>
+      <PointForm point={point} />
+    </GoogleMapsProvider>
+  );
+}
+
+function PointForm({ point }: { point?: TransferPoint }) {
   const router = useRouter();
   const path = useLocalePath();
 
@@ -72,6 +82,9 @@ export function TransferPointForm({ point }: { point?: TransferPoint }) {
 
   const [values, setValues] = useState<Values>(() => initial(point));
   const [slugTouched, setSlugTouched] = useState(editing);
+  // Until it is edited by hand, the kind may follow what a searched place
+  // says it is. Once chosen it stays chosen.
+  const [kindTouched, setKindTouched] = useState(editing);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,10 +95,7 @@ export function TransferPointForm({ point }: { point?: TransferPoint }) {
     setSaved(false);
   };
 
-  const latitude = Number.parseFloat(values.latitude);
-  const longitude = Number.parseFloat(values.longitude);
-  const placed = Number.isFinite(latitude) && Number.isFinite(longitude);
-
+  const placed = isPlaced(values.location);
   const isAirport = values.kind === "AIRPORT";
 
   const ready =
@@ -96,6 +106,8 @@ export function TransferPointForm({ point }: { point?: TransferPoint }) {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!isPlaced(values.location)) return;
+
     setBusy(true);
     setError(null);
     setFieldErrors({});
@@ -116,8 +128,9 @@ export function TransferPointForm({ point }: { point?: TransferPoint }) {
       name: values.name.trim(),
       kind: values.kind,
       regionLabel: values.regionLabel.trim(),
-      latitude,
-      longitude,
+      latitude: values.location.latitude,
+      longitude: values.location.longitude,
+      place: values.location.place,
       timezone: values.timezone,
       popular: values.popular,
       // Only airports carry one, and the field is `.optional()` rather than
@@ -195,7 +208,10 @@ export function TransferPointForm({ point }: { point?: TransferPoint }) {
               id="point-kind"
               label="Kind"
               value={values.kind}
-              onChange={(event) => set("kind", event.target.value as TransferPointKind)}
+              onChange={(event) => {
+                setKindTouched(true);
+                set("kind", event.target.value as TransferPointKind);
+              }}
               options={pointKindOptions}
               error={fieldErrors.kind}
             />
@@ -244,45 +260,34 @@ export function TransferPointForm({ point }: { point?: TransferPoint }) {
         </div>
 
         <div className="space-y-5">
-          <Field
+          <LocationField
             label="Where it is"
-            error={fieldErrors.latitude ?? fieldErrors.longitude}
-            hint="Coordinates price every route through here that has no fare of its own, so they are worth placing rather than typing."
-          >
-            <TransferPointMap
-              latitude={placed ? latitude : null}
-              longitude={placed ? longitude : null}
-              onChange={(nextLat, nextLng) => {
-                set("latitude", nextLat.toFixed(6));
-                set("longitude", nextLng.toFixed(6));
-              }}
-            />
-          </Field>
+            required
+            ids={{ search: "point-place", latitude: "point-latitude", longitude: "point-longitude" }}
+            value={values.location}
+            error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
+            hint="The position prices every route through here that has no fare of its own, so it is worth checking the pin."
+            onChange={(next, meta) => {
+              setValues((current) => {
+                const place = meta.source === "search" ? next.place : null;
+                const kind = place ? suggestPointKind(place.types) : null;
 
-          <div className="grid grid-cols-2 gap-4">
-            <NumberInput
-              id="point-latitude"
-              label="Latitude"
-              required
-              step="any"
-              min={-90}
-              max={90}
-              value={values.latitude}
-              onChange={(event) => set("latitude", event.target.value)}
-              error={fieldErrors.latitude}
-            />
-            <NumberInput
-              id="point-longitude"
-              label="Longitude"
-              required
-              step="any"
-              min={-180}
-              max={180}
-              value={values.longitude}
-              onChange={(event) => set("longitude", event.target.value)}
-              error={fieldErrors.longitude}
-            />
-          </div>
+                return {
+                  ...current,
+                  location: next,
+                  // A searched place fills in what is still empty, and no more.
+                  ...(place?.name && !current.name.trim()
+                    ? { name: place.name, ...(slugTouched ? {} : { slug: slugify(place.name) }) }
+                    : {}),
+                  ...(place && !current.regionLabel.trim() && (place.region ?? place.city)
+                    ? { regionLabel: (place.region ?? place.city)! }
+                    : {}),
+                  ...(kind && !kindTouched ? { kind } : {}),
+                };
+              });
+              setSaved(false);
+            }}
+          />
         </div>
       </div>
 

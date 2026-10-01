@@ -21,6 +21,7 @@ import type {
   RoomTypeSummary,
   TaxFee,
 } from "@/types/catalogue";
+import type { PlaceRef } from "@/types/geo";
 import type { Paginated } from "@/types/partner";
 
 /**
@@ -363,8 +364,11 @@ export interface DestinationInput {
   /** Inherited from the parent when omitted, so only a root really needs it. */
   countryCode?: string;
   timezone?: string;
-  latitude?: number;
-  longitude?: number;
+  /** A pair or neither; `null` for both takes the pin off the map again. */
+  latitude?: number | null;
+  longitude?: number | null;
+  /** What the place search said. Only ever alongside a pair. */
+  place?: PlaceRef | null;
   tagline?: string | null;
   summary?: string | null;
   description?: string[];

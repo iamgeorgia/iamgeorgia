@@ -14,6 +14,7 @@ import {
     makeHotel,
     makePartner,
     makePartnerUser,
+    placeRef,
     signIn,
     unique
 } from './support/factories.js';
@@ -171,6 +172,35 @@ describe('hotels', { skip: dbAvailable ? false : 'Postgres is not reachable' }, 
             const second = await createDraft({ slug: first.body.slug });
 
             assert.equal(second.status, 409);
+        });
+    });
+
+    describe('location', () => {
+        it('stores the searched place with the pin, and clears both together', async () => {
+            const { body: draft } = await createDraft();
+            const place = placeRef({ name: 'Stamba Hotel', types: ['lodging', 'point_of_interest'] });
+
+            const placed = await asAdmin('patch', `/api/admin/hotels/${draft.id}`).send({
+                latitude: 41.7076,
+                longitude: 44.7867,
+                place
+            });
+
+            assert.equal(placed.status, 200);
+            assert.deepEqual(placed.body.place, place);
+
+            const half = await asAdmin('patch', `/api/admin/hotels/${draft.id}`).send({ latitude: null });
+            assert.equal(half.status, 400, 'the pair rule holds for null as it does for absent');
+
+            const cleared = await asAdmin('patch', `/api/admin/hotels/${draft.id}`).send({
+                latitude: null,
+                longitude: null
+            });
+
+            assert.equal(cleared.status, 200);
+            assert.equal(cleared.body.latitude, null);
+            assert.equal(cleared.body.longitude, null);
+            assert.equal(cleared.body.place, null, 'an address for a pin that is gone would be a lie');
         });
     });
 

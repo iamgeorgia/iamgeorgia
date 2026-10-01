@@ -286,6 +286,12 @@ Two things must agree or the browser will be blocked:
 - `client/.env.local` — `NEXT_PUBLIC_API_URL` must point at the API.
 - `server/.env` — `CLIENT_ORIGIN` must list the client's origin.
 
+Optionally, `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (and `NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`)
+in `client/.env.local` turns on the Google place search and map on the admin
+location screens and at transfer checkout. Use a browser key whose referrers
+include `http://localhost:3000/*`. Without it those screens fall back to typed
+coordinates, which is fine for most local work.
+
 The session cookie is `httpOnly` and only travels cross-origin when CORS says it
 may, so a mismatch shows up as "logged out immediately" or a CORS error in the
 browser console — not as a server error.

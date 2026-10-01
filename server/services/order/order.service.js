@@ -150,6 +150,7 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
                     leadPassenger: lead,
                     flightNumber: input.flightNumber,
                     pickupAddress: input.pickupAddress,
+                    pickupPlace: input.pickupPlace,
                     preferredDriverId: input.preferredDriverId,
                     preferredFleetVehicleId: input.preferredFleetVehicleId,
                     ...shared

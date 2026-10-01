@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
-import { LocationPicker } from "@/components/admin/LocationPicker";
+import { HotelLocationEditor } from "@/components/admin/HotelLocationEditor";
 import { getHotel } from "@/lib/api/hotels";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
@@ -47,7 +47,7 @@ export default async function HotelLocationPage({
       />
 
       <div className="mt-8">
-        <LocationPicker hotel={hotel} />
+        <HotelLocationEditor hotel={hotel} />
       </div>
     </AdminContainer>
   );

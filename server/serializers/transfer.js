@@ -32,6 +32,7 @@ export const toPoint = (point) => ({
     region: point.regionLabel,
     latitude: point.latitude,
     longitude: point.longitude,
+    place: point.place ?? null,
     timezone: point.timezone,
     popular: point.popular,
     image: point.image ?? null,
@@ -281,6 +282,8 @@ export const toTransferBooking = (booking, viewer) => ({
     flightNumber: booking.flightNumber ?? null,
     pickupAddress: booking.pickupAddress ?? null,
     dropoffAddress: booking.dropoffAddress ?? null,
+    pickupPlace: booking.pickupPlace ?? null,
+    dropoffPlace: booking.dropoffPlace ?? null,
     specialRequests: booking.specialRequests ?? null,
     cancellation: {
         freeUntil: freeCancellationUntil(booking.cancellationSchedule),

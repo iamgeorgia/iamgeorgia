@@ -114,6 +114,7 @@ export const toHotelDetail = (hotel, locale, viewer) => {
         description: value.description ?? [],
         address: value.address ?? null,
         postalCode: value.postalCode ?? null,
+        place: value.place ?? null,
         timezone: value.timezone,
         checkIn: { from: value.checkInFrom ?? null, until: value.checkInUntil ?? null },
         checkOut: { from: value.checkOutFrom ?? null, until: value.checkOutUntil ?? null },

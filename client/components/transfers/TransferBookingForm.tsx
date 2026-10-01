@@ -5,6 +5,8 @@ import { AnimatePresence, m } from "framer-motion";
 import { AlertCircle, Info } from "lucide-react";
 import { useState } from "react";
 
+import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
+import { PlaceSearch, type PlaceSelection } from "@/components/geo/PlaceSearch";
 import { DriverChoice } from "@/components/transfers/DriverChoice";
 import { Button } from "@/components/ui/Button";
 import { fill } from "@/lib/i18n/fill";
@@ -14,6 +16,7 @@ import { confirmTransferBooking } from "@/lib/api/transfers";
 import { type TransferQuery } from "@/lib/transfers/query";
 import { cn } from "@/lib/utils";
 import type { DriverChoiceValue } from "@/types/driver";
+import type { PlacedLocation } from "@/types/geo";
 import type { TransferOffer, TransferPoint } from "@/types/transfer";
 
 interface FormValues {
@@ -93,8 +96,27 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
   // Bumped to remount the picker with a fresh list after the server says the
   // chosen driver is gone.
   const [driverListKey, setDriverListKey] = useState(0);
+  // The exact doors, searched: what the driver navigates to. Optional on
+  // both ends — the curated points above are where the fare is measured
+  // between, and "Terminal 1, arrivals" in the note is still a good answer.
+  const [pickupPlace, setPickupPlace] = useState<PlacedLocation | null>(null);
+  const [dropoffPlace, setDropoffPlace] = useState<PlacedLocation | null>(null);
 
   const fromAirport = from?.kind === "AIRPORT";
+
+  /**
+   * A searched place, kept only when Google has a point for it. A place with
+   * no position is nothing a driver can drive to, so it goes into the note
+   * as text instead — which is what the traveller would have typed anyway.
+   */
+  const placeFrom = (selection: PlaceSelection): PlacedLocation | null => {
+    if (selection.latitude === null || selection.longitude === null) {
+      const text = selection.place.formattedAddress ?? selection.place.name;
+      if (text && !values.pickupNote.trim()) set("pickupNote", text);
+      return null;
+    }
+    return { latitude: selection.latitude, longitude: selection.longitude, place: selection.place };
+  };
 
   const messageFor = (key?: ErrorKey) => (key ? t.transfers.booking.errors[key] : undefined);
 
@@ -147,7 +169,12 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
           phone: values.phone.trim() || undefined,
         },
         flightNumber: values.flightNumber.trim() || undefined,
-        pickupAddress: values.pickupNote.trim() || undefined,
+        // The note is what the driver reads; a searched door supplies the
+        // text when the traveller wrote none, and the coordinates always.
+        pickupAddress: values.pickupNote.trim() || pickupPlace?.place?.formattedAddress || undefined,
+        dropoffAddress: dropoffPlace?.place?.formattedAddress ?? undefined,
+        pickupPlace: pickupPlace ?? undefined,
+        dropoffPlace: dropoffPlace ?? undefined,
         specialRequests: values.specialRequests.trim() || undefined,
         idempotencyKey,
         preferredDriverId: driverChoice?.driverId,
@@ -360,6 +387,31 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
               </p>
             </div>
           )}
+
+          <GoogleMapsProvider>
+            <PlaceSearch
+              id="pickupPlace"
+              variant="site"
+              label={t.transfers.booking.pickupPlace}
+              hint={t.transfers.booking.pickupPlaceHint}
+              value={pickupPlace?.place ?? null}
+              onSelect={(selection) => setPickupPlace(placeFrom(selection))}
+              onClear={() => setPickupPlace(null)}
+              strings={t.common.placeSearch}
+              autoComplete="street-address"
+            />
+
+            <PlaceSearch
+              id="dropoffPlace"
+              variant="site"
+              label={t.transfers.booking.dropoffPlace}
+              hint={t.transfers.booking.dropoffPlaceHint}
+              value={dropoffPlace?.place ?? null}
+              onSelect={(selection) => setDropoffPlace(placeFrom(selection))}
+              onClear={() => setDropoffPlace(null)}
+              strings={t.common.placeSearch}
+            />
+          </GoogleMapsProvider>
 
           <div>
             <label htmlFor="pickupNote" className={labelClass}>

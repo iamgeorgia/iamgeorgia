@@ -17,7 +17,8 @@ import {
 } from './normalize.js';
 import { SUPPORTED_LOCALES } from '../lib/locales.js';
 import { KOSHER_SERVICE_LEVELS } from './kosher.js';
-import { hotelPoliciesSchema, nearbyPlaceSchema, reviewCategoryScoreSchema } from './domain.js';
+import { hotelPoliciesSchema, nearbyPlaceSchema, placeRefSchema, reviewCategoryScoreSchema } from './domain.js';
+import { withCoordinatePair } from './location.js';
 
 const PROPERTY_TYPES = ['Hotel', 'Boutique', 'Resort', 'Guesthouse', 'Lodge', 'Apartment', 'Chalet', 'Hostel', 'Villa'];
 const HOTEL_STATUSES = ['DRAFT', 'ACTIVE', 'INACTIVE', 'SUSPENDED', 'ARCHIVED'];
@@ -66,12 +67,6 @@ export const createHotelSchema = z
     })
     .strict();
 
-const coordinatePair = (schema) =>
-    schema.refine((value) => (value.latitude === undefined) === (value.longitude === undefined), {
-        message: 'Provide both latitude and longitude, or neither',
-        path: ['latitude']
-    });
-
 /**
  * Everything the later wizard steps write.
  *
@@ -79,7 +74,7 @@ const coordinatePair = (schema) =>
  * endpoints and their own rules, not a field an admin may set to anything. That
  * is the same treatment partner status already gets.
  */
-export const updateHotelSchema = coordinatePair(
+export const updateHotelSchema = withCoordinatePair(
     z
         .object({
             slug: slugField,
@@ -92,8 +87,11 @@ export const updateHotelSchema = coordinatePair(
             address: textField(300).nullish(),
             postalCode: textField(20).nullish(),
             countryCode: countryField,
-            latitude: latitudeField,
-            longitude: longitudeField,
+            // Nullable so the pin can be taken off the map again; the pair
+            // rule in withCoordinatePair treats null like absent.
+            latitude: latitudeField.nullable(),
+            longitude: longitudeField.nullable(),
+            place: placeRefSchema.nullable(),
 
             checkInFrom: clockTimeField.nullish(),
             checkInUntil: clockTimeField.nullish(),

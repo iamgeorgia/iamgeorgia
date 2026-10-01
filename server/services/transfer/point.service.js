@@ -114,8 +114,42 @@ export const resolveEndpoints = async (fromIdOrSlug, toIdOrSlug, { locale } = {}
     return { from: localisePoint(from, locale), to: localisePoint(to, locale) };
 };
 
+/**
+ * The same Google place may not be two live points.
+ *
+ * Slugs are unique, but "tbilisi-airport" and "tbs" are different slugs for
+ * one terminal, and a quote between the two would price a journey of zero
+ * kilometres. The place id is the one fact both registrations share. A 409
+ * rather than a silent merge, and it names the other slug, because the
+ * operator is usually looking for a point that already exists.
+ */
+const assertPlaceUnclaimed = async (tx, place, { exceptId } = {}) => {
+    if (!place?.placeId) {
+        return;
+    }
+
+    const claimed = await tx.transferPoint.findFirst({
+        where: {
+            status: { not: 'ARCHIVED' },
+            place: { path: ['placeId'], equals: place.placeId },
+            ...(exceptId ? { id: { not: exceptId } } : {})
+        },
+        select: { slug: true }
+    });
+
+    if (claimed) {
+        throw new ConflictError(`That place is already registered as ${claimed.slug}`, {
+            field: 'place',
+            reason: 'PLACE_TAKEN',
+            slug: claimed.slug
+        });
+    }
+};
+
 export const createPoint = async (input, actor, req) => {
     const point = await prisma.$transaction(async (tx) => {
+        await assertPlaceUnclaimed(tx, input.place);
+
         const created = await tx.transferPoint.create({ data: input, include: withTranslations });
 
         await recordAudit(tx, {
@@ -140,6 +174,8 @@ export const updatePoint = async (id, input, actor, req) => {
         if (!existing) {
             throw new NotFoundError('That pick-up point does not exist');
         }
+
+        await assertPlaceUnclaimed(tx, input.place, { exceptId: id });
 
         const updated = await tx.transferPoint.update({
             where: { id },

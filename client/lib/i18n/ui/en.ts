@@ -154,6 +154,19 @@ export const en = {
   },
 
   common: {
+    /** The Google place search on the checkout forms. */
+    placeSearch: {
+      placeholder: "Search for an address or place…",
+      typeMore: "Keep typing — three letters or more.",
+      searching: "Searching…",
+      noResults: "No places match “{term}”.",
+      failed: "Place search is not answering. Try again in a moment.",
+      loading: "Loading place search…",
+      unavailable: "Place search is not available on this site.",
+      pickSuggestion: "Choose a suggestion to set the location.",
+      clear: "Clear",
+      poweredBy: "Powered by Google",
+    },
     home: "Home",
     from: "From",
     total: "Total",
@@ -799,6 +812,8 @@ export const en = {
       flightNumber: "Flight number (optional)",
       flightNumberHint: "So the driver can follow the flight if it moves.",
       pickupAddress: "Pick-up address (optional)",
+      pickupPlace: "Exact pick-up address (optional)",
+      pickupPlaceHint: "Search for the hotel or building where the driver should collect you.",
       specialRequests: "Anything we should know",
       specialRequestsHint:
         "Mobility, a birthday on the road, an early arrival. Passed to everyone involved, never guaranteed.",
@@ -1588,6 +1603,10 @@ export const en = {
       flightHint: "Optional, but it is how we track a delay and hold the driver for you.",
       pickupNote: "Exact address or meeting note",
       pickupNotePlaceholder: "Hotel name, street number, or where to wait",
+      pickupPlace: "Exact pick-up address",
+      pickupPlaceHint: "Search for the hotel, building or terminal where the driver should find you, if it is not the location above.",
+      dropoffPlace: "Exact drop-off address",
+      dropoffPlaceHint: "Where the journey should end, if it is a specific door rather than the location above.",
       requests: "Special requests",
       requestsBody:
         "Child seats, extra stops, oversized luggage, a wheelchair — tell us and we will confirm before the day.",

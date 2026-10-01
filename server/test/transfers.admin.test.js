@@ -16,6 +16,7 @@ import {
     makeTransferProvider,
     makeTransferRoute,
     makeTransferVehicle,
+    placeRef,
     signIn,
     unique
 } from './support/factories.js';
@@ -420,6 +421,44 @@ describe('the transfer panel', { skip: dbAvailable ? false : 'Postgres is not re
         tracker.transferRoute(created.body);
         assert.ok(created.body.distanceKm > 0, 'the distance is derived from the coordinates');
         assert.equal(created.body.status, 'DRAFT', 'and it starts unpublished');
+    });
+
+    it('registers a searched place once, whatever it is called', async () => {
+        const place = placeRef();
+        const body = (slug) => ({
+            slug: unique(slug),
+            name: 'Tbilisi Airport',
+            kind: 'AIRPORT',
+            regionLabel: 'Tbilisi',
+            latitude: 41.6692,
+            longitude: 44.9547,
+            place
+        });
+
+        const first = await request(app).post('/api/admin/transfers/points').set('Cookie', adminCookie).send(body('tbs'));
+        assert.equal(first.status, 201);
+        tracker.transferPoint(first.body);
+        assert.equal(first.body.place.placeId, place.placeId);
+
+        const again = await request(app)
+            .post('/api/admin/transfers/points')
+            .set('Cookie', adminCookie)
+            .send(body('tbilisi-airport'));
+        assert.equal(again.status, 409, 'two slugs for one terminal would quote a journey of zero kilometres');
+        assert.equal(again.body.error.details.slug, first.body.slug, 'and it names the point that already exists');
+
+        // The same point may keep its own place across an edit.
+        const edited = await request(app)
+            .patch(`/api/admin/transfers/points/${first.body.id}`)
+            .set('Cookie', adminCookie)
+            .send({ name: 'Tbilisi Shota Rustaveli Airport', place });
+        assert.equal(edited.status, 200);
+
+        const malformed = await request(app)
+            .post('/api/admin/transfers/points')
+            .set('Cookie', adminCookie)
+            .send({ ...body('broken'), place: { formattedAddress: 'somewhere' } });
+        assert.equal(malformed.status, 400, 'a place without its id is not a place');
     });
 
     it('translates a route without touching its numbers', async () => {

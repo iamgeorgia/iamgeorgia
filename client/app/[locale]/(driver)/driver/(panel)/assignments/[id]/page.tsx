@@ -1,15 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Baby, Briefcase, Car, Clock, MapPin, Phone, Plane, Users } from "lucide-react";
+import { ArrowLeft, Baby, Briefcase, Car, Clock, MapPin, Navigation, Phone, Plane, Users } from "lucide-react";
 
 import { TransferLegStatusBadge } from "@/components/admin/DispatchBadges";
 import { AssignmentControls } from "@/components/driver/AssignmentControls";
 import { ApiError } from "@/lib/api/client";
 import { getDriverAssignment } from "@/lib/api/driverPanel";
 import { driverLegStatusLabels, formatPickup } from "@/lib/admin/dispatch";
+import { mapsDirectionsUrl } from "@/lib/geo/place";
 import { getI18n } from "@/lib/i18n/server";
 import type { DriverAssignment } from "@/types/driver";
+import type { PlacedLocation } from "@/types/geo";
 
 export const metadata: Metadata = { title: "Transfer" };
 
@@ -34,6 +36,29 @@ export default async function DriverAssignmentPage({
 
   const { leg, booking, vehicle } = assignment;
   const withdrawn = ["DECLINED", "REVOKED"].includes(assignment.status);
+
+  /**
+   * The address, with a directions link when the traveller picked a real
+   * door at checkout. A phone opens it in whichever maps app it has; a
+   * booking made before place search existed simply has no link.
+   */
+  const withNavigation = (text: string, place: PlacedLocation | null) =>
+    place ? (
+      <>
+        {text}
+        <a
+          href={mapsDirectionsUrl(place.latitude, place.longitude)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-1 inline-flex items-center gap-1 text-[0.8125rem] font-medium text-brand-text underline-offset-4 hover:underline"
+        >
+          <Navigation size={13} aria-hidden />
+          Navigate
+        </a>
+      </>
+    ) : (
+      text
+    );
 
   const row = (icon: React.ReactNode, label: string, value: React.ReactNode) => (
     <div className="flex items-start gap-3 py-3">
@@ -72,8 +97,8 @@ export default async function DriverAssignmentPage({
       {!withdrawn && <AssignmentControls assignment={assignment} />}
 
       <section className="divide-y divide-line rounded-sm border border-line bg-surface px-4" aria-label="Pick-up details">
-        {row(<MapPin size={16} aria-hidden />, "Pick up at", booking.pickupAddress ?? leg.from)}
-        {row(<MapPin size={16} aria-hidden />, "Drop off at", booking.dropoffAddress ?? leg.to)}
+        {row(<MapPin size={16} aria-hidden />, "Pick up at", withNavigation(booking.pickupAddress ?? leg.from, booking.pickupPlace))}
+        {row(<MapPin size={16} aria-hidden />, "Drop off at", withNavigation(booking.dropoffAddress ?? leg.to, booking.dropoffPlace))}
         {row(<Clock size={16} aria-hidden />, "Journey", `${leg.distanceKm} km · about ${leg.durationMinutes} min`)}
         {booking.flightNumber && row(<Plane size={16} aria-hidden />, "Flight", booking.flightNumber)}
       </section>

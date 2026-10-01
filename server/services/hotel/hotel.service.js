@@ -360,7 +360,13 @@ export const updateHotel = async (id, input, actor, req) =>
             }
         }
 
-        const hotel = await tx.hotel.update({ where: { id }, data: input });
+        const hotel = await tx.hotel.update({
+            where: { id },
+            // Taking the pin off the map takes the place with it: an address
+            // for a position that no longer exists is a lie the panel would
+            // print.
+            data: input.latitude === null ? { ...input, place: null } : input
+        });
 
         await recordAudit(tx, {
             action: 'HOTEL_UPDATED',

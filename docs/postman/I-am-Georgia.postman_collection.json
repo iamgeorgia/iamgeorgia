@@ -12304,7 +12304,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"slug\": \"pm-resort-{{runId}}\",\n    \"name\": \"PM Resort {{runId}}\",\n    \"type\": \"RESORT\",\n    \"parentId\": \"{{coreParentDestinationId}}\",\n    \"latitude\": 42.66,\n    \"longitude\": 44.62,\n    \"tagline\": \"Created by the Postman collection\",\n    \"idealFor\": [\n        \"Testing\"\n    ],\n    \"featured\": false\n}"
+                  "raw": "{\n    \"slug\": \"pm-resort-{{runId}}\",\n    \"name\": \"PM Resort {{runId}}\",\n    \"type\": \"RESORT\",\n    \"parentId\": \"{{coreParentDestinationId}}\",\n    \"latitude\": 42.66,\n    \"longitude\": 44.62,\n    \"place\": {\n        \"placeId\": \"ChIJ-postman-{{runId}}\",\n        \"name\": \"PM Resort\",\n        \"formattedAddress\": \"PM Resort, Georgia\",\n        \"city\": null,\n        \"region\": \"Postman region\",\n        \"countryCode\": \"GE\",\n        \"types\": [\"locality\", \"political\"]\n    },\n    \"tagline\": \"Created by the Postman collection\",\n    \"idealFor\": [\n        \"Testing\"\n    ],\n    \"featured\": false\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/admin/destinations",
@@ -14744,7 +14744,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"address\": \"12 Rustaveli Avenue\",\n    \"postalCode\": \"0108\",\n    \"latitude\": 42.4786,\n    \"longitude\": 44.4809,\n    \"checkInFrom\": \"14:00\",\n    \"checkOutUntil\": \"12:00\",\n    \"shortDescription\": \"A boutique stay in the pines — Postman run {{runId}}\",\n    \"description\": [\n        \"A longer paragraph about the property, written by the Postman collection.\"\n    ],\n    \"policies\": {\n        \"checkIn\": \"From 14:00\",\n        \"checkOut\": \"Until 12:00\",\n        \"cancellation\": \"Free until 24h before arrival\",\n        \"children\": \"Children of all ages are welcome\",\n        \"pets\": \"Pets are not allowed\",\n        \"payment\": \"Card or cash on arrival\",\n        \"rules\": [\n            \"No smoking indoors\"\n        ]\n    },\n    \"b2cEnabled\": true\n}"
+                  "raw": "{\n    \"address\": \"12 Rustaveli Avenue\",\n    \"postalCode\": \"0108\",\n    \"latitude\": 42.4786,\n    \"longitude\": 44.4809,\n    \"place\": {\n        \"placeId\": \"ChIJ-postman-{{runId}}\",\n        \"name\": \"Postman Hotel\",\n        \"formattedAddress\": \"Postman Hotel, Georgia\",\n        \"city\": null,\n        \"region\": \"Postman region\",\n        \"countryCode\": \"GE\",\n        \"types\": [\"lodging\"]\n    },\n    \"checkInFrom\": \"14:00\",\n    \"checkOutUntil\": \"12:00\",\n    \"shortDescription\": \"A boutique stay in the pines — Postman run {{runId}}\",\n    \"description\": [\n        \"A longer paragraph about the property, written by the Postman collection.\"\n    ],\n    \"policies\": {\n        \"checkIn\": \"From 14:00\",\n        \"checkOut\": \"Until 12:00\",\n        \"cancellation\": \"Free until 24h before arrival\",\n        \"children\": \"Children of all ages are welcome\",\n        \"pets\": \"Pets are not allowed\",\n        \"payment\": \"Card or cash on arrival\",\n        \"rules\": [\n            \"No smoking indoors\"\n        ]\n    },\n    \"b2cEnabled\": true\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/admin/hotels/{{hotHotelId}}",
@@ -14758,7 +14758,7 @@
                     "{{hotHotelId}}"
                   ]
                 },
-                "description": "**Expected: 200** with the address, coordinates, times and policies now on the record and those codes gone from `publishChecklist`.\n\n`PATCH` is partial and strict: send only what changed, never `status` (publish/unpublish/archive are transitions with their own rules) and never a kosher field (see folder 07). `latitude` and `longitude` travel together or not at all. `policies` is checked for shape on every write and for completeness only at publish. `b2cEnabled` is off by default — everything is B2B until switched on."
+                "description": "**Expected: 200** with the address, coordinates, times and policies now on the record and those codes gone from `publishChecklist`.\n\n`PATCH` is partial and strict: send only what changed, never `status` (publish/unpublish/archive are transitions with their own rules) and never a kosher field (see folder 07). `latitude` and `longitude` travel together or not at all — an explicit `null` pair takes the pin off the map and drops `place` with it. `place` (the Google Places record: `placeId`, `name`, `formattedAddress`, `city`, `region`, `countryCode`, `types`) is only accepted alongside a pair. `policies` is checked for shape on every write and for completeness only at publish. `b2cEnabled` is off by default — everything is B2B until switched on."
               },
               "response": [],
               "event": [
@@ -20004,7 +20004,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n    \"slug\": \"pm-from-{{runId}}\",\n    \"name\": \"Postman Airport {{runId}}\",\n    \"kind\": \"AIRPORT\",\n    \"regionLabel\": \"Postman region\",\n    \"latitude\": 41.6692,\n    \"longitude\": 44.9547,\n    \"timezone\": \"Asia/Tbilisi\",\n    \"popular\": false,\n    \"iataCode\": \"PMA\"\n}"
+                  "raw": "{\n    \"slug\": \"pm-from-{{runId}}\",\n    \"name\": \"Postman Airport {{runId}}\",\n    \"kind\": \"AIRPORT\",\n    \"regionLabel\": \"Postman region\",\n    \"latitude\": 41.6692,\n    \"longitude\": 44.9547,\n    \"place\": {\n        \"placeId\": \"ChIJ-postman-{{runId}}\",\n        \"name\": \"Postman Airport\",\n        \"formattedAddress\": \"Postman Airport, Georgia\",\n        \"city\": null,\n        \"region\": \"Postman region\",\n        \"countryCode\": \"GE\",\n        \"types\": [\"airport\"]\n    },\n    \"timezone\": \"Asia/Tbilisi\",\n    \"popular\": false,\n    \"iataCode\": \"PMA\"\n}"
                 },
                 "url": {
                   "raw": "{{baseUrl}}/api/admin/transfers/points",
@@ -20018,7 +20018,7 @@
                     "points"
                   ]
                 },
-                "description": "**Expected: 201** with the point, `status: \"ACTIVE\"` and `code: \"PMA\"` (the IATA code is uppercased on the way in and answered as `code`).\n\nRequired: `slug`, `name`, `kind`, `regionLabel`, `latitude`, `longitude`. Optional: `iataCode` (exactly three letters), `destinationId`, `timezone` (an IANA name — an unknown one is a 400), `popular`, `image`.\n\nThe slug carries `{{runId}}` so re-running the collection never collides with a seeded point or an earlier run."
+                "description": "**Expected: 201** with the point, `status: \"ACTIVE\"` and `code: \"PMA\"` (the IATA code is uppercased on the way in and answered as `code`).\n\nRequired: `slug`, `name`, `kind`, `regionLabel`, `latitude`, `longitude`. Optional: `place` (what Google Places said — `placeId`, `name`, `formattedAddress`, `city`, `region`, `countryCode`, `types`; a second live point with the same `placeId` is a 409 `PLACE_TAKEN`), `iataCode` (exactly three letters), `destinationId`, `timezone` (an IANA name — an unknown one is a 400), `popular`, `image`.\n\nThe slug carries `{{runId}}` so re-running the collection never collides with a seeded point or an earlier run."
               },
               "response": [],
               "event": [

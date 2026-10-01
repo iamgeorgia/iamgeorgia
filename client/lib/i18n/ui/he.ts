@@ -96,6 +96,19 @@ export const he: UiDictionary = {
   },
 
   common: {
+    /** The Google place search on the checkout forms. */
+    placeSearch: {
+      placeholder: "חפשו כתובת או מקום…",
+      typeMore: "הקלידו לפחות שלוש אותיות.",
+      searching: "מחפש…",
+      noResults: "אין מקומות התואמים ל־„{term}“.",
+      failed: "חיפוש המקומות אינו מגיב כרגע. נסו שוב בעוד רגע.",
+      loading: "חיפוש המקומות נטען…",
+      unavailable: "חיפוש מקומות אינו זמין באתר זה.",
+      pickSuggestion: "בחרו הצעה כדי לקבוע את המיקום.",
+      clear: "נקה",
+      poweredBy: "Powered by Google",
+    },
     home: "דף הבית",
     from: "החל מ-",
     total: "סה״כ",
@@ -738,6 +751,8 @@ export const he: UiDictionary = {
       flightNumber: "מספר טיסה (לא חובה)",
       flightNumberHint: "כדי שהנהג יוכל לעקוב אחרי הטיסה אם היא תזוז.",
       pickupAddress: "כתובת איסוף (לא חובה)",
+      pickupPlace: "כתובת איסוף מדויקת (לא חובה)",
+      pickupPlaceHint: "חפשו את המלון או הבניין שממנו הנהג יאסוף אתכם.",
       specialRequests: "מה שכדאי שנדע",
       specialRequestsHint:
         "ניידות, יום הולדת בדרך, הגעה מוקדמת. מועבר לכל המעורבים, אך אינו מובטח.",
@@ -1507,6 +1522,10 @@ export const he: UiDictionary = {
       flightHint: "לא חובה, אבל כך אנחנו עוקבים אחרי עיכוב ומחזיקים לכם את הנהג.",
       pickupNote: "כתובת מדויקת או הערה על המפגש",
       pickupNotePlaceholder: "שם המלון, מספר הבית, או היכן להמתין",
+      pickupPlace: "כתובת איסוף מדויקת",
+      pickupPlaceHint: "חפשו את המלון, הבניין או הטרמינל שבו הנהג ימצא אתכם, אם אינו המקום שלמעלה.",
+      dropoffPlace: "כתובת הורדה מדויקת",
+      dropoffPlaceHint: "היכן הנסיעה צריכה להסתיים, אם מדובר בכתובת ספציפית ולא במקום שלמעלה.",
       requests: "בקשות מיוחדות",
       requestsBody:
         "מושבי בטיחות, עצירות נוספות, כבודה גדולה, כיסא גלגלים — כתבו לנו ונאשר עוד לפני היום.",

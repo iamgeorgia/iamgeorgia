@@ -13,6 +13,7 @@
  * Fields marked "staff only" are *absent* rather than null for anyone who may
  * not see them, so `in` and `?.` distinguish "no value" from "not permitted".
  */
+import type { PlaceRef } from "./geo";
 
 export type PropertyType =
   | "Hotel"
@@ -183,6 +184,8 @@ export interface DestinationSummary {
   timezone: string;
   latitude: number | null;
   longitude: number | null;
+  /** What the place search said when the pin was set; null for a pin placed by hand. */
+  place: PlaceRef | null;
   coverImage: string | null;
   featured: boolean;
   hotelCount?: number;
@@ -582,6 +585,8 @@ export interface Hotel extends HotelSummary {
   description: string[];
   address: string | null;
   postalCode: string | null;
+  /** What the place search said when the pin was set; null for a pin placed by hand. */
+  place: PlaceRef | null;
   timezone: string;
   checkIn: { from: string | null; until: string | null };
   checkOut: { from: string | null; until: string | null };

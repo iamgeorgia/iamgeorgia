@@ -6,6 +6,8 @@ import { useState, useSyncExternalStore } from "react";
 
 import { OrderCheckoutSummary } from "./OrderCheckoutSummary";
 import { HoldCountdown } from "@/components/booking/HoldCountdown";
+import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
+import { PlaceSearch } from "@/components/geo/PlaceSearch";
 import { MobileCheckoutSummary } from "@/components/booking/MobileCheckoutSummary";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -23,6 +25,7 @@ import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { hasOnRequestSlot, resolvedService, resolvedTour } from "@/lib/packages/query";
 import { formatMoney } from "@/lib/money";
+import type { PlacedLocation } from "@/types/geo";
 import type { OrderPriceChangedDetails, OrderTraveller, OrderUnavailableDetails } from "@/types/order";
 import { cn } from "@/lib/utils";
 
@@ -66,6 +69,8 @@ export function OrderCheckoutForm() {
   const [phone, setPhone] = useState("");
   const [flightNumber, setFlightNumber] = useState("");
   const [pickupAddress, setPickupAddress] = useState("");
+  /** The searched pick-up door, when Google had a point for it. */
+  const [pickupPlace, setPickupPlace] = useState<PlacedLocation | null>(null);
   const [specialRequests, setSpecialRequests] = useState("");
   const [travellers, setTravellers] = useState<OrderTraveller[]>([]);
 
@@ -142,7 +147,10 @@ export function OrderCheckoutForm() {
             : undefined,
         specialRequests: specialRequests.trim() || undefined,
         flightNumber: flightNumber.trim() || undefined,
-        pickupAddress: pickupAddress.trim() || undefined,
+        // The text is what the driver reads; the searched door supplies it
+        // when the traveller wrote none, and the coordinates always.
+        pickupAddress: pickupAddress.trim() || pickupPlace?.place?.formattedAddress || undefined,
+        pickupPlace: pickupPlace ?? undefined,
         source: "web",
         idempotencyKey: draft.idempotencyKey ?? fallbackKey,
       });
@@ -517,6 +525,35 @@ export function OrderCheckoutForm() {
                 <p className="type-caption mt-2 text-muted">
                   {t.orders.checkout.flightNumberHint}
                 </p>
+
+                <GoogleMapsProvider>
+                  <PlaceSearch
+                    id="pickupPlace"
+                    variant="site"
+                    className="mt-4"
+                    label={t.orders.checkout.pickupPlace}
+                    hint={t.orders.checkout.pickupPlaceHint}
+                    value={pickupPlace?.place ?? null}
+                    onSelect={(selection) => {
+                      // A place Google has no point for is nothing to drive
+                      // to; it becomes the address text instead.
+                      if (selection.latitude === null || selection.longitude === null) {
+                        const text = selection.place.formattedAddress ?? selection.place.name;
+                        if (text && !pickupAddress.trim()) setPickupAddress(text);
+                        setPickupPlace(null);
+                        return;
+                      }
+                      setPickupPlace({
+                        latitude: selection.latitude,
+                        longitude: selection.longitude,
+                        place: selection.place,
+                      });
+                    }}
+                    onClear={() => setPickupPlace(null)}
+                    strings={t.common.placeSearch}
+                    autoComplete="street-address"
+                  />
+                </GoogleMapsProvider>
 
                 <label className="mt-6 block">
                   <span className={labelClass}>{t.orders.checkout.specialRequests}</span>

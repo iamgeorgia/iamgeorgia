@@ -1,6 +1,7 @@
 import { apiFetch, cachedFor, serverFetch, type RequestOptions } from "./client";
 import { toQueryString } from "./query";
 import type { AvailableDrivers } from "@/types/driver";
+import type { PlaceRef } from "@/types/geo";
 import type { Paginated } from "@/types/partner";
 import type {
   AmendTransferInput,
@@ -388,6 +389,8 @@ export interface TransferPointInput {
   regionLabel: string;
   latitude: number;
   longitude: number;
+  /** What the place search said, when the position came from it. */
+  place?: PlaceRef | null;
   timezone?: string;
   popular?: boolean;
   image?: string | null;

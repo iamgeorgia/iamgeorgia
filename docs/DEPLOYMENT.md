@@ -277,7 +277,16 @@ them by name, so a misconfigured deploy fails at startup rather than at the
 first sign-in or upload. The full reference, including every optional tuning
 knob, is `server/.env.example` and the table in `server/README.md`.
 
-The client has exactly one variable: `NEXT_PUBLIC_API_URL`.
+The client has one required variable, `NEXT_PUBLIC_API_URL`, and two optional
+ones for the place search and maps on the admin location screens and the
+transfer checkout: `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` and
+`NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`. All three are inlined at build time, so a
+change means a rebuild. The Maps key is a **browser** key: restrict it in the
+Cloud console by HTTP referrer to the site's origins (production domain,
+Vercel preview pattern, `http://localhost:3000/*`) and to exactly the Maps
+JavaScript API, Places API (New) and Geocoding API, and set per-minute quotas
+and a budget alert there. Without the key the location screens fall back to
+typed coordinates and the checkout hides the address search.
 
 ---
 

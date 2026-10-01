@@ -646,6 +646,23 @@ export const databaseAvailable = () =>
    ========================================================================== */
 
 /**
+ * What the place search says about Tbilisi airport — the shape the client's
+ * LocationField sends, so a test that posts one is posting what the panel
+ * posts. Each call gets its own place id unless told otherwise, because a
+ * place id is unique across live pick-up points.
+ */
+export const placeRef = (overrides = {}) => ({
+    placeId: unique('ChIJ'),
+    name: 'Tbilisi International Airport',
+    formattedAddress: 'Tbilisi International Airport, Tbilisi 0158, Georgia',
+    city: 'Tbilisi',
+    region: 'Tbilisi',
+    countryCode: 'GE',
+    types: ['airport', 'point_of_interest'],
+    ...overrides
+});
+
+/**
  * A pick-up point with real-ish coordinates.
  *
  * The coordinates matter more than they look: with no curated price the fare

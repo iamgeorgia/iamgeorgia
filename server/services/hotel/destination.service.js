@@ -259,6 +259,10 @@ export const updateDestination = async (id, input, actor, req) =>
             where: { id },
             data: {
                 ...rest,
+                // Taking the pin off the map takes the place with it: an
+                // address for a position that no longer exists is a lie the
+                // panel would print.
+                ...(rest.latitude === null ? { place: null } : {}),
                 ...(movingParent ? { parentId: parentId ?? null } : {}),
                 ...(newPath !== current.path ? { path: newPath } : {})
             }

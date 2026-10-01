@@ -328,7 +328,7 @@ hard constraint, not a filter.
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| POST | `/transfers/bookings` | `{ quoteToken, leadPassenger, flightNumber?, pickupAddress?, dropoffAddress?, specialRequests?, preferredDriverId?, preferredFleetVehicleId? }`. Send `Idempotency-Key` |
+| POST | `/transfers/bookings` | `{ quoteToken, leadPassenger, flightNumber?, pickupAddress?, dropoffAddress?, pickupPlace?, dropoffPlace?, specialRequests?, preferredDriverId?, preferredFleetVehicleId? }`. Send `Idempotency-Key`. `pickupPlace`/`dropoffPlace` are searched doors — `{ latitude, longitude, place: PlaceRef | null }` — for the driver to navigate to; the address strings stay the text they read |
 | GET | `/transfers/bookings/:reference` | Travellers must add `?email=` |
 | PATCH | `/transfers/bookings/:reference` | Paperwork only |
 | GET | `/transfers/bookings/:reference/cancellation-quote` | |
@@ -371,6 +371,8 @@ an earlier traveller is owed.
   "adults": 2, "children": 0, "luggage": 2,
   "leadPassengerName": "...", "leadPassengerEmail": "...",
   "flightNumber": "TK378", "pickupAddress": "Terminal 1, arrivals",
+  "pickupPlace": { "latitude": 41.6692, "longitude": 44.9547, "place": { "placeId": "ChIJ…", "name": "Tbilisi International Airport", "formattedAddress": "…", "city": "Tbilisi", "region": "Tbilisi", "countryCode": "GE", "types": ["airport"] } },
+  "dropoffPlace": null,
   "currency": "GEL", "totalCents": 17116,
   "cancellation": { "freeUntil": "...", "windows": [{ "fromAt": null, "toAt": "...", "chargeCents": 0 }] },
   "legs": [{ "legIndex": 0, "direction": "OUTBOUND", "from": "...", "to": "...", "pickupAt": "...", "sellCents": 17116 }],
@@ -387,7 +389,7 @@ All under `/admin/transfers/*`, guarded by `authenticate + requireAdmin`.
 
 | Method | Path |
 | --- | --- |
-| GET/POST | `/admin/transfers/points` · GET/PATCH/DELETE `/points/:id` |
+| GET/POST | `/admin/transfers/points` · GET/PATCH/DELETE `/points/:id` — coordinates required; `place?` (PlaceRef, see Destinations) alongside them. A second live point with the same `place.placeId` is a 409 `PLACE_TAKEN` naming the existing slug |
 | PUT | `/admin/transfers/points/:id/translations/:locale` |
 | GET/POST | `/admin/transfers/vehicles` · GET/PATCH `/vehicles/:id` · POST `/vehicles/:id/archive` |
 | PUT | `/admin/transfers/vehicles/:id/translations/:locale` |
@@ -796,7 +798,7 @@ An **order** (`ORD-000001`) is a package booked as one thing: one transaction wr
 | --- | --- | --- |
 | POST | `/orders/holds` | `{ packageToken }` → `{ holdTokens: { "<slot>": token }, expiresAt }` — a hotel hold and a tour hold per such slot (15 min). |
 | DELETE | `/orders/holds` | `{ holdTokens }`. Always 204. |
-| POST | `/orders` | `{ packageToken, holdTokens?, leadGuest, travellers?, specialRequests?, requests?, flightNumber?, pickupAddress?, preferredDriverId?, source? }`. 201, or 200 on replay (`Idempotency-Key`). 409 `PRICE_CHANGED` `{ quotedCents, currentCents, components: [{ slotIndex, label, quotedCents, currentCents }] }`; 409 `UNAVAILABLE` `{ slots: [{ slotIndex, label, reason }] }`; 409 `KOSHER_INELIGIBLE`; 409 `PACKAGE_CHANGED` / `NOT_ON_SALE`; 410 spent token. |
+| POST | `/orders` | `{ packageToken, holdTokens?, leadGuest, travellers?, specialRequests?, requests?, flightNumber?, pickupAddress?, pickupPlace?, preferredDriverId?, source? }` (`pickupPlace` as on transfer bookings; it reaches the order's transfer). 201, or 200 on replay (`Idempotency-Key`). 409 `PRICE_CHANGED` `{ quotedCents, currentCents, components: [{ slotIndex, label, quotedCents, currentCents }] }`; 409 `UNAVAILABLE` `{ slots: [{ slotIndex, label, reason }] }`; 409 `KOSHER_INELIGIBLE`; 409 `PACKAGE_CHANGED` / `NOT_ON_SALE`; 410 spent token. |
 | GET | `/orders/:reference` | Detail: items with their child bookings. A guest reads with `?email=`. |
 | GET | `/orders/:reference/cancellation-quote` | Per item `{ chargeCents, refundCents, clawbackCents }` and totals, off frozen data. |
 | PATCH | `/orders/:reference` | Paperwork only: `leadGuest`, `specialRequests`. |
@@ -828,7 +830,7 @@ All under `/admin/*`, guarded by `authenticate + requireAdmin`.
 | Method | Path |
 | --- | --- |
 | GET / POST | `/admin/hotels` |
-| GET / PATCH | `/admin/hotels/:id` |
+| GET / PATCH | `/admin/hotels/:id` — `latitude`/`longitude` as a pair, nullable together to take the pin off the map (which also clears `place`); `place?` only alongside a pair |
 | POST | `/admin/hotels/:id/publish` · `/unpublish` · `/archive` |
 | PUT | `/admin/hotels/:id/amenities` — `{ amenities: [{ amenityId, note? }] }` |
 | POST / PATCH / DELETE | `/admin/hotels/:id/images` · `/images/:imageId` |
@@ -959,7 +961,7 @@ Detaching is a 409 while a verified certificate points at it.
 | Method | Path |
 | --- | --- |
 | GET/POST | `/admin/destinations`, `GET /admin/destinations/tree` |
-| GET/PATCH/DELETE | `/admin/destinations/:id` |
+| GET/PATCH/DELETE | `/admin/destinations/:id` — `latitude`/`longitude` as a pair or neither; on PATCH an explicit `null` pair takes the pin off the map and clears `place`. `place?` is what Google Places said when the pin was set: `{ placeId, name, formattedAddress, city, region, countryCode, types }`, every field but `placeId` nullable, accepted only alongside a pair, and answered as `place` (null for pins placed by hand) on destinations, hotels and pick-up points alike |
 | PUT | `/admin/destinations/:id/translations/:locale` |
 | GET/POST | `/admin/amenities`, `GET/PATCH /admin/amenities/:id` |
 | GET/POST | `/admin/media` (multipart: `file`, `category`, `altText?`) |

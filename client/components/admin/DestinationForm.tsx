@@ -5,16 +5,15 @@ import { useMemo, useState } from "react";
 
 import {
   CheckboxField,
-  Field,
   FormError,
   LineListInput,
-  NumberInput,
   SelectInput,
   SubmitButton,
   TextArea,
   TextInput,
 } from "./FormControls";
-import { TransferPointMap } from "./TransferPointMap";
+import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
+import { LocationField } from "@/components/geo/LocationField";
 import { ApiError, describeError } from "@/lib/api/client";
 import { createDestination, updateDestination, type DestinationInput } from "@/lib/api/hotels";
 import {
@@ -25,8 +24,10 @@ import {
   parentOptions,
 } from "@/lib/admin/destinations";
 import { slugify, timezoneOptions } from "@/lib/admin/geography";
+import { isPlaced, locationOf } from "@/lib/geo/place";
 import { useLocalePath } from "@/lib/i18n/provider";
 import type { Destination, DestinationNode, DestinationType } from "@/types/catalogue";
+import { EMPTY_LOCATION, type LocationValue } from "@/types/geo";
 
 /**
  * Adding or editing a destination.
@@ -36,7 +37,7 @@ import type { Destination, DestinationNode, DestinationType } from "@/types/cata
  * would be the same fields maintained twice.
  *
  * The shape of the form follows what a destination is *for*. Its top half is
- * structural — type, parent, country, coordinates — because those decide where
+ * structural — type, parent, country, position — because those decide where
  * every hotel, tour and pick-up point below it is filed, and what "everything in
  * Georgia" resolves to. The editorial half underneath is optional throughout and
  * can be left empty forever without holding anything up.
@@ -57,7 +58,7 @@ import type { Destination, DestinationNode, DestinationType } from "@/types/cata
  * carries, so whatever is already stored in them survives every save made here.
  */
 
-/** The form's own shape: every field a string, as the inputs hold them. */
+/** The form's own shape: every text field a string, as the inputs hold them. */
 interface Values {
   slug: string;
   name: string;
@@ -65,8 +66,7 @@ interface Values {
   parentId: string;
   countryCode: string;
   timezone: string;
-  latitude: string;
-  longitude: string;
+  location: LocationValue;
   tagline: string;
   summary: string;
   description: string[];
@@ -83,10 +83,7 @@ const initial = (destination?: Destination): Values => ({
   parentId: destination?.parentId ?? "",
   countryCode: destination?.countryCode ?? "GE",
   timezone: destination?.timezone ?? "Asia/Tbilisi",
-  // `toFixed(6)` rather than `String()`: six decimals is roughly 10cm, and a
-  // round-trip through the form should not lengthen the number it was given.
-  latitude: destination?.latitude != null ? destination.latitude.toFixed(6) : "",
-  longitude: destination?.longitude != null ? destination.longitude.toFixed(6) : "",
+  location: destination ? locationOf(destination) : EMPTY_LOCATION,
   tagline: destination?.tagline ?? "",
   summary: destination?.summary ?? "",
   description: destination?.description ?? [],
@@ -104,6 +101,14 @@ export function DestinationForm({
   /** The whole tree, for the parent picker. Tens of rows, so it ships whole. */
   tree: DestinationNode[];
 }) {
+  return (
+    <GoogleMapsProvider>
+      <Form destination={destination} tree={tree} />
+    </GoogleMapsProvider>
+  );
+}
+
+function Form({ destination, tree }: { destination?: Destination; tree: DestinationNode[] }) {
   const router = useRouter();
   const path = useLocalePath();
 
@@ -111,9 +116,10 @@ export function DestinationForm({
 
   const [values, setValues] = useState<Values>(() => initial(destination));
   const [slugTouched, setSlugTouched] = useState(editing);
-  // Until it is edited by hand, the country follows the parent. Sending a
-  // hard-coded GE for a place filed under Armenia would override the value the
-  // server would otherwise have inherited, and nothing on screen would say so.
+  // Until it is edited by hand, the country follows the parent — or the
+  // searched place. Sending a hard-coded GE for a place filed under Armenia
+  // would override the value the server would otherwise have inherited, and
+  // nothing on screen would say so.
   const [countryTouched, setCountryTouched] = useState(editing);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -142,30 +148,12 @@ export function DestinationForm({
   const isCountry = values.type === "COUNTRY";
   const parent = flat.find((candidate) => candidate.id === values.parentId);
 
-  const latitude = Number.parseFloat(values.latitude);
-  const longitude = Number.parseFloat(values.longitude);
-  const placed = Number.isFinite(latitude) && Number.isFinite(longitude);
-  // A pair or neither, which is what the server's schema and the table's CHECK
-  // constraint both say. Catching it here names the field instead of quoting a
-  // constraint back at the operator.
-  const halfPlaced = (values.latitude.trim() !== "") !== (values.longitude.trim() !== "");
-
-  /**
-   * Both fields emptied on a record that already had a pin.
-   *
-   * There is no way to say "unset these": the update schema takes a number or
-   * nothing, and nothing means "leave it alone". Saving would therefore keep
-   * the stored pair while the form showed two empty boxes, so the operator is
-   * told rather than left to discover it on the next page load.
-   */
-  const clearingPlacement =
-    editing && destination?.latitude != null && !placed && !halfPlaced;
+  const placed = isPlaced(values.location);
 
   const ready =
     values.name.trim().length > 0 &&
     values.slug.trim().length > 0 &&
-    (isCountry ? values.countryCode.trim().length === 2 : values.parentId.length > 0) &&
-    !halfPlaced;
+    (isCountry ? values.countryCode.trim().length === 2 : values.parentId.length > 0);
 
   /**
    * A text field on its way to the API.
@@ -178,6 +166,20 @@ export function DestinationForm({
     const trimmed = value.trim();
     if (trimmed) return trimmed;
     return editing ? null : undefined;
+  };
+
+  /**
+   * The position on its way to the API: the pair and its place when set, an
+   * explicit null pair when an edit has taken the pin off the map (the server
+   * drops the place with it), and nothing at all on a create with no pin.
+   */
+  const positionFields = (): Pick<DestinationInput, "latitude" | "longitude" | "place"> => {
+    const { location } = values;
+    if (isPlaced(location)) {
+      return { latitude: location.latitude, longitude: location.longitude, place: location.place };
+    }
+    if (editing && destination?.latitude != null) return { latitude: null, longitude: null };
+    return {};
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -198,7 +200,7 @@ export function DestinationForm({
       parentId: isCountry ? null : values.parentId,
       countryCode: values.countryCode.trim().toUpperCase(),
       timezone: values.timezone,
-      ...(placed ? { latitude, longitude } : {}),
+      ...positionFields(),
       tagline: optionalText(values.tagline),
       summary: optionalText(values.summary),
       description: values.description,
@@ -350,54 +352,37 @@ export function DestinationForm({
         </div>
 
         <div className="space-y-5">
-          <Field
+          <LocationField
             label="Where it is"
-            error={fieldErrors.latitude ?? fieldErrors.longitude}
-            hint="Optional, and a pair or nothing. It centres the maps that show what is in this place; it prices nothing."
-          >
-            <TransferPointMap
-              latitude={placed ? latitude : null}
-              longitude={placed ? longitude : null}
-              onChange={(nextLat, nextLng) => {
-                set("latitude", nextLat.toFixed(6));
-                set("longitude", nextLng.toFixed(6));
-              }}
-            />
-          </Field>
+            ids={{
+              search: "destination-place",
+              latitude: "destination-latitude",
+              longitude: "destination-longitude",
+            }}
+            value={values.location}
+            error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
+            hint="Optional. It centres the maps that show what is in this place; it prices nothing."
+            onChange={(next, meta) => {
+              setValues((current) => {
+                const place = meta.source === "search" ? next.place : null;
 
-          <div className="grid grid-cols-2 gap-4">
-            <NumberInput
-              id="destination-latitude"
-              label="Latitude"
-              step="any"
-              min={-90}
-              max={90}
-              value={values.latitude}
-              onChange={(event) => set("latitude", event.target.value)}
-              error={fieldErrors.latitude}
-            />
-            <NumberInput
-              id="destination-longitude"
-              label="Longitude"
-              step="any"
-              min={-180}
-              max={180}
-              value={values.longitude}
-              onChange={(event) => set("longitude", event.target.value)}
-              error={fieldErrors.longitude}
-            />
-          </div>
+                return {
+                  ...current,
+                  location: next,
+                  // A searched place fills in what is still empty, and no more.
+                  ...(place?.name && !current.name.trim()
+                    ? { name: place.name, ...(slugTouched ? {} : { slug: slugify(place.name) }) }
+                    : {}),
+                  ...(place?.countryCode && !countryTouched ? { countryCode: place.countryCode } : {}),
+                };
+              });
+              setSaved(false);
+            }}
+          />
 
-          {halfPlaced && (
-            <p role="alert" className="text-[0.75rem] text-error-text">
-              Give both coordinates, or clear them both.
-            </p>
-          )}
-
-          {clearingPlacement && (
+          {!placed && editing && destination?.latitude != null && (
             <p className="text-[0.75rem] leading-relaxed text-warning-text">
-              A pin cannot be removed once it is set — saving now leaves the stored coordinates
-              where they are. Move it instead.
+              Saving now takes this destination off the map.
             </p>
           )}
 
