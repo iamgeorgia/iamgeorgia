@@ -269,6 +269,62 @@
 }
 
 /* ==========================================================================
+   GEORGIAN TYPE
+   The display scale above is drawn for Fraunces, and Fraunces has no Georgian
+   glyphs: on /ka every headline is set in the Noto Sans Georgian fallback at
+   Fraunces' size, leading and tracking, and none of the three fit it.
+
+   Mkhedruli has no capitals — nearly every letter either climbs to cap height
+   or drops below the baseline — so the ink of a line is as tall as the line
+   itself (1.02em), and at a leading of 0.98–1.1 one line's descenders land in
+   the next line's ascenders. The face is also drawn larger: its letter body
+   is 0.55em against Fraunces' 0.47em x-height, so the same pixel size reads a
+   sixth bigger and a quarter wider, and a headline that takes two lines in
+   English took four.
+
+   Scoped by `:lang(ka)`, so no other language moves. Body sizes are left
+   alone: Inter and Noto Sans Georgian share an x-height, and 1.5–1.65 is
+   already enough leading for the script.
+   ========================================================================== */
+
+@layer components {
+  :is(.type-display, .type-h1, .type-h2, .type-h3, .font-display):lang(ka) {
+    /* Sizes each face by its x-height rather than its em box, which brings the
+       Georgian fallback down to the optical size Fraunces is drawn at. It
+       works per glyph, so Latin inside a Georgian page — a hotel name, a
+       figure in a headline — is still Fraunces at exactly its English size.
+       The number is what `from-font` resolves to for Fraunces, for browsers
+       that only take a number. */
+    font-size-adjust: 0.482;
+    font-size-adjust: from-font;
+    /* The negative tracking is display kerning for Fraunces. */
+    letter-spacing: normal;
+  }
+
+  .type-display:lang(ka) {
+    line-height: 1.06;
+  }
+
+  .type-h1:lang(ka) {
+    line-height: 1.12;
+  }
+
+  .type-h2:lang(ka) {
+    line-height: 1.16;
+  }
+
+  .type-h3:lang(ka) {
+    line-height: 1.26;
+  }
+
+  /* A Georgian overline is longer and wraps more often; at a leading of 1
+     its two lines sat on top of each other. */
+  .type-eyebrow:lang(ka) {
+    line-height: 1.4;
+  }
+}
+
+/* ==========================================================================
    UTILITIES
    ========================================================================== */
 
