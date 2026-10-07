@@ -19,9 +19,13 @@ type Size = "sm" | "md" | "lg";
  * in a two-button row on a phone — or a Russian cancel dialog at any width —
  * the text ran out of the button and was clipped by the dialog. A button that
  * has room still sits on one line at exactly its old height.
+ *
+ * Georgian gets a looser leading for the wrapped case: its letters fill the
+ * whole line, and at `leading-tight` two lines of a label were 3px apart. The
+ * minimum heights absorb it, so a one-line button does not grow.
  */
 const base =
-  "inline-flex max-w-full items-center justify-center gap-2 rounded-sm text-center font-sans leading-tight font-semibold [&>svg]:shrink-0 " +
+  "inline-flex max-w-full items-center justify-center gap-2 rounded-sm text-center font-sans leading-tight font-semibold [&:lang(ka)]:leading-snug [&>svg]:shrink-0 " +
   "transition-[background-color,color,border-color,transform] duration-200 ease-(--ease-out-soft) " +
   "active:translate-y-px disabled:pointer-events-none disabled:opacity-50";
 
