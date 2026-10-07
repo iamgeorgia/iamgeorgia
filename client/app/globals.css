@@ -201,7 +201,14 @@
     /* The floor is what a phone gets: at 2.75rem a single long Georgian word
        was wider than a 320px screen. From ~630px up the size is unchanged. */
     font-size: clamp(2.25rem, 7vw, 5.75rem);
-    line-height: 0.98;
+    /* The leading of the four display sizes is measured, not eyeballed.
+       Fraunces' descender and ascender add up to a full em, so a line-height
+       of 1 is the point where the "g" of one line touches the "b" and "d" of
+       the next, and whatever is above 1 is the clear air between them: at the
+       old 0.98–1.1 there was none to speak of. The share grows as the type
+       gets smaller, which is what keeps the gap from closing up in pixels —
+       13px here at the desktop size, 6px under a 22px card title. */
+    line-height: 1.12;
     letter-spacing: -0.025em;
   }
 
@@ -209,7 +216,7 @@
     font-family: var(--font-display);
     font-weight: 300;
     font-size: clamp(2.25rem, 5vw, 3.75rem);
-    line-height: 1.04;
+    line-height: 1.16;
     letter-spacing: -0.022em;
   }
 
@@ -217,7 +224,7 @@
     font-family: var(--font-display);
     font-weight: 300;
     font-size: clamp(1.875rem, 3.6vw, 2.75rem);
-    line-height: 1.1;
+    line-height: 1.2;
     letter-spacing: -0.018em;
   }
 
@@ -225,7 +232,7 @@
     font-family: var(--font-display);
     font-weight: 400;
     font-size: clamp(1.375rem, 2.2vw, 1.75rem);
-    line-height: 1.2;
+    line-height: 1.28;
     letter-spacing: -0.012em;
   }
 
@@ -276,15 +283,16 @@
 
    Mkhedruli has no capitals — nearly every letter either climbs to cap height
    or drops below the baseline — so the ink of a line is as tall as the line
-   itself (1.02em), and at a leading of 0.98–1.1 one line's descenders land in
-   the next line's ascenders. The face is also drawn larger: its letter body
-   is 0.55em against Fraunces' 0.47em x-height, so the same pixel size reads a
-   sixth bigger and a quarter wider, and a headline that takes two lines in
-   English took four.
+   itself (1.02em), and at the Latin leading of 1.12–1.28 one line's descenders
+   still crowd the next line's ascenders. The face is also drawn larger: its
+   letter body is 0.55em against Fraunces' 0.47em x-height, so the same pixel
+   size reads a sixth bigger and a quarter wider, and a headline that takes two
+   lines in English took four.
 
    Scoped by `:lang(ka)`, so no other language moves. Body sizes are left
    alone: Inter and Noto Sans Georgian share an x-height, and 1.5–1.65 is
-   already enough leading for the script.
+   already enough leading for the script. The two sans styles set tighter
+   than that — `.type-h4` and a wrapped button label — are opened up below.
    ========================================================================== */
 
 @layer components {
@@ -301,26 +309,68 @@
     letter-spacing: normal;
   }
 
+  /* Every Georgian line is ragged on both edges, so the same clear gap reads
+     tighter than it does under Latin, where most of a line stops at the
+     x-height. Each size gets about a third of an em of clear air instead of
+     an eighth: 29px under the hero at the desktop size, 12px on a phone,
+     where that headline runs to four lines. */
   .type-display:lang(ka) {
-    line-height: 1.06;
+    line-height: 1.24;
   }
 
   .type-h1:lang(ka) {
-    line-height: 1.12;
+    line-height: 1.28;
   }
 
   .type-h2:lang(ka) {
-    line-height: 1.16;
+    line-height: 1.32;
   }
 
   .type-h3:lang(ka) {
-    line-height: 1.26;
+    line-height: 1.36;
+  }
+
+  /* Set in the sans, with no size adjustment, so the ink is the full 1.02em:
+     at 1.35 two lines of a 17px label were under 5px apart. */
+  .type-h4:lang(ka) {
+    line-height: 1.45;
   }
 
   /* A Georgian overline is longer and wraps more often; at a leading of 1
      its two lines sat on top of each other. */
   .type-eyebrow:lang(ka) {
     line-height: 1.4;
+  }
+}
+
+/* ==========================================================================
+   RUSSIAN AND HEBREW DISPLAY
+   Fraunces has no Cyrillic or Hebrew either, and the faces that stand in for
+   it are taller from ascender to descender — about 1.06em against Fraunces'
+   1em. At the Latin leading a Russian headline kept half the gap an English
+   one does, and a Hebrew final kaf came within 2px of the lamed on the line
+   below. The difference is added back at every display size.
+   ========================================================================== */
+
+@layer components {
+  .type-display:lang(ru) {
+    line-height: 1.18;
+  }
+
+  .type-display:lang(he) {
+    line-height: 1.2;
+  }
+
+  .type-h1:is(:lang(ru), :lang(he)) {
+    line-height: 1.22;
+  }
+
+  .type-h2:is(:lang(ru), :lang(he)) {
+    line-height: 1.26;
+  }
+
+  .type-h3:is(:lang(ru), :lang(he)) {
+    line-height: 1.32;
   }
 }
 
