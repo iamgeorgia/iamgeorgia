@@ -7,7 +7,7 @@ import { assertReplayOwner } from '../../lib/idempotency.js';
 import { sqlStateOf } from '../../middleware/errors.js';
 import { nextTransferBookingReference } from '../../lib/reference.js';
 import { dateOnlyToUtc } from '../../lib/time.js';
-import { isTransferOps } from '../../middleware/auth.js';
+import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { buildCancellationSchedule, calculateRefund, freeCancellationUntil } from '../hotel/policy.service.js';
 import { revalidateQuote } from './quote.service.js';
 import { ACTIVE_ASSIGNMENT_STATUSES } from '../../lib/transfer/machines.js';
@@ -114,7 +114,11 @@ const snapshotVehicle = (vehicle) => ({
 });
 
 /** Who may ask for a particular driver: a partner, or operations booking for one. */
-const mayChooseDriver = (actor) => Boolean(actor?.partnerId) || isTransferOps(actor);
+const mayChooseDriver = (actor) =>
+    Boolean(actor?.partnerId) || can(actor, CAPABILITIES.BOOKINGS_WRITE, CAPABILITIES.DISPATCH_WRITE);
+
+/** Staff who read every transfer booking: the booking desks, and operations who dispatch against them. */
+const readsAllTransfers = (viewer) => can(viewer, CAPABILITIES.BOOKINGS_READ, CAPABILITIES.DISPATCH_READ);
 
 const notEligible = (message, field) =>
     new UnprocessableEntityError(message, { reason: 'DRIVER_NOT_ELIGIBLE', field });
@@ -461,7 +465,7 @@ const aggregateExtras = (legs) => {
  * turn this endpoint into a way of discovering which ones exist.
  */
 const assertMayRead = (booking, viewer, { email } = {}) => {
-    if (isTransferOps(viewer)) {
+    if (readsAllTransfers(viewer)) {
         return;
     }
 
@@ -485,6 +489,29 @@ const assertMayRead = (booking, viewer, { email } = {}) => {
     }
 };
 
+/**
+ * Who may change a booking: cancel it or amend its paperwork.
+ *
+ * Narrower than reading. Operations and finance read every booking, but a
+ * dispatcher never touches money, and a cancellation is money: it fixes the
+ * charge and the refund. So of the platform side only the roles holding the
+ * capability pass (`bookings.cancel` to cancel, `bookings.write` to amend);
+ * everyone else needs the same proof a read does — their own partner's
+ * booking, or the lead passenger's email. Staff who may read but not change
+ * are answered as a stranger would be, with a 404.
+ */
+const assertMayMutate = (booking, viewer, { capability, ...options }) => {
+    if (can(viewer, capability)) {
+        return;
+    }
+
+    if (readsAllTransfers(viewer)) {
+        throw new NotFoundError('That booking does not exist');
+    }
+
+    assertMayRead(booking, viewer, options);
+};
+
 export const findTransferBookingOr404 = async (reference, viewer, options = {}) => {
     const booking = await prisma.transferBooking.findUnique({
         where: { reference },
@@ -506,7 +533,7 @@ export const listTransferBookings = async (query, viewer) => {
     const where = {
         // Scoped in the query rather than filtered after, so there is no path
         // by which one partner reads another's.
-        ...(isTransferOps(viewer) ? {} : { partnerId: viewer?.partnerId ?? '__none__' }),
+        ...(readsAllTransfers(viewer) ? {} : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: Array.isArray(status) ? { in: status } : status } : {}),
         ...(from || to
             ? {
@@ -662,7 +689,7 @@ export const cancelTransferBooking = async (reference, { reason, email } = {}, a
             throw new NotFoundError('That booking does not exist');
         }
 
-        assertMayRead(booking, actor, { email });
+        assertMayMutate(booking, actor, { email, capability: CAPABILITIES.BOOKINGS_CANCEL });
 
         await assertNotInOrder(tx, 'transferBookingId', booking.id);
 
@@ -682,6 +709,8 @@ const AMENDABLE_STATUSES = ['PENDING', 'CONFIRMED'];
 export const amendTransferBooking = async (reference, input, actor, req) => {
     const { email, leadPassenger, ...rest } = input;
     const booking = await findTransferBookingOr404(reference, actor, { email });
+
+    assertMayMutate(booking, actor, { email, capability: CAPABILITIES.BOOKINGS_WRITE });
 
     if (!AMENDABLE_STATUSES.includes(booking.status)) {
         throw new ConflictError('That booking can no longer be amended', {

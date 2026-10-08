@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
     createDestinationSchema,
@@ -34,7 +35,7 @@ import {
  */
 export const adminDestinationRoutes = Router();
 
-adminDestinationRoutes.use(authenticate, requireAdmin);
+adminDestinationRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
 
 adminDestinationRoutes.get('/', validate({ query: destinationQuerySchema }), async (req, res) => {
     const { locale } = req.valid.query;

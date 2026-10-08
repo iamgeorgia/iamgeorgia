@@ -224,8 +224,11 @@ export const quotesForJourney = async (query, viewer) => {
         return { from, to, route: curated, offers: [], closed: true };
     }
 
+    // `productType` is what lets a rule written for "every transfer" match;
+    // without it only rules that name no product type at all could apply.
     const { markupBps } = await resolveMarkup({
         partner: viewer?.partner ?? (viewer?.partnerId ? { id: viewer.partnerId } : null),
+        productType: 'TRANSFER',
         destinationId: from.destinationId,
         timezone: from.timezone,
         date: travelDates[0]

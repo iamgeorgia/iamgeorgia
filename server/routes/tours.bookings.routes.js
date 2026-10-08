@@ -3,10 +3,13 @@ import { Router } from 'express';
 import {
     authenticate,
     optionalAuthenticate,
-    requireAdmin,
+    rejectUnapprovedPartner,
     requireApprovedPartner,
+    requireCapability,
+    requireCapabilityByMethod,
     requirePartner
 } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { idempotencyKeyFrom } from '../lib/idempotency.js';
 import {
@@ -48,7 +51,7 @@ import {
  */
 export const tourBookingRoutes = Router();
 
-tourBookingRoutes.use(optionalAuthenticate);
+tourBookingRoutes.use(optionalAuthenticate, rejectUnapprovedPartner);
 
 tourBookingRoutes.post('/holds', validate({ body: tourHoldSchema }), async (req, res) => {
     const { hold, priced } = await holdTourOffer(req.valid.body.token, req.user);
@@ -137,7 +140,7 @@ partnerTourBookingRoutes.get('/', validate({ query: tourBookingQuerySchema }), a
  */
 export const adminTourBookingRoutes = Router();
 
-adminTourBookingRoutes.use(authenticate, requireAdmin);
+adminTourBookingRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ], write: [CAPABILITIES.BOOKINGS_WRITE] }));
 
 adminTourBookingRoutes.get('/', validate({ query: tourBookingQuerySchema }), async (req, res) => {
     const { bookings, ...page } = await listTourBookings(req.valid.query, req.user);
@@ -169,7 +172,7 @@ adminTourBookingRoutes.post(
 
 adminTourBookingRoutes.post(
     '/:reference/cancel',
-    validate({ params: tourReferenceParamSchema, body: cancelTourBookingSchema }),
+    requireCapability(CAPABILITIES.BOOKINGS_CANCEL), validate({ params: tourReferenceParamSchema, body: cancelTourBookingSchema }),
     async (req, res) => {
         const { booking, quote } = await cancelTourBooking(req.valid.params.reference, req.valid.body, req.user, req);
 

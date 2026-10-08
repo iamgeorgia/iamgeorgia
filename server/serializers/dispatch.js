@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { ACTOR, transferLegMachine } from '../lib/transfer/machines.js';
 import { isTransferOps } from '../middleware/auth.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 import { toDriverPublic } from './driver.js';
 import { toFleetVehiclePublic } from './fleet.js';
 
@@ -123,7 +124,7 @@ export const toLegAdmin = (leg, viewer) => {
             vehicleClassId: leg.booking.vehicleId
         },
         assignment: toAssignmentAdmin(assignment),
-        allowedTransitions: transferLegMachine.nextStates(leg.status, isTransferOps(viewer) ? ACTOR.OPS : ACTOR.PARTNER)
+        allowedTransitions: transferLegMachine.nextStates(leg.status, can(viewer, CAPABILITIES.DISPATCH_WRITE) ? ACTOR.OPS : ACTOR.PARTNER)
     };
 };
 

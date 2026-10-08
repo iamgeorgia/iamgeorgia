@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { isAdmin } from '../middleware/auth.js';
+import { canViewBuyer, canViewMargin } from '../middleware/auth.js';
 import { toBookingSummary } from './booking.js';
 import { toTransferBookingSummary } from './transfer.js';
 import { toTourBookingSummary } from './tourBooking.js';
@@ -44,7 +44,7 @@ export const toOrderItem = (item, viewer) => ({
     lineTotalCents: item.lineTotalCents,
     cancellationChargeCents: item.cancellationChargeCents ?? null,
     cancelledAt: item.cancelledAt ?? null,
-    ...(isAdmin(viewer) ? { netCents: item.netCents } : {}),
+    ...(canViewMargin(viewer) ? { netCents: item.netCents } : {}),
     booking: toChild(item, viewer)
 });
 
@@ -74,10 +74,13 @@ export const toOrderSummary = (order, viewer) => {
         completedAt: order.completedAt ?? null
     };
 
-    if (isAdmin(viewer)) {
+    if (canViewMargin(viewer)) {
         summary.componentsNetCents = order.componentsNetCents;
         summary.componentsSellCents = order.componentsSellCents;
         summary.marginCents = order.sellTotalCents - order.componentsNetCents;
+    }
+
+    if (canViewBuyer(viewer)) {
         summary.partner = order.partner ?? null;
     }
 

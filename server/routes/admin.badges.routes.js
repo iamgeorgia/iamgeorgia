@@ -1,7 +1,8 @@
 import { Router } from 'express';
 
 import { prisma } from '../db/index.js';
-import { authenticate, isAdmin, requireTransferOps } from '../middleware/auth.js';
+import { authenticate, requireCapability } from '../middleware/auth.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 import { dateOnlyToUtc } from '../lib/time.js';
 
 /**
@@ -20,7 +21,7 @@ import { dateOnlyToUtc } from '../lib/time.js';
  */
 export const adminBadgeRoutes = Router();
 
-adminBadgeRoutes.use(authenticate, requireTransferOps);
+adminBadgeRoutes.use(authenticate, requireCapability(CAPABILITIES.CATALOGUE_READ));
 
 /** A hotel booking that still owes the operator something. */
 const ACTIVE_BOOKING_STATUSES = ['PENDING', 'CONFIRMED'];
@@ -32,7 +33,9 @@ const PENDING_PARTNER_STATUSES = ['PENDING_APPROVAL', 'REGISTRATION_IN_PROGRESS'
 const LEG_WINDOW_DAYS = 30;
 
 adminBadgeRoutes.get('/', async (req, res) => {
-    const admin = isAdmin(req.user);
+    const partners = can(req.user, CAPABILITIES.PARTNERS_READ);
+    const bookings = can(req.user, CAPABILITIES.BOOKINGS_READ);
+    const dispatch = can(req.user, CAPABILITIES.DISPATCH_READ);
 
     // The list takes `from`/`to` as calendar dates and treats `to` as
     // inclusive (`< to + 1 day`); the same arithmetic here keeps the badge and
@@ -42,13 +45,15 @@ adminBadgeRoutes.get('/', async (req, res) => {
 
     const [pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders] =
         await Promise.all([
-            admin ? prisma.partner.count({ where: { status: { in: PENDING_PARTNER_STATUSES } } }) : null,
-            admin ? prisma.hotelBooking.count({ where: { status: { in: ACTIVE_BOOKING_STATUSES } } }) : null,
-            prisma.transferBookingLeg.count({
-                where: { status: 'UNASSIGNED', pickupAt: { gte: today, lt: until } }
-            }),
-            admin ? prisma.tourBooking.count({ where: { status: 'PENDING' } }) : null,
-            admin ? prisma.order.count({ where: { status: 'PENDING_CONFIRMATION' } }) : null
+            partners ? prisma.partner.count({ where: { status: { in: PENDING_PARTNER_STATUSES } } }) : null,
+            bookings ? prisma.hotelBooking.count({ where: { status: { in: ACTIVE_BOOKING_STATUSES } } }) : null,
+            dispatch
+                ? prisma.transferBookingLeg.count({
+                      where: { status: 'UNASSIGNED', pickupAt: { gte: today, lt: until } }
+                  })
+                : null,
+            bookings ? prisma.tourBooking.count({ where: { status: 'PENDING' } }) : null,
+            bookings ? prisma.order.count({ where: { status: 'PENDING_CONFIRMATION' } }) : null
         ]);
 
     res.json({ pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders });

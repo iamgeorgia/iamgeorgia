@@ -8,7 +8,7 @@ import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextTourBookingReference } from '../../lib/reference.js';
 import { dateOnlyToUtc, toDateOnly } from '../../lib/time.js';
-import { isAdmin } from '../../middleware/auth.js';
+import { readsAllBookings } from '../../middleware/auth.js';
 import { readTourOfferToken } from '../../lib/tour/offerToken.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
 import { revalidateTourOffer } from './search.service.js';
@@ -403,7 +403,7 @@ export const holdTourOffer = async (token, actor) => {
  * cannot be enumerated.
  */
 const assertMayRead = (booking, viewer, { email } = {}) => {
-    if (isAdmin(viewer)) {
+    if (readsAllBookings(viewer)) {
         return;
     }
 
@@ -444,7 +444,7 @@ export const listTourBookings = async (query, viewer) => {
     const { page, pageSize, status, tourId, partnerId, from, to, search } = query;
 
     const where = {
-        ...(isAdmin(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
+        ...(readsAllBookings(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(tourId ? { tourId } : {}),
         ...(from || to

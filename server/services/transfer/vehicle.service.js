@@ -2,7 +2,7 @@ import { prisma } from '../../db/index.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { localise } from '../../serializers/localise.js';
-import { isAdmin } from '../../middleware/auth.js';
+import { isStaff } from '../../middleware/auth.js';
 
 /**
  * Vehicle classes — the sellable products.
@@ -44,7 +44,7 @@ const localiseVehicle = (vehicle, locale) => {
  * reaches a response.
  */
 export const visibilityScope = (viewer) => {
-    if (isAdmin(viewer)) {
+    if (isStaff(viewer)) {
         return {};
     }
 

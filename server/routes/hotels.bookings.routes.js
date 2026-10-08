@@ -3,10 +3,13 @@ import { Router } from 'express';
 import {
     authenticate,
     optionalAuthenticate,
-    requireAdmin,
+    rejectUnapprovedPartner,
     requireApprovedPartner,
+    requireCapability,
+    requireCapabilityByMethod,
     requirePartner
 } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { idempotencyKeyFrom } from '../lib/idempotency.js';
 import {
@@ -54,7 +57,7 @@ import {
  */
 export const bookingRoutes = Router();
 
-bookingRoutes.use(optionalAuthenticate);
+bookingRoutes.use(optionalAuthenticate, rejectUnapprovedPartner);
 
 /** Secures the rooms while the guest fills in their details. */
 bookingRoutes.post('/holds', validate({ body: holdSchema }), async (req, res) => {
@@ -171,7 +174,7 @@ partnerBookingRoutes.get('/', validate({ query: bookingQuerySchema }), async (re
 /** Every booking on the platform. */
 export const adminBookingRoutes = Router();
 
-adminBookingRoutes.use(authenticate, requireAdmin);
+adminBookingRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ], write: [CAPABILITIES.BOOKINGS_WRITE] }));
 
 adminBookingRoutes.get('/', validate({ query: bookingQuerySchema }), async (req, res) => {
     const { bookings, ...page } = await listBookings(req.valid.query, req.user);
@@ -218,7 +221,7 @@ adminBookingRoutes.post(
 
 adminBookingRoutes.post(
     '/:reference/cancel',
-    validate({ params: referenceParamSchema, body: cancelBookingSchema }),
+    requireCapability(CAPABILITIES.BOOKINGS_CANCEL), validate({ params: referenceParamSchema, body: cancelBookingSchema }),
     async (req, res) => {
         const { booking, quote } = await cancelBooking(
             req.valid.params.reference,

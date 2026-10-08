@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { canViewNetRates } from '../middleware/auth.js';
+import { canViewMargin, canViewNetRates } from '../middleware/auth.js';
 
 /**
  * Inventory, rate and quote responses.
@@ -146,6 +146,9 @@ export const toQuote = (quote, viewer, hotel) => {
 
     if (canViewNetRates(viewer, hotel)) {
         payload.totals.netCents = quote.totals.netCents;
+    }
+
+    if (canViewMargin(viewer)) {
         payload.totals.markupBps = quote.totals.markupBps;
         payload.totals.marginCents = quote.totals.marginCents;
     }

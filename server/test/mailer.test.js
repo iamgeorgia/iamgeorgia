@@ -29,7 +29,8 @@ const sampleData = {
     partnerRejected: { companyName: 'Rooms Hotel', reference: 'PTR-000001', contactName: 'Nino', reason: 'Unverified' },
     accountActivation: { contactName: 'Nino', companyName: 'Rooms Hotel', url: activationUrl('tok'), expiresAt },
     invitationReissued: { companyName: 'Rooms Hotel', url: invitationUrl('tok2'), expiresAt },
-    passwordReset: { url: passwordResetUrl('tok3'), expiresAt }
+    passwordReset: { url: passwordResetUrl('tok3'), expiresAt },
+    staffAccountActivation: { contactName: 'Tamar', roleLabel: 'Finance', url: activationUrl('tok4'), expiresAt }
 };
 
 describe('email templates', () => {

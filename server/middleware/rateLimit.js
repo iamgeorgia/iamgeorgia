@@ -231,6 +231,21 @@ export const passwordChangeLimiter = rateLimit({
 });
 
 /**
+ * Invitations sent, per inviter.
+ *
+ * Keyed on the session's user like the password-change limiter, and counting
+ * successes — the point is the number of accounts one session can create,
+ * not the number of mistakes it makes.
+ */
+export const inviteLimiter = rateLimit({
+    ...base,
+    store: store('invite'),
+    limit: config.auth.inviteLimit,
+    keyGenerator: (req) => req.user?.id ?? ipKeyGenerator(req.ip),
+    handler: handler('Too many invitations. Try again later.')
+});
+
+/**
  * Reset links per address, wherever they are asked for from.
  *
  * The per-IP limiter below caps how fast one client can ask; this caps how

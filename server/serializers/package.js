@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { isAdmin } from '../middleware/auth.js';
+import { canViewMargin, isStaff } from '../middleware/auth.js';
 import { localise } from './localise.js';
 import { toImageAsset } from './media.js';
 import { PACKAGE_TRANSLATABLE_FIELDS } from '../services/package/package.service.js';
@@ -94,7 +94,7 @@ export const toPackageSummary = (pkg, locale, viewer) => {
         updatedAt: pkg.updatedAt
     };
 
-    if (isAdmin(viewer)) {
+    if (isStaff(viewer)) {
         summary.status = pkg.status;
         summary.b2cEnabled = pkg.b2cEnabled;
         summary.sortOrder = pkg.sortOrder;
@@ -137,7 +137,7 @@ export const toPackageComponent = (component, viewer) => ({
                   certificationScopes: component.kosherCertificationScopes
               }
             : null,
-    ...(isAdmin(viewer) ? { constraints: component.constraints ?? {} } : {})
+    ...(isStaff(viewer) ? { constraints: component.constraints ?? {} } : {})
 });
 
 export const toPackageDetail = (pkg, locale, viewer) => {
@@ -223,7 +223,7 @@ const toResolved = (resolved, net) => {
 };
 
 export const toPackageQuote = (quote, locale, viewer) => {
-    const net = isAdmin(viewer);
+    const net = canViewMargin(viewer);
 
     return {
         package: toPackageSummary(quote.package, locale, viewer),
@@ -291,7 +291,7 @@ export const toRecommendations = (recommendations, locale, viewer) => ({
             currency: quote.currency,
             totalCents: quote.totals.totalCents,
             adjustmentCents: quote.totals.adjustmentCents,
-            ...(isAdmin(viewer) ? { marginCents: quote.totals.marginCents } : {})
+            ...(canViewMargin(viewer) ? { marginCents: quote.totals.marginCents } : {})
         }
     }))
 });

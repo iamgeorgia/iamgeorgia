@@ -3,12 +3,13 @@ import { Router } from 'express';
 import { prisma } from '../db/index.js';
 import { dateOnlyToUtc } from '../lib/time.js';
 import { validate } from '../middleware/validate.js';
-import { authenticate, requireApprovedPartner, requirePartner, requireRole } from '../middleware/auth.js';
+import { authenticate, requireApprovedPartner, requireCapability, requirePartner } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { partnerSelfUpdateSchema, accountUpdateSchema, financialUpdateSchema } from '../validation/partner.js';
 import { toPartnerDetail } from '../serializers/partner.js';
 import { toUser } from '../serializers/user.js';
-import { findPartnerOr404, updateFinancial } from '../services/partner.service.js';
+import { findPartnerOr404, readFinancial, updateFinancial } from '../services/partner.service.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 
 export const partnerRoutes = Router();
@@ -109,7 +110,7 @@ partnerRoutes.get('/dashboard', requireApprovedPartner, async (req, res) => {
 partnerRoutes.patch(
     '/profile',
     requireApprovedPartner,
-    requireRole('PARTNER_OWNER', 'PARTNER_ADMIN'),
+    requireCapability(CAPABILITIES.PARTNER_PROFILE_WRITE),
     validate({ body: partnerSelfUpdateSchema }),
     async (req, res) => {
         const id = ownPartnerId(req);
@@ -145,11 +146,12 @@ partnerRoutes.get(
     // — and a guard that is applied to the write but not the read is how the
     // next one gets forgotten.
     requireApprovedPartner,
-    requireRole('PARTNER_OWNER', 'PARTNER_FINANCE'),
+    requireCapability(CAPABILITIES.PARTNER_FINANCIAL_READ),
     async (req, res) => {
-        const financial = await prisma.partnerFinancialDetail.findUnique({
-            where: { partnerId: ownPartnerId(req) }
-        });
+        // Through `readFinancial` so a partner's own look at its bank details
+        // is audited like an admin's: the trail answers "who saw the IBAN"
+        // whichever side of the platform they were on.
+        const financial = await readFinancial(ownPartnerId(req), req.user, req);
 
         if (!financial) {
             throw new NotFoundError('No bank details on file');
@@ -168,7 +170,7 @@ partnerRoutes.get(
 partnerRoutes.put(
     '/financial',
     requireApprovedPartner,
-    requireRole('PARTNER_OWNER', 'PARTNER_FINANCE'),
+    requireCapability(CAPABILITIES.PARTNER_FINANCIAL_WRITE),
     validate({ body: financialUpdateSchema }),
     async (req, res) => {
         const financial = await updateFinancial(ownPartnerId(req), req.valid.body, req.user, req);

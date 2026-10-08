@@ -1,7 +1,8 @@
 import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { NotFoundError } from '../lib/errors.js';
 import { toPartnerSummary, toPartnerDetail, toAuditEntry, toInvitation } from '../serializers/partner.js';
 import { prisma } from '../db/index.js';
@@ -35,7 +36,7 @@ export const adminPartnerRoutes = Router();
 
 // Every route below is an admin route. Applying the guards once to the router
 // is what stops a new endpoint from being added without them.
-adminPartnerRoutes.use(authenticate, requireAdmin);
+adminPartnerRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.PARTNERS_READ], write: [CAPABILITIES.PARTNERS_WRITE] }));
 
 adminPartnerRoutes.get('/', validate({ query: partnerQuerySchema }), async (req, res) => {
     const { partners, ...page } = await listPartners(req.valid.query);

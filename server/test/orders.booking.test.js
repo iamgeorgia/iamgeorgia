@@ -172,7 +172,7 @@ describe('orders', { skip: dbAvailable ? false : 'Postgres is not reachable' }, 
         // The guest reads it by email; a stranger does not.
         const mine = await request(app).get(`/api/orders/${created.body.reference}?email=${encodeURIComponent(lead.email)}`);
         assert.equal(mine.status, 200);
-        assert.equal((await request(app).get(`/api/orders/${created.body.reference}?email=other@example.test`)).status, 403);
+        assert.equal((await request(app).get(`/api/orders/${created.body.reference}?email=other@example.test`)).status, 404);
 
         // The children are reachable on their own registers, but cancelling one
         // there is refused: the order is the only door.

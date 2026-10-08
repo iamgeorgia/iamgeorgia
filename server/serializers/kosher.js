@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { isAdmin, canViewNetRates } from '../middleware/auth.js';
+import { isStaff, ownsHotel } from '../middleware/auth.js';
 import {
     certificationState,
     daysUntilExpiry,
@@ -56,7 +56,7 @@ const toCertification = (certification, today, viewer) => {
         documentId: certification.documentId ?? null
     };
 
-    if (isAdmin(viewer)) {
+    if (isStaff(viewer)) {
         value.verification = certification.verification;
         value.verifiedAt = certification.verifiedAt ?? null;
         value.verifiedBy = certification.verifiedBy
@@ -96,7 +96,7 @@ export const toKosher = (hotel, viewer) => {
 
     const today = kosherToday(hotel.timezone);
     const resolved = deriveKosher(profile, today);
-    const staff = canViewNetRates(viewer, hotel);
+    const staff = isStaff(viewer) || ownsHotel(viewer, hotel);
 
     // Archived certificates are history: readable by staff, invisible to an
     // agency, and never part of a badge.

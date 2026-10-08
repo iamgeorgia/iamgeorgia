@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { isAdmin } from '../middleware/auth.js';
+import { canViewBuyer, canViewMargin, isStaff } from '../middleware/auth.js';
 import { toLegAssignmentFor } from './dispatch.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 
@@ -21,7 +21,7 @@ import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 const ownsVehicle = (viewer, vehicle) =>
     Boolean(viewer?.partnerId) && Boolean(vehicle?.partnerId) && viewer.partnerId === vehicle.partnerId;
 
-export const canViewNetFares = (viewer, vehicle) => isAdmin(viewer) || ownsVehicle(viewer, vehicle);
+export const canViewNetFares = (viewer, vehicle) => canViewMargin(viewer) || ownsVehicle(viewer, vehicle);
 
 export const toPoint = (point) => ({
     id: point.id,
@@ -94,12 +94,16 @@ export const toVehicle = (vehicle, viewer) => ({
         : null,
     currency: vehicle.currency,
     recommendedRank: vehicle.recommendedRank,
-    ...(isAdmin(viewer)
+    ...(isStaff(viewer)
         ? {
               status: vehicle.status,
               b2cEnabled: vehicle.b2cEnabled,
               partnerId: vehicle.partnerId ?? null,
-              paceFactor: vehicle.paceFactor,
+              paceFactor: vehicle.paceFactor
+          }
+        : {}),
+    ...(canViewMargin(viewer)
+        ? {
               fallbackPricing: {
                   perKmCents: vehicle.perKmCents,
                   minimumFareCents: vehicle.minimumFareCents,
@@ -140,14 +144,14 @@ export const toRoute = (route, viewer) => ({
         (route.prices ?? []).length > 0
             ? Math.min(...route.prices.map((price) => price.oneWayCents))
             : null,
-    ...(isAdmin(viewer)
+    ...(isStaff(viewer)
         ? {
               status: route.status,
               prices: (route.prices ?? []).map((price) => ({
                   vehicleId: price.vehicleId,
                   oneWayCents: price.oneWayCents,
                   returnCents: price.returnCents,
-                  netCents: price.netCents,
+                  ...(canViewMargin(viewer) ? { netCents: price.netCents } : {}),
                   currency: price.currency,
                   isActive: price.isActive
               }))
@@ -200,12 +204,9 @@ export const toOffer = (offer, viewer) => ({
         totals: {
             sellCents: offer.quote.totals.sellCents,
             totalCents: offer.quote.totals.totalCents,
-            ...(canViewNetFares(viewer, offer.vehicle)
-                ? {
-                      netCents: offer.quote.totals.netCents,
-                      markupBps: offer.quote.totals.markupBps,
-                      marginCents: offer.quote.totals.marginCents
-                  }
+            ...(canViewNetFares(viewer, offer.vehicle) ? { netCents: offer.quote.totals.netCents } : {}),
+            ...(canViewMargin(viewer)
+                ? { markupBps: offer.quote.totals.markupBps, marginCents: offer.quote.totals.marginCents }
                 : {})
         }
     }
@@ -257,11 +258,15 @@ export const toTransferBookingSummary = (booking, viewer) => ({
     totalCents: booking.sellTotalCents,
     createdAt: booking.createdAt.toISOString(),
     legStatuses: (booking.legs ?? []).map((leg) => leg.status ?? 'UNASSIGNED'),
-    ...(isAdmin(viewer)
+    ...(canViewMargin(viewer)
         ? {
               netTotalCents: booking.netTotalCents,
               markupBps: booking.markupBps,
-              marginCents: booking.sellTotalCents - booking.netTotalCents,
+              marginCents: booking.sellTotalCents - booking.netTotalCents
+          }
+        : {}),
+    ...(canViewBuyer(viewer)
+        ? {
               partner: booking.partner
                   ? { id: booking.partner.id, reference: booking.partner.reference, name: booking.partner.name }
                   : null

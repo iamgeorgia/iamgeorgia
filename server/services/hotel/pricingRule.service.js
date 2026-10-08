@@ -67,6 +67,12 @@ export const resolveMarkup = async ({
     timezone,
     date
 } = {}) => {
+    // Only an approved partner buys at its negotiated terms. One still waiting
+    // for approval, or one that has been suspended or rejected, is priced as
+    // the public would be: its session may be live, but its agreement is not.
+    // A bare `{ id }` built without the relation (tests, system callers) is
+    // taken at its word, the same rule `isTrade` applies.
+    const buyer = partner && (partner.status === undefined || partner.status === 'APPROVED') ? partner : null;
     const named = hotel ?? tour ?? service ?? pkg ?? null;
     const scopeDestinationId = destinationId ?? named?.destinationId ?? null;
     const type = productTypeOf({ productType, hotel, tour, service, pkg });
@@ -77,7 +83,7 @@ export const resolveMarkup = async ({
             isActive: true,
             // A rule that names a partner applies only to that partner; a rule
             // that names none applies to everyone including anonymous guests.
-            OR: [{ partnerId: null }, ...(partner?.id ? [{ partnerId: partner.id }] : [])],
+            OR: [{ partnerId: null }, ...(buyer?.id ? [{ partnerId: buyer.id }] : [])],
             AND: [
                 anyOr('hotelId', hotel?.id),
                 anyOr('tourId', tour?.id),
@@ -99,8 +105,8 @@ export const resolveMarkup = async ({
         return { markupBps: best.markupBps, source: 'RULE', ruleId: best.id, label: best.label ?? null };
     }
 
-    if (partner?.commissionRateBps != null) {
-        return { markupBps: partner.commissionRateBps, source: 'PARTNER_COMMISSION' };
+    if (buyer?.commissionRateBps != null) {
+        return { markupBps: buyer.commissionRateBps, source: 'PARTNER_COMMISSION' };
     }
 
     const platformDefault =
@@ -108,7 +114,9 @@ export const resolveMarkup = async ({
             ? config.tour.defaultMarkupBps
             : type === 'SERVICE'
               ? config.service.defaultMarkupBps
-              : config.hotel.defaultMarkupBps;
+              : type === 'TRANSFER'
+                ? config.transfer.defaultMarkupBps
+                : config.hotel.defaultMarkupBps;
 
     return { markupBps: platformDefault, source: 'PLATFORM_DEFAULT' };
 };

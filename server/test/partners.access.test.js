@@ -244,3 +244,76 @@ describe('privilege boundaries', { skip: dbAvailable ? false : 'Postgres is not 
         assert.equal((await prisma.user.findUnique({ where: { id: owner.id } })).role, 'PARTNER_OWNER');
     });
 });
+
+/**
+ * The public booking routers serve guests, so they cannot demand a session —
+ * but a partner session that arrives there books in the partner's name and at
+ * its terms. Signing in works in every status, so these routers must refuse a
+ * partner the portal has already shut out.
+ */
+describe('booking as a partner that is not approved', { skip: dbAvailable ? false : 'Postgres is not reachable' }, () => {
+    const tracker = createTracker();
+
+    after(async () => {
+        await tracker.cleanup();
+        await disconnect();
+    });
+
+    const sessionFor = async (status) => {
+        const partner = await makePartner(tracker, { status });
+        const owner = await makePartnerUser(tracker, partner);
+        const { cookie } = await signIn(app, owner.email);
+
+        return cookie;
+    };
+
+    const bookingWrites = [
+        ['post', '/api/bookings/holds'],
+        ['post', '/api/bookings'],
+        ['post', '/api/transfers/bookings'],
+        ['post', '/api/tours/bookings'],
+        ['post', '/api/orders'],
+        ['post', '/api/bookings/BKG-000001/cancel'],
+        ['patch', '/api/transfers/bookings/TRF-000001']
+    ];
+
+    for (const status of ['PENDING_APPROVAL', 'SUSPENDED', 'REJECTED']) {
+        it(`refuses a ${status.toLowerCase()} partner on every public booking route`, async () => {
+            const cookie = await sessionFor(status);
+
+            for (const [method, path] of bookingWrites) {
+                const response = await request(app)[method](path).set('Cookie', cookie).send({});
+
+                assert.equal(response.status, 403, `${method.toUpperCase()} ${path}`);
+                assert.equal(response.body.error.details.partnerStatus, status);
+            }
+        });
+    }
+
+    it('lets an approved partner through to validation', async () => {
+        const cookie = await sessionFor('APPROVED');
+        const response = await request(app).post('/api/bookings').set('Cookie', cookie).send({});
+
+        assert.equal(response.status, 400);
+    });
+
+    it('leaves a guest with no session untouched', async () => {
+        const response = await request(app).post('/api/bookings').send({});
+
+        assert.equal(response.status, 400);
+    });
+
+    it('prices a partner that is not approved as the public, not at its commission', async () => {
+        const { resolveMarkup } = await import('../services/hotel/pricingRule.service.js');
+        const partner = await makePartner(tracker, { status: 'SUSPENDED' });
+
+        await prisma.partner.update({ where: { id: partner.id }, data: { commissionRateBps: 123 } });
+
+        const suspended = await resolveMarkup({ partner: { ...partner, commissionRateBps: 123 } });
+        const approved = await resolveMarkup({ partner: { ...partner, status: 'APPROVED', commissionRateBps: 123 } });
+
+        assert.equal(suspended.source, 'PLATFORM_DEFAULT');
+        assert.equal(approved.source, 'PARTNER_COMMISSION');
+        assert.equal(approved.markupBps, 123);
+    });
+});

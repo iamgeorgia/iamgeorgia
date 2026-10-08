@@ -1,4 +1,4 @@
-import { FINANCIAL_ROLES, isAdmin } from '../middleware/auth.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 import { toContact } from './user.js';
 
 const primaryContactOf = (partner) => {
@@ -14,13 +14,9 @@ const primaryContactOf = (partner) => {
  * their own company and no other — the partnerId comparison is what stops one
  * approved partner from reading another's IBAN by changing the id in a URL.
  */
-export const canViewFinancial = (viewer, partner) => {
-    if (!viewer || !FINANCIAL_ROLES.includes(viewer.role)) {
-        return false;
-    }
-
-    return isAdmin(viewer) || viewer.partnerId === partner.id;
-};
+export const canViewFinancial = (viewer, partner) =>
+    can(viewer, CAPABILITIES.PARTNERS_FINANCIAL_READ) ||
+    (can(viewer, CAPABILITIES.PARTNER_FINANCIAL_READ) && viewer.partnerId === partner.id);
 
 const toFinancial = (financial) =>
     financial
@@ -87,7 +83,7 @@ export const toPartnerDetail = (partner, viewer) => {
         detail.financial = toFinancial(partner.financial);
     }
 
-    if (isAdmin(viewer)) {
+    if (can(viewer, CAPABILITIES.PARTNERS_READ)) {
         detail.notes = partner.notes ?? null;
         detail.review.rejectionNote = partner.rejectionNote ?? null;
     }
@@ -117,6 +113,8 @@ export const toInvitation = (invitation) => ({
 export const toAuditEntry = (entry) => ({
     id: entry.id,
     action: entry.action,
+    entityType: entry.entityType,
+    entityId: entry.entityId,
     summary: entry.summary,
     metadata: entry.metadata ?? {},
     actor: entry.actorUser ? toContact(entry.actorUser) : null,

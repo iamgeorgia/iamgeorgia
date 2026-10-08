@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { textField } from '../validation/normalize.js';
 import { dateOnlyField } from '../validation/ratePlan.js';
@@ -20,7 +21,7 @@ import {
  */
 export const adminPricingRuleRoutes = Router();
 
-adminPricingRuleRoutes.use(authenticate, requireAdmin);
+adminPricingRuleRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.FINANCE_MARGIN_READ], write: [CAPABILITIES.PRICING_WRITE] }));
 
 const ruleSchema = z
     .object({

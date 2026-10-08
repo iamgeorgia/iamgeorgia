@@ -17,7 +17,7 @@ import {
     forgotPasswordSchema,
     changePasswordSchema
 } from '../validation/auth.js';
-import { toUser } from '../serializers/user.js';
+import { toSessionUser } from '../serializers/user.js';
 import { toPartnerDetail } from '../serializers/partner.js';
 import { findPartnerOr404 } from '../services/partner.service.js';
 import { findDriverByUserId } from '../services/transfer/driver.service.js';
@@ -45,7 +45,7 @@ authRoutes.use(noStoreResponses);
 
 /** The one place the client learns who it is signed in as. */
 const identity = async (user) => ({
-    user: toUser(user),
+    user: toSessionUser(user),
     partner: user.partnerId ? toPartnerDetail(await findPartnerOr404(user.partnerId, user), user) : null,
     // Null for everyone but a driver, and null for a driver whose account has
     // not been linked to a profile yet — the panel shows that as its own state.
@@ -60,7 +60,7 @@ authRoutes.post('/login', authLimiter, validate({ body: loginSchema }), async (r
 });
 
 authRoutes.post('/logout', optionalAuthenticate, async (req, res) => {
-    await logout(req.session);
+    await logout(req.session, req);
     clearSessionCookie(res);
 
     // 204 whether or not there was a session to end: logging out of nothing has

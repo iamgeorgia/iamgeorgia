@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { prisma } from '../../db/index.js';
 import { config } from '../../config.js';
-import { ConflictError, ForbiddenError, GoneError, HttpError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
+import { ConflictError, GoneError, HttpError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
@@ -13,7 +13,8 @@ import { readOfferToken } from '../../lib/hotel/offerToken.js';
 import { readTourOfferToken } from '../../lib/tour/offerToken.js';
 import { impliedOrderStatus, LIVE_ITEM_STATUSES, orderMachine } from '../../lib/order/machines.js';
 import { ACTOR } from '../../lib/transfer/machines.js';
-import { isAdmin, isTrade } from '../../middleware/auth.js';
+import { isTrade, readsAllBookings } from '../../middleware/auth.js';
+import { CAPABILITIES, can } from '../../lib/permissions.js';
 import {
     cancelHotelBookingInTx,
     confirmHotelBookingInTx,
@@ -100,7 +101,7 @@ const deriveIdempotencyKey = (input) =>
         .update([input.packageToken, input.leadGuest.email.toLowerCase(), input.leadGuest.lastName.toLowerCase()].join('|'))
         .digest('base64url');
 
-const actorKind = (viewer) => (isAdmin(viewer) ? OPS : viewer?.partnerId ? PARTNER : viewer ? PARTNER : GUEST);
+const actorKind = (viewer) => (can(viewer, CAPABILITIES.BOOKINGS_WRITE) ? OPS : viewer?.partnerId ? PARTNER : viewer ? PARTNER : GUEST);
 
 /** The child booking an item points at, whichever product it is. */
 export const childOf = (item) => item.hotelBooking ?? item.transferBooking ?? item.tourBooking ?? item.serviceBooking ?? null;
@@ -641,7 +642,7 @@ export const releaseOrderHolds = async (holdTokens) => {
 // --- reads -------------------------------------------------------------------
 
 const assertMayRead = (order, viewer, { email } = {}) => {
-    if (isAdmin(viewer)) return;
+    if (readsAllBookings(viewer)) return;
 
     if (viewer?.partnerId) {
         if (order.partnerId !== viewer.partnerId) {
@@ -655,7 +656,10 @@ const assertMayRead = (order, viewer, { email } = {}) => {
         return;
     }
 
-    throw new ForbiddenError('That order is not yours to see');
+    // A 404, not a 403, like every other booking module: references come from
+    // a sequence, and a different answer for "exists but not yours" would let
+    // anyone enumerate them.
+    throw new NotFoundError('Order not found');
 };
 
 export const findOrderOr404 = async (reference, viewer, options = {}) => {
@@ -674,7 +678,7 @@ export const listOrders = async (query, viewer) => {
     const { page, pageSize, status, packageId, partnerId, from, to, search } = query;
 
     const where = {
-        ...(isAdmin(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
+        ...(readsAllBookings(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(packageId ? { packageId } : {}),
         ...(from || to ? { startDate: { ...(from ? { gte: dateOnlyToUtc(from) } : {}), ...(to ? { lte: dateOnlyToUtc(to) } : {}) } } : {}),
@@ -816,7 +820,7 @@ export const cancelOrderItem = async (reference, slotIndex, { reason, email } = 
         // A package without its hotel is not a package, and dropping the hotel
         // while keeping the discounted transfer is the arbitrage the allocation
         // exists to prevent. Operations may override.
-        if (item.required && !isAdmin(actor)) {
+        if (item.required && !can(actor, CAPABILITIES.BOOKINGS_CANCEL)) {
             throw new ConflictError('That part of the package cannot be cancelled on its own', {
                 reason: 'REQUIRED_COMPONENT',
                 slotIndex

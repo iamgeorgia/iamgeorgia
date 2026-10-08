@@ -58,6 +58,13 @@ describe('the users role constraint', { skip: dbAvailable ? false : 'Postgres is
         await assert.rejects(attempt({ role: 'DISPATCHER', partnerId: partner.id }));
     });
 
+    it('keeps the desk roles on the platform side too', async () => {
+        for (const role of ['MANAGEMENT', 'RESERVATIONS', 'FINANCE']) {
+            tracker.user(await attempt({ role }));
+            await assert.rejects(attempt({ role, partnerId: partner.id }), role);
+        }
+    });
+
     it('still requires a company for every partner role', async () => {
         await assert.rejects(attempt({ role: 'PARTNER_AGENT' }));
         tracker.user(await attempt({ role: 'PARTNER_AGENT', partnerId: partner.id }));
@@ -137,7 +144,7 @@ describe('who reaches what', { skip: dbAvailable ? false : 'Postgres is not reac
         }
     });
 
-    it('lets a dispatcher read bookings but not touch the catalogue or the partners', async () => {
+    it('lets a dispatcher read bookings and the catalogue, but not change the catalogue or see the partners', async () => {
         const list = await request(app)
             .get('/api/admin/transfers/bookings')
             .set('Cookie', dispatcherCookie)
@@ -145,11 +152,46 @@ describe('who reaches what', { skip: dbAvailable ? false : 'Postgres is not reac
         assert.equal(list.status, 200);
         assert.ok(list.body.data.some((row) => row.reference === ownBooking.reference));
 
+        // Reading the catalogue is part of running the fleet; changing it is not.
         const vehicles = await request(app).get('/api/admin/transfers/vehicles').set('Cookie', dispatcherCookie);
-        assert.equal(vehicles.status, 403);
+        assert.equal(vehicles.status, 200);
+
+        const newVehicle = await request(app).post('/api/admin/transfers/vehicles').set('Cookie', dispatcherCookie).send({});
+        assert.equal(newVehicle.status, 403);
+        assert.deepEqual(newVehicle.body.error.details.required, ['catalogue.write']);
 
         const partners = await request(app).get('/api/admin/partners').set('Cookie', dispatcherCookie);
         assert.equal(partners.status, 403);
+    });
+
+    it('lets a dispatcher read a booking but neither cancel nor amend it', async () => {
+        const cancel = await request(app)
+            .post(`/api/admin/transfers/bookings/${platformBooking.reference}/cancel`)
+            .set('Cookie', dispatcherCookie)
+            .send({ reason: 'test' });
+        assert.equal(cancel.status, 403);
+
+        // The public door answers a dispatcher as it would a stranger.
+        const publicCancel = await request(app)
+            .post(`/api/transfers/bookings/${platformBooking.reference}/cancel`)
+            .set('Cookie', dispatcherCookie)
+            .send({ reason: 'test' });
+        assert.equal(publicCancel.status, 404);
+
+        const amend = await request(app)
+            .patch(`/api/transfers/bookings/${platformBooking.reference}`)
+            .set('Cookie', dispatcherCookie)
+            .send({ specialRequests: 'changed by a dispatcher' });
+        assert.equal(amend.status, 404);
+
+        const after = await prisma.transferBooking.findUnique({ where: { id: platformBooking.id } });
+        assert.equal(after.status, platformBooking.status);
+        assert.notEqual(after.specialRequests, 'changed by a dispatcher');
+
+        const read = await request(app)
+            .get(`/api/admin/transfers/bookings/${platformBooking.reference}`)
+            .set('Cookie', dispatcherCookie);
+        assert.equal(read.status, 200);
     });
 
     it('withholds the money from a dispatcher that an admin sees', async () => {

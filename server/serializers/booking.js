@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { canViewNetRates } from '../middleware/auth.js';
+import { canViewBuyer, canViewMargin, canViewNetRates } from '../middleware/auth.js';
 import { toBookingRequest } from './kosher.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 
@@ -10,7 +10,8 @@ import { freeCancellationUntil } from '../services/hotel/policy.service.js';
  * hotel record, which is the whole point of taking one: a voucher printed six
  * months after the hotel renamed the room still describes what was sold.
  *
- * Net figures and margin are admin-only and absent otherwise.
+ * Net figures go to admins and to the property's own supplier; markup,
+ * margin and the buying agency to admins only.
  */
 
 const toNight = (night, viewer, hotel) => ({
@@ -87,12 +88,21 @@ export const toBookingSummary = (booking, viewer) => {
     };
 
     // The hotel record carries `supplierId`, so the property's own owner sees
-    // the cost side of its own reservations.
+    // the cost side of its own reservations: its net, never our markup on it
+    // or the agency that bought it.
     if (canViewNetRates(viewer, booking.hotel)) {
         summary.netTotalCents = booking.netTotalCents;
+    }
+
+    if (canViewMargin(viewer)) {
         summary.markupBps = booking.markupBps;
         summary.marginCents = booking.sellTotalCents - booking.netTotalCents;
+    }
+
+    if (canViewBuyer(viewer)) {
         summary.partner = booking.partner ?? null;
+    } else if (canViewNetRates(viewer, booking.hotel)) {
+        summary.bookedVia = booking.partnerId ? 'AGENCY' : 'DIRECT';
     }
 
     return summary;

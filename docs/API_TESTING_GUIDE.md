@@ -1291,19 +1291,40 @@ Note the new partner lands in `PENDING_APPROVAL`. They can sign in and read
 
 ---
 
+### Team — `/api/partner/team`
+
+Owners and partner admins only (`partner.team.manage`); an agent or a finance
+user gets **`403`**, as does platform staff. Approved partners only. Every id
+is looked up inside the caller's company, so another company's member is
+**`404`** on every verb — test that with a user from a second partner.
+
+| Method | Path | Expected |
+| --- | --- | --- |
+| `GET` | `/api/partner/team?role&status&q&page&pageSize` | `200`, paginated; `status` ∈ `INVITED` `ACTIVE` `DEACTIVATED` |
+| `POST` | `/api/partner/team` | `201` — `{ user, link: { kind, url, expiresAt }, email, emailSent }`; `role` ∈ `PARTNER_ADMIN` `PARTNER_AGENT` `PARTNER_FINANCE`. A partner admin inviting a `PARTNER_ADMIN` → `403` `ROLE_ABOVE_CEILING`; a taken email → `409`; a full team → `409` `TEAM_FULL` |
+| `GET` | `/api/partner/team/:id` | `200` |
+| `PATCH` | `/api/partner/team/:id/role` | `200`; the member's sessions end. Your own id → `400` `SELF` |
+| `PATCH` | `/api/partner/team/:id/primary-contact` | `200`; exactly one primary contact remains. An invited member → `409` `NOT_ACTIVE` |
+| `POST` | `/api/partner/team/:id/deactivate` · `/reactivate` · `/sessions/revoke` · `/activation/resend` | `200` |
+| `DELETE` | `/api/partner/team/:id` | `204` with `{ "confirm": "<their email>" }`; an active member → `409` `STILL_ACTIVE` |
+
 ## Part 8 — Admin
 
-Everything under `/api/admin/*` is guarded by `authenticate + requireAdmin` on
-the **router**, not route by route. So the first test for every single admin
-endpoint is the same:
+Everything under `/api/admin/*` is guarded on the **router**, not route by
+route — `requireAdmin` on the older routers, a named capability on the newer
+ones (`/admin/users` needs `users.staff.manage`, `/admin/audit` needs
+`audit.read`). So the first test for every single admin endpoint is the same:
 
 | Caller | Expected |
 | --- | --- |
 | Anonymous | `401` |
-| Any partner role | `403` |
+| Any partner role, or a driver | `403` |
 | `ADMIN` / `SUPER_ADMIN` | `200`/`201` |
+| `MANAGEMENT` / `RESERVATIONS` / `FINANCE` / `DISPATCHER` | depends on the area — see the role table in `server/API.md` ("Users, roles and capabilities") |
 
 Worth doing once as a sweep across the whole surface, rather than per endpoint.
+The server's own `test/rbac.matrix.test.js` does exactly that for every route
+and every role, against `test/fixtures/rbac-matrix.json`.
 
 ### Partners
 
@@ -1542,6 +1563,41 @@ Upload limits: 10 MB for images, 25 MB for documents. Over the limit → **`413`
 field name → `400`.
 
 ---
+
+### Staff accounts — `/api/admin/users`
+
+**`SUPER_ADMIN` only.** An `ADMIN` gets `403` with
+`details.reason = "INSUFFICIENT_CAPABILITY"` and `details.required =
+["users.staff.manage"]` — the first thing to test.
+
+| Method | Path | Expected |
+| --- | --- | --- |
+| `GET` | `/api/admin/users?role&status&q&page&pageSize` | `200`, paginated; staff only — no drivers, no partner users |
+| `POST` | `/api/admin/users` | `201` — `{ user, link, email, emailSent }`; `role` ∈ `ADMIN` `MANAGEMENT` `RESERVATIONS` `FINANCE` `DISPATCHER` (`SUPER_ADMIN` → `400`). Taken email → `409` |
+| `GET` | `/api/admin/users/:id` | `200`; `status` derived (`INVITED` / `ACTIVE` / `DEACTIVATED`) |
+| `PATCH` | `/api/admin/users/:id/role` | `200`; the account's sessions end — its old cookie now gets `401` on `/api/auth/me` |
+| `POST` | `/api/admin/users/:id/deactivate` | `200`; sign-in now `401`. An invitation → `409` `NOT_ACTIVATED` |
+| `POST` | `/api/admin/users/:id/reactivate` · `/sessions/revoke` · `/activation/resend` | `200` |
+| `DELETE` | `/api/admin/users/:id` | `204` with `{ "confirm": "<their email>" }`; wrong address → `400` `CONFIRM_MISMATCH`; active account → `409` `STILL_ACTIVE` |
+
+The activation link in the `POST` response opens the same `/activate/:token`
+flow as a partner's: `POST /api/auth/activation/:token` with a password, then
+sign in and check `user.role` and `user.capabilities`.
+
+### Audit log — `/api/admin/audit`
+
+`audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE`. A `DISPATCHER`
+and every partner role → `403`.
+
+| Query | Expected |
+| --- | --- |
+| `?entityType=Partner&entityId=<id>` | `200`, newest first, every entry for that partner |
+| `?action=PARTNER_APPROVED&actorUserId=<admin id>` | `200`, only that action by that admin |
+| `?action=NOT_A_THING` | `400` |
+| `?from=<ISO>&to=<ISO>` with `from` after `to` | `400` |
+
+Sign in and out first: `USER_LOGIN_SUCCEEDED` and `USER_LOGGED_OUT` rows
+appear against the account.
 
 ## Part 9 — Kosher
 

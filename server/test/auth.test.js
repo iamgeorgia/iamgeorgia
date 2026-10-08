@@ -58,6 +58,27 @@ describe('authentication', { skip: dbAvailable ? false : 'Postgres is not reacha
         assert.ok(cookie.length > 0);
     });
 
+    it('tells the client what the signed-in role may do', async () => {
+        const finance = await makeAdmin(tracker, { role: 'FINANCE' });
+        const { body, cookie } = await signIn(app, finance.email);
+
+        assert.ok(body.user.capabilities.includes('finance.payments.write'));
+        assert.ok(!body.user.capabilities.includes('catalogue.write'));
+
+        const me = await request(app).get('/api/auth/me').set('Cookie', cookie);
+
+        assert.equal(me.status, 200);
+        assert.deepEqual(me.body.user.capabilities, body.user.capabilities);
+
+        const agent = await makePartnerUser(tracker, await makePartner(tracker), { role: 'PARTNER_AGENT' });
+        const agentMe = await request(app)
+            .get('/api/auth/me')
+            .set('Cookie', (await signIn(app, agent.email)).cookie);
+
+        assert.ok(agentMe.body.user.capabilities.includes('partner.bookings.write'));
+        assert.ok(!agentMe.body.user.capabilities.includes('partner.financial.read'));
+    });
+
     it('puts the session in an httpOnly cookie and never in the body', async () => {
         const admin = await makeAdmin(tracker);
         const { body, cookie } = await signIn(app, admin.email);

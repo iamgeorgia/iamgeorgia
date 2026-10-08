@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { canViewNetRates, isAdmin } from '../middleware/auth.js';
+import { canViewMargin, canViewNetRates, isStaff } from '../middleware/auth.js';
 import { localise } from './localise.js';
 import { toImageAsset } from './media.js';
 import { toCancellationPolicy } from './ratePlan.js';
@@ -87,7 +87,7 @@ export const toTourSummary = (tour, locale, viewer) => {
 
     // Lifecycle, channel and operator belong to the back office, never to the
     // shop window — even for a partner.
-    if (isAdmin(viewer)) {
+    if (isStaff(viewer)) {
         summary.status = tour.status;
         summary.b2cEnabled = tour.b2cEnabled;
         summary.supplier = tour.supplier ?? null;
@@ -235,7 +235,8 @@ export const toTourQuote = (quote, viewer, tour) => {
         })),
         totals: {
             totalCents: quote.totals.totalCents,
-            ...(net ? { netCents: quote.totals.netCents, markupBps: quote.totals.markupBps, marginCents: quote.totals.marginCents } : {})
+            ...(net ? { netCents: quote.totals.netCents } : {}),
+            ...(canViewMargin(viewer) ? { markupBps: quote.totals.markupBps, marginCents: quote.totals.marginCents } : {})
         }
     };
 };

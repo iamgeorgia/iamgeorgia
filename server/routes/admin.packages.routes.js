@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
     archivePackageSchema,
@@ -51,7 +52,7 @@ import {
 /** The package builder. Admin only. */
 export const adminPackageRoutes = Router();
 
-adminPackageRoutes.use(authenticate, requireAdmin);
+adminPackageRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
 
 const reload = (req) => findPackageOr404(req.valid.params.packageId);
 

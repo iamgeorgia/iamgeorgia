@@ -7,7 +7,8 @@ import { config } from '../../config.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { logger } from '../../lib/logger.js';
-import { isAdmin, isTransferOps } from '../../middleware/auth.js';
+import { isTransferOps } from '../../middleware/auth.js';
+import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { newAssetFolder, objectKeyFor, extensionForMime } from '../../lib/media/keys.js';
 import { processImage } from './image.service.js';
 import { putObject, removeObjectPrefix, signedUrlForObject } from './storage.service.js';
@@ -272,9 +273,15 @@ const OPS_CATEGORIES = new Set(['FLEET_IMAGE', 'DRIVER_PHOTO', 'DRIVER_DOCUMENT'
 
 export const isOpsCategory = (category) => OPS_CATEGORIES.has(category);
 
-/** Ownership, for supplier users. Admins reach everything; operations staff reach their own categories. */
+/**
+ * Whether a viewer reaches every file, contracts included: the back-office
+ * desks. A dispatcher reaches the operations categories only.
+ */
+export const reachesAllFiles = (viewer) => can(viewer, CAPABILITIES.PARTNERS_READ);
+
+/** Ownership, for supplier users. The desks reach everything; operations staff reach their own categories. */
 const assertMayReach = (asset, viewer) => {
-    if (isAdmin(viewer)) {
+    if (reachesAllFiles(viewer)) {
         return;
     }
 

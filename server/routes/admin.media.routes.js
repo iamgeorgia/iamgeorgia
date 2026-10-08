@@ -2,7 +2,8 @@ import { Router } from 'express';
 import multer from 'multer';
 
 import { config } from '../config.js';
-import { authenticate, isAdmin, requireAdmin, requireTransferOps } from '../middleware/auth.js';
+import { authenticate, requireAdmin, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { idParamSchema, mediaQuerySchema, uploadSchema } from '../validation/media.js';
@@ -10,6 +11,7 @@ import {
     findFileOr404,
     isOpsCategory,
     issueSignedUrl,
+    reachesAllFiles,
     softDeleteFile,
     uploadFile
 } from '../services/media/upload.service.js';
@@ -42,7 +44,7 @@ export const adminMediaRoutes = Router();
  * The narrowing is applied per route below; the service applies it again for
  * signed links, so this router is not the only thing standing in the way.
  */
-adminMediaRoutes.use(authenticate, requireTransferOps);
+adminMediaRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ, CAPABILITIES.DISPATCH_READ], write: [CAPABILITIES.CATALOGUE_WRITE, CAPABILITIES.DISPATCH_WRITE] }));
 
 adminMediaRoutes.get('/', validate({ query: mediaQuerySchema }), async (req, res) => {
     const { category, partnerId, page, pageSize } = req.valid.query;
@@ -50,7 +52,7 @@ adminMediaRoutes.get('/', validate({ query: mediaQuerySchema }), async (req, res
 
     let categories = requested;
 
-    if (!isAdmin(req.user)) {
+    if (!reachesAllFiles(req.user)) {
         categories = (requested ?? [...['FLEET_IMAGE', 'DRIVER_PHOTO', 'DRIVER_DOCUMENT', 'VEHICLE_DOCUMENT']]).filter(
             isOpsCategory
         );
@@ -89,7 +91,7 @@ adminMediaRoutes.get('/', validate({ query: mediaQuerySchema }), async (req, res
 });
 
 adminMediaRoutes.post('/', upload.single('file'), validate({ body: uploadSchema }), async (req, res) => {
-    if (!isAdmin(req.user) && !isOpsCategory(req.valid.body.category)) {
+    if (!can(req.user, CAPABILITIES.CATALOGUE_WRITE) && !isOpsCategory(req.valid.body.category)) {
         throw new ForbiddenError('Operations staff may upload fleet and driver files only', {
             category: req.valid.body.category
         });
@@ -114,7 +116,7 @@ adminMediaRoutes.get('/:id', validate({ params: idParamSchema }), async (req, re
 
     // A 404 rather than a 403: a dispatcher probing ids must not learn which
     // of a partner's contracts exist.
-    if (!isAdmin(req.user) && !isOpsCategory(asset.category)) {
+    if (!reachesAllFiles(req.user) && !isOpsCategory(asset.category)) {
         throw new NotFoundError('File not found');
     }
 

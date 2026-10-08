@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin, requireTransferOps } from '../middleware/auth.js';
+import { authenticate, requireAdmin, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
     attachFleetImageSchema,
@@ -39,7 +40,7 @@ import { toAttachedDocument, toFleetImage, toFleetVehicleAdmin } from '../serial
  */
 export const adminFleetRoutes = Router();
 
-adminFleetRoutes.use(authenticate, requireTransferOps);
+adminFleetRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.DISPATCH_READ], write: [CAPABILITIES.DISPATCH_WRITE] }));
 
 adminFleetRoutes.get('/', validate({ query: fleetQuerySchema }), async (req, res) => {
     const { vehicles, ...page } = await listFleetVehicles(req.valid.query);

@@ -8,7 +8,7 @@ import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextServiceBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, todayInTimezone, zonedTimeToInstant } from '../../lib/time.js';
-import { isAdmin, isTrade } from '../../middleware/auth.js';
+import { isTrade, readsAllBookings } from '../../middleware/auth.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
 import { resolveMarkup } from '../hotel/pricingRule.service.js';
 import { quoteService } from './pricing.service.js';
@@ -298,7 +298,7 @@ export const confirmServiceBooking = async (input, actor, req) => {
 };
 
 const assertMayRead = (booking, viewer, { email } = {}) => {
-    if (isAdmin(viewer)) {
+    if (readsAllBookings(viewer)) {
         return;
     }
 
@@ -333,7 +333,7 @@ export const listServiceBookings = async (query, viewer) => {
     const { page, pageSize, status, serviceId, partnerId, from, to, search } = query;
 
     const where = {
-        ...(isAdmin(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
+        ...(readsAllBookings(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(serviceId ? { serviceId } : {}),
         ...(from || to

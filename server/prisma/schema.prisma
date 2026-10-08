@@ -3103,6 +3103,12 @@ model AmenityTranslation {
 enum Role {
   SUPER_ADMIN
   ADMIN
+  /// Platform staff who read everything, including margins, and write nothing.
+  MANAGEMENT
+  /// Platform staff who create, amend and cancel bookings; never see a margin.
+  RESERVATIONS
+  /// Platform staff who record money: payments, terms, invoices, reports.
+  FINANCE
   /// Transfer operations staff: dispatches drivers and cars, never touches
   /// fares, partners or margins. Platform-side (no partnerId), not an admin.
   DISPATCHER
@@ -3306,6 +3312,15 @@ enum AuditAction {
   ORDER_CANCELLED
   ORDER_COMPLETED
   ORDER_AMENDED
+  USER_INVITED
+  USER_ROLE_CHANGED
+  USER_DEACTIVATED
+  USER_REACTIVATED
+  USER_DELETED
+  USER_SESSIONS_REVOKED
+  USER_LOGIN_SUCCEEDED
+  USER_LOGGED_OUT
+  USER_PRIMARY_CONTACT_CHANGED
 
   @@map("audit_action")
 }
@@ -3332,6 +3347,21 @@ model User {
   isPrimaryContact Boolean   @default(false) @map("is_primary_contact")
   isActive         Boolean   @default(true) @map("is_active")
   lastLoginAt      DateTime? @map("last_login_at")
+
+  /// Who created this account and when, for staff and team members invited by
+  /// another user. Null for the CLI-made first admin and for partner owners
+  /// who came through the onboarding invitation.
+  invitedByUserId String?   @map("invited_by_user_id")
+  invitedBy       User?     @relation("UserInvitedBy", fields: [invitedByUserId], references: [id], onDelete: SetNull)
+  invitedAt       DateTime? @map("invited_at")
+
+  /// Set together with isActive=false; cleared on reactivation.
+  deactivatedByUserId String?   @map("deactivated_by_user_id")
+  deactivatedBy       User?     @relation("UserDeactivatedBy", fields: [deactivatedByUserId], references: [id], onDelete: SetNull)
+  deactivatedAt       DateTime? @map("deactivated_at")
+
+  usersInvited     User[] @relation("UserInvitedBy")
+  usersDeactivated User[] @relation("UserDeactivatedBy")
 
   partnerId String?  @map("partner_id")
   partner   Partner? @relation("PartnerMembers", fields: [partnerId], references: [id], onDelete: Cascade)

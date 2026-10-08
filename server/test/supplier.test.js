@@ -279,6 +279,21 @@ describe('suppliers and B2B pricing', { skip: dbAvailable ? false : 'Postgres is
             assert.ok(resolved.markupBps > 0);
         });
 
+        it('applies a rule written for transfers to a transfer, and not to a hotel', async () => {
+            // Scoped to a destination nothing else uses, so a parallel test
+            // file quoting transfers never sees it.
+            const destination = await makeDestination(tracker);
+            const created = await makeRule({ productType: 'TRANSFER', destinationId: destination.id, markupBps: 900 });
+            assert.equal(created.status, 201);
+
+            const transfer = await resolveMarkup({ productType: 'TRANSFER', destinationId: destination.id });
+            assert.equal(transfer.source, 'RULE');
+            assert.equal(transfer.markupBps, 900);
+
+            const hotel = await resolveMarkup({ productType: 'HOTEL', destinationId: destination.id });
+            assert.notEqual(hotel.markupBps, 900);
+        });
+
         it('prefers a rule over the commission rate', async () => {
             const created = await makeRule({ partnerId: supplier.id, markupBps: 700, label: 'Negotiated' });
             assert.equal(created.status, 201);

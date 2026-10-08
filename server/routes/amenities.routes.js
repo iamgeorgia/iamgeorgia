@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
     amenityLocaleParamSchema,
@@ -40,7 +41,7 @@ amenityRoutes.get('/', validate({ query: amenityQuerySchema }), async (req, res)
 
 export const adminAmenityRoutes = Router();
 
-adminAmenityRoutes.use(authenticate, requireAdmin);
+adminAmenityRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
 
 adminAmenityRoutes.get('/', validate({ query: amenityQuerySchema }), async (req, res) => {
     const { locale } = req.valid.query;

@@ -3,10 +3,13 @@ import { Router } from 'express';
 import {
     authenticate,
     optionalAuthenticate,
+    rejectUnapprovedPartner,
     requireApprovedPartner,
-    requirePartner,
-    requireTransferOps
+    requireCapability,
+    requireCapabilityByMethod,
+    requirePartner
 } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { idempotencyKeyFrom } from '../lib/idempotency.js';
 import {
@@ -45,7 +48,7 @@ import { toRatingPublic } from '../serializers/rating.js';
  */
 export const transferBookingRoutes = Router();
 
-transferBookingRoutes.use(optionalAuthenticate);
+transferBookingRoutes.use(optionalAuthenticate, rejectUnapprovedPartner);
 
 /**
  * Confirms a transfer.
@@ -206,7 +209,7 @@ partnerTransferBookingRoutes.post(
  */
 export const adminTransferBookingRoutes = Router();
 
-adminTransferBookingRoutes.use(authenticate, requireTransferOps);
+adminTransferBookingRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ, CAPABILITIES.DISPATCH_READ], write: [CAPABILITIES.BOOKINGS_CANCEL] }));
 
 adminTransferBookingRoutes.get(
     '/',
@@ -236,8 +239,11 @@ adminTransferBookingRoutes.get(
     }
 );
 
+// Cancelling fixes a charge and a refund, which is money, so this one route
+// is closed to dispatchers even though they read everything above it.
 adminTransferBookingRoutes.post(
     '/:reference/cancel',
+    requireCapability(CAPABILITIES.BOOKINGS_CANCEL),
     validate({ params: referenceParamSchema, body: cancelTransferSchema }),
     async (req, res) => {
         const { booking, quote } = await cancelTransferBooking(

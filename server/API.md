@@ -450,14 +450,14 @@ fills gaps and leaves every figure someone has already set. Returns
 
 ### Operations roles and the driver identity
 
-Two platform-side roles exist beside the admins. `DISPATCHER` may read every
-transfer booking (`GET /api/admin/transfers/bookings`, `GET
-/api/admin/transfers/bookings/:reference`) and, from the dispatch phase on,
-manage cars, drivers and assignments — but not the catalogue, the fares, the
-partners or the money: the summary and detail shapes carry `netTotalCents`,
-`markupBps` and `marginCents` for admins only. `DRIVER` reaches nothing under
-`/api/partner/*` or `/api/admin/*`; its own routes arrive with the driver
-panel.
+`DISPATCHER` reads every transfer booking (`GET /api/admin/transfers/bookings`,
+`GET /api/admin/transfers/bookings/:reference`), reads the catalogue, and
+manages cars, drivers and assignments — but never changes the catalogue, the
+fares or the partners, never cancels, and never sees the money: the summary and
+detail shapes carry `netTotalCents`, `markupBps` and `marginCents` only for
+roles holding `finance.margin.read`. `DRIVER` reaches nothing under
+`/api/partner/*` or `/api/admin/*`; it has its own panel. The full role map is
+under "Users, roles and capabilities".
 
 `GET /api/auth/me` answers with a third field, `driver`, beside `user` and
 `partner`: the driver's own profile for a `DRIVER` account (`null` until an
@@ -977,6 +977,91 @@ Media categories decide visibility, not the caller: `HOTEL_IMAGE`, `ROOM_IMAGE`,
 `AMENITY_ICON` are public; `CONTRACT`, `RATE_SHEET`, `INVOICE`, `VOUCHER`,
 `IMPORT`, `OTHER` are private and have **no URL** — fetch `/url` for a
 60-second signed link.
+
+## Users, roles and capabilities
+
+Eleven roles. Platform side, never attached to a partner: `SUPER_ADMIN`,
+`ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE`, `DISPATCHER`, `DRIVER`.
+Partner side, always attached to one: `PARTNER_OWNER`, `PARTNER_ADMIN`,
+`PARTNER_AGENT`, `PARTNER_FINANCE`. The database CHECK enforces the split.
+
+What a role may do is a list of **capabilities** (`server/lib/permissions.js`),
+and the signed-in user's list travels on `user.capabilities` in the sign-in
+response and on `GET /api/auth/me`, sorted, so a client decides what to show
+from that rather than from a copy of the role table. Names are `area.verb`:
+`catalogue.write`, `bookings.cancel`, `finance.margin.read`,
+`users.staff.manage`, `partner.team.manage`, `partner.bookings.write`, and so
+on. A 403 from a capability guard says what was missing:
+`{ error: { details: { reason: "INSUFFICIENT_CAPABILITY", required: ["…"] } } }`.
+
+What the platform roles reach in the admin panel:
+
+| Area | Read | Change |
+| --- | --- | --- |
+| Catalogue — destinations, amenities, hotels, tours, services, packages, transfer points/vehicles/routes | every staff role | `SUPER_ADMIN`, `ADMIN` |
+| A hotel's contracts and documents | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
+| Bookings and orders, every company | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` (transfers: also `DISPATCHER`) | confirm/decline and cancel: `SUPER_ADMIN`, `ADMIN`, `RESERVATIONS` |
+| Fleet, drivers, dispatch | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `DISPATCHER` | `SUPER_ADMIN`, `ADMIN`, `DISPATCHER` (deleting a car or a driver: admins) |
+| Partners | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
+| A partner's bank details | `SUPER_ADMIN`, `ADMIN`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
+| Pricing rules | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
+| Net, markup and margin in any response | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | — |
+| Which agency bought a booking | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` | — |
+
+`GET /admin/badges` answers every staff role, with `null` for each queue the
+role does not work (a dispatcher gets `unassignedLegs` only; finance gets
+everything but `unassignedLegs`).
+
+On the partner side, `PARTNER_FINANCE` reads the company's bookings and its
+bank details but makes, holds, amends and cancels nothing: every change on
+`/bookings`, `/transfers/bookings`, `/tours/bookings`, `/orders` and
+`/service-bookings` needs `partner.bookings.write` or `partner.bookings.cancel`
+(403 `INSUFFICIENT_CAPABILITY`). Editing the company profile needs
+`partner.profile.write` (owner, admin); the bank details need
+`partner.financial.read`/`.write` (owner, finance).
+
+### Staff accounts — `/admin/users`
+
+`users.staff.manage`, which only `SUPER_ADMIN` holds: an `ADMIN` gets 403.
+Drivers are not here; they are managed with their profiles under
+`/admin/transfers/drivers`.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/admin/users?role&status&q&page&pageSize` | `status` ∈ `INVITED` `ACTIVE` `DEACTIVATED`; `role` repeatable; envelope `{ data, total, page, pageSize, totalPages }` |
+| POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `RESERVATIONS` `FINANCE` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
+| GET | `/admin/users/:id` | `status` is derived: no password yet → `INVITED`; switched off → `DEACTIVATED`; else `ACTIVE`. Carries `invitedBy`, `invitedAt`, `deactivatedBy`, `deactivatedAt` |
+| PATCH | `/admin/users/:id/role` | `{ role }`, any staff role including `SUPER_ADMIN`; ends the account's sessions |
+| POST | `/admin/users/:id/deactivate` | `{ reason? }`; sessions end now and every unused activation or reset link is spent. 409 `NOT_ACTIVATED` for an invitation — delete it instead |
+| POST | `/admin/users/:id/reactivate` | |
+| POST | `/admin/users/:id/sessions/revoke` | `{ user, revoked }` |
+| POST | `/admin/users/:id/activation/resend` | a fresh link; the old one stops working |
+| DELETE | `/admin/users/:id` | `{ confirm: email }` must match. Only `INVITED` or `DEACTIVATED` accounts (409 `STILL_ACTIVE`); bookings the person made keep their rows |
+
+Nobody may change, deactivate or delete their own account through these
+(400 `SELF`). Invitations are limited per inviter (`AUTH_INVITE_LIMIT`).
+
+### A partner's team — `/partner/team`
+
+`partner.team.manage`: `PARTNER_OWNER` and `PARTNER_ADMIN`, on an approved
+partner. The same verbs as above, scoped to the session's company — another
+company's user id is **404**. Differences: invite roles are `PARTNER_ADMIN`
+`PARTNER_AGENT` `PARTNER_FINANCE`; `PATCH /partner/team/:id/role` accepts any
+partner role including `PARTNER_OWNER`; an owner manages everyone (other
+owners included) while an admin manages agents and finance users only (403
+`ROLE_ABOVE_CEILING`); `PATCH /partner/team/:id/primary-contact` moves the one
+primary contact to an active member; a team holds at most `PARTNER_TEAM_MAX`
+members, invited ones included (409 `TEAM_FULL`).
+
+### Audit log — `/admin/audit`
+
+`audit.read` (`SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE`).
+`GET /admin/audit?entityType&entityId&actorUserId&action&q&from&to&page&pageSize`
+answers the whole trail newest first, each entry `{ id, action, entityType,
+entityId, summary, metadata, actor, actorEmail, createdAt }`. `action` must be a
+known audit action (400 otherwise); `from`/`to` are ISO instants. Successful
+sign-ins (`USER_LOGIN_SUCCEEDED`, with the user agent) and sign-outs
+(`USER_LOGGED_OUT`) are on the trail beside the failures.
 
 ## Supplier extranet
 

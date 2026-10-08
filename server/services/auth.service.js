@@ -152,13 +152,36 @@ export const login = async ({ email, password }, req) => {
 
     const token = await createSession(user, req);
 
+    // The success is on the trail next to the failures, so "who was signed in
+    // when this happened" can be answered. The user agent, never the token.
+    await recordAudit(prisma, {
+        action: 'USER_LOGIN_SUCCEEDED',
+        actor: user,
+        entityType: AUDIT_ENTITY.user,
+        entityId: user.id,
+        summary: `${user.email} signed in`,
+        metadata: { userAgent: req?.get?.('user-agent')?.slice(0, 200) ?? null },
+        req
+    });
+
     return { user, token };
 };
 
-export const logout = async (session) => {
-    if (session) {
-        await prisma.session.update({ where: { id: session.id }, data: { revokedAt: new Date() } });
+export const logout = async (session, req) => {
+    if (!session) {
+        return;
     }
+
+    await prisma.session.update({ where: { id: session.id }, data: { revokedAt: new Date() } });
+
+    await recordAudit(prisma, {
+        action: 'USER_LOGGED_OUT',
+        actor: session.user,
+        entityType: AUDIT_ENTITY.user,
+        entityId: session.userId,
+        summary: `${session.user?.email ?? session.userId} signed out`,
+        req
+    });
 };
 
 /**

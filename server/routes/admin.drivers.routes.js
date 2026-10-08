@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin, requireTransferOps } from '../middleware/auth.js';
+import { authenticate, requireAdmin, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { documentParamSchema, idParamSchema } from '../validation/fleet.js';
 import {
@@ -42,7 +43,7 @@ import { toAttachedDocument } from '../serializers/fleet.js';
  */
 export const adminDriverRoutes = Router();
 
-adminDriverRoutes.use(authenticate, requireTransferOps);
+adminDriverRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.DISPATCH_READ], write: [CAPABILITIES.DISPATCH_WRITE] }));
 
 adminDriverRoutes.get('/', validate({ query: driverQuerySchema }), async (req, res) => {
     const { drivers, ...page } = await listDrivers(req.valid.query);

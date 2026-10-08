@@ -188,10 +188,22 @@ export const config = {
         // would have counted every user behind one address together.
         passwordChangeLimit: numberEnv('AUTH_PASSWORD_CHANGE_LIMIT', (nodeEnv === 'test' ? 10_000 : 5)),
 
+        // Invitations one signed-in user may send per fifteen minutes. A seat
+        // costs nothing to create, which is exactly why a stolen staff session
+        // must not be able to mint thousands of them.
+        inviteLimit: numberEnv('AUTH_INVITE_LIMIT', (nodeEnv === 'test' ? 10_000 : 30)),
+
         // Reset links per 15 minutes for one address, counted regardless of
         // where the request came from. The per-IP limiter alone lets a rotating
         // client mail a victim a link every thirty seconds.
         forgotPasswordLimit: numberEnv('AUTH_FORGOT_PASSWORD_LIMIT', (nodeEnv === 'test' ? 10_000 : 5))
+    },
+
+    partners: {
+        // Members a partner may have, invited ones included. A ceiling rather
+        // than a plan limit: the number is there to stop a runaway script, not
+        // to sell seats.
+        teamMax: numberEnv('PARTNER_TEAM_MAX', 25)
     },
 
     mail: {

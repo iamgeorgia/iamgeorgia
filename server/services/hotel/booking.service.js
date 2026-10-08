@@ -12,7 +12,7 @@ import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextHotelBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, toDateOnly } from '../../lib/time.js';
-import { isAdmin } from '../../middleware/auth.js';
+import { readsAllBookings } from '../../middleware/auth.js';
 import { readOfferToken } from '../../lib/hotel/offerToken.js';
 import { revalidateOffer } from './search.service.js';
 import { buildCancellationSchedule, calculateRefund } from './policy.service.js';
@@ -534,7 +534,7 @@ export const confirmBooking = async (input, actor, req) => {
  * discover which references exist.
  */
 const assertMayRead = (booking, viewer, { email } = {}) => {
-    if (isAdmin(viewer)) {
+    if (readsAllBookings(viewer)) {
         return;
     }
 
@@ -584,10 +584,10 @@ export const listBookings = async (query, viewer, { propertyScope = null } = {})
 
     const where = {
         // A partner's list is scoped in the query, not filtered afterwards.
-        ...(isAdmin(viewer) || propertyScope ? {} : { partnerId: viewer?.partnerId ?? '__none__' }),
+        ...(readsAllBookings(viewer) || propertyScope ? {} : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(propertyScope ? { hotelId: propertyScope } : hotelId ? { hotelId } : {}),
-        ...(isAdmin(viewer) && partnerId ? { partnerId } : {}),
+        ...(readsAllBookings(viewer) && partnerId ? { partnerId } : {}),
         ...(from || to
             ? {
                   checkIn: {

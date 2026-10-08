@@ -1,6 +1,15 @@
 import { Router } from 'express';
 
-import { authenticate, optionalAuthenticate, requireAdmin, requireApprovedPartner, requirePartner } from '../middleware/auth.js';
+import {
+    authenticate,
+    optionalAuthenticate,
+    rejectUnapprovedPartner,
+    requireApprovedPartner,
+    requireCapability,
+    requireCapabilityByMethod,
+    requirePartner
+} from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { idempotencyKeyFrom } from '../lib/idempotency.js';
 import {
@@ -37,7 +46,7 @@ import { toOrderCancellationQuote, toOrderDetail, toOrderSummary } from '../seri
  */
 export const orderRoutes = Router();
 
-orderRoutes.use(optionalAuthenticate);
+orderRoutes.use(optionalAuthenticate, rejectUnapprovedPartner);
 
 /** Holds every slot with inventory for the checkout countdown. */
 orderRoutes.post('/holds', validate({ body: orderHoldSchema }), async (req, res) => {
@@ -111,7 +120,7 @@ partnerOrderRoutes.get('/', validate({ query: orderQuerySchema }), async (req, r
 
 export const adminOrderRoutes = Router();
 
-adminOrderRoutes.use(authenticate, requireAdmin);
+adminOrderRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ], write: [CAPABILITIES.BOOKINGS_WRITE] }));
 
 adminOrderRoutes.get('/', validate({ query: orderQuerySchema }), async (req, res) => {
     const { orders, ...page } = await listOrders(req.valid.query, req.user);
@@ -127,7 +136,7 @@ adminOrderRoutes.get('/:reference/cancellation-quote', validate({ params: orderR
     res.json(toOrderCancellationQuote(quoteOrderCancellation(await findOrderOr404(req.valid.params.reference, req.user))));
 });
 
-adminOrderRoutes.post('/:reference/cancel', validate({ params: orderReferenceParamSchema, body: cancelOrderSchema }), async (req, res) => {
+adminOrderRoutes.post('/:reference/cancel', requireCapability(CAPABILITIES.BOOKINGS_CANCEL), validate({ params: orderReferenceParamSchema, body: cancelOrderSchema }), async (req, res) => {
     const { order, quote } = await cancelOrder(req.valid.params.reference, req.valid.body, req.user, req);
 
     res.json({ ...toOrderDetail(order, req.user), cancellation: toOrderCancellationQuote(quote) });
@@ -151,7 +160,7 @@ adminOrderRoutes.post(
 
 adminOrderRoutes.post(
     '/:reference/items/:slotIndex/cancel',
-    validate({ params: orderItemParamSchema, body: cancelOrderSchema }),
+    requireCapability(CAPABILITIES.BOOKINGS_CANCEL), validate({ params: orderItemParamSchema, body: cancelOrderSchema }),
     async (req, res) => {
         const { reference, slotIndex } = req.valid.params;
         const { order, quote } = await cancelOrderItem(reference, slotIndex, req.valid.body, req.user, req);

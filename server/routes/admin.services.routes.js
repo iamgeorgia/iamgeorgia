@@ -1,6 +1,14 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin, requireApprovedPartner, requirePartner } from '../middleware/auth.js';
+import {
+    authenticate,
+    rejectUnapprovedPartner,
+    requireApprovedPartner,
+    requireCapability,
+    requireCapabilityByMethod,
+    requirePartner
+} from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { idempotencyKeyFrom } from '../lib/idempotency.js';
 import {
@@ -55,7 +63,7 @@ import {
  */
 export const adminServiceRoutes = Router();
 
-adminServiceRoutes.use(authenticate, requireAdmin);
+adminServiceRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
 
 const withChecklist = (service, viewer) => ({
     ...toServiceDetail(service, 'en', viewer),
@@ -124,7 +132,7 @@ adminServiceRoutes.put(
 
 export const adminServiceBookingRoutes = Router();
 
-adminServiceBookingRoutes.use(authenticate, requireAdmin);
+adminServiceBookingRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ], write: [CAPABILITIES.BOOKINGS_WRITE] }));
 
 adminServiceBookingRoutes.get('/', validate({ query: serviceBookingQuerySchema }), async (req, res) => {
     const { bookings, ...page } = await listServiceBookings(req.valid.query, req.user);
@@ -165,7 +173,7 @@ adminServiceBookingRoutes.post(
 
 adminServiceBookingRoutes.post(
     '/:reference/cancel',
-    validate({ params: serviceReferenceParamSchema, body: cancelServiceBookingSchema }),
+    requireCapability(CAPABILITIES.BOOKINGS_CANCEL), validate({ params: serviceReferenceParamSchema, body: cancelServiceBookingSchema }),
     async (req, res) => {
         const { booking, quote } = await cancelServiceBooking(req.valid.params.reference, req.valid.body, req.user, req);
 
@@ -184,7 +192,7 @@ export const serviceBookingRoutes = Router();
 
 // Approved partners only, for reading as well as booking: a partner still
 // waiting for approval has a login, not a portal.
-serviceBookingRoutes.use(authenticate, requirePartner, requireApprovedPartner);
+serviceBookingRoutes.use(authenticate, requirePartner, requireApprovedPartner, rejectUnapprovedPartner);
 
 serviceBookingRoutes.post('/', validate({ body: confirmServiceBookingSchema }), async (req, res) => {
     const { booking, replayed } = await confirmServiceBooking(

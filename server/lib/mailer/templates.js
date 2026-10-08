@@ -294,6 +294,26 @@ export const templates = {
         })
     }),
 
+    /** A staff seat in the admin panel, created by a super admin. */
+    staffAccountActivation: ({ contactName, roleLabel, url, expiresAt }) => ({
+        subject: 'Your I am Georgia staff account',
+        text: plain([
+            `${contactName ? `Hello ${contactName},` : 'Hello,'}`,
+            `A staff account${roleLabel ? ` (${roleLabel})` : ''} has been created for you in the I am Georgia admin panel.`,
+            `Choose a password to activate it:\n${url}`,
+            `This link can be used once and expires on ${formatDate(expiresAt)} UTC.`
+        ]),
+        html: layout({
+            heading: 'Activate your staff account',
+            paragraphs: [
+                `${contactName ? `Hello ${escapeHtml(contactName)},` : 'Hello,'}`,
+                `A staff account${roleLabel ? ` (<strong>${escapeHtml(roleLabel)}</strong>)` : ''} has been created for you in the I am Georgia admin panel.`,
+                `This link can be used once and expires on <strong>${escapeHtml(formatDate(expiresAt))} UTC</strong>.`
+            ],
+            cta: { label: 'Choose your password', url }
+        })
+    }),
+
     /** A driver's login, created by operations against an existing profile. */
     driverAccountActivation: ({ driverName, url, expiresAt }) => ({
         subject: 'Your I am Georgia driver account',

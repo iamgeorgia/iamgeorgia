@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { canViewNetRates } from '../middleware/auth.js';
+import { canViewBuyer, canViewMargin, canViewNetRates } from '../middleware/auth.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 
 /**
@@ -59,9 +59,17 @@ export const toTourBookingSummary = (booking, viewer) => {
 
     if (canViewNetRates(viewer, booking.tour)) {
         summary.netTotalCents = booking.netTotalCents;
+    }
+
+    if (canViewMargin(viewer)) {
         summary.markupBps = booking.markupBps;
         summary.marginCents = booking.sellTotalCents - booking.netTotalCents;
+    }
+
+    if (canViewBuyer(viewer)) {
         summary.partner = booking.partner ?? null;
+    } else if (canViewNetRates(viewer, booking.tour)) {
+        summary.bookedVia = booking.partnerId ? 'AGENCY' : 'DIRECT';
     }
 
     return summary;

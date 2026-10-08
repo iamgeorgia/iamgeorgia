@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
     blackoutQuerySchema,
@@ -76,7 +77,7 @@ import { toBlackout, toExtra, toPoint, toProvider, toRoute, toVehicle } from '..
  */
 export const adminTransferRoutes = Router();
 
-adminTransferRoutes.use(authenticate, requireAdmin);
+adminTransferRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
 
 /* --- Points ------------------------------------------------------------- */
 

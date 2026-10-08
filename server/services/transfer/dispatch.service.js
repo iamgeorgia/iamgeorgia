@@ -14,7 +14,7 @@ import {
 import { assignmentWindow } from '../../lib/transfer/schedule.js';
 import { dateOnlyToUtc } from '../../lib/time.js';
 import { sqlStateOf } from '../../middleware/errors.js';
-import { isTransferOps } from '../../middleware/auth.js';
+import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { findConflicts, lockResources } from './schedule.service.js';
 
 /**
@@ -76,7 +76,7 @@ export const activeAssignmentOf = (leg) => leg.assignments?.[0] ?? null;
 /** Which kind of actor this viewer is, for the transition tables. */
 export const actorKindFor = (viewer) => {
     if (!viewer) return ACTOR.GUEST;
-    if (isTransferOps(viewer)) return ACTOR.OPS;
+    if (can(viewer, CAPABILITIES.DISPATCH_WRITE)) return ACTOR.OPS;
     if (viewer.role === 'DRIVER') return ACTOR.DRIVER;
     if (viewer.partnerId) return ACTOR.PARTNER;
     return ACTOR.GUEST;

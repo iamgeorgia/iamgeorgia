@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapability, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
     archiveHotelSchema,
@@ -52,7 +53,7 @@ import { adminHotelDocumentRoutes } from './admin.hotels.documents.routes.js';
  */
 export const adminHotelRoutes = Router();
 
-adminHotelRoutes.use(authenticate, requireAdmin);
+adminHotelRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
 
 // Room types and the child policy hang off a hotel and are only ever
 // addressable through it. Mounted here rather than at the top level so they
@@ -68,7 +69,9 @@ adminHotelRoutes.use('/:hotelId/tax-fees', adminTaxFeeRoutes);
 // verification cannot be reached by an ordinary hotel update — the same
 // treatment `status` gets, and for the same reason.
 adminHotelRoutes.use('/:hotelId/kosher', adminKosherRoutes);
-adminHotelRoutes.use('/:hotelId/documents', adminHotelDocumentRoutes);
+// A property's contracts are partner business, not catalogue: a dispatcher
+// reads the hotel to run transfers to it, never its paperwork.
+adminHotelRoutes.use('/:hotelId/documents', requireCapability(CAPABILITIES.PARTNERS_READ), adminHotelDocumentRoutes);
 
 /**
  * Every rate plan in the property, flat.

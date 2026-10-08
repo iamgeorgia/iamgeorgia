@@ -1,6 +1,7 @@
 import { prisma } from '../db/index.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { isAdmin, ownsHotel, SUPPLIER_MANAGE_ROLES } from './auth.js';
+import { isStaff, ownsHotel } from './auth.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 
 /**
  * Supplier ownership, checked once per request.
@@ -37,17 +38,18 @@ export const requireHotelAccess = ({ manage = false } = {}) =>
             throw new NotFoundError('Hotel not found');
         }
 
-        if (!isAdmin(req.user)) {
+        if (!isStaff(req.user)) {
             if (!ownsHotel(req.user, hotel)) {
                 throw new NotFoundError('Hotel not found');
             }
 
             // Ownership says which property; the role says what may be done to
             // it. An agent books, it does not rewrite the rate calendar.
-            if (manage && !SUPPLIER_MANAGE_ROLES.includes(req.user.role)) {
+            if (manage && !can(req.user, CAPABILITIES.PARTNER_INVENTORY_WRITE)) {
                 throw new ForbiddenError('Your role cannot change this property', {
                     role: req.user.role,
-                    allowed: SUPPLIER_MANAGE_ROLES
+                    reason: 'INSUFFICIENT_CAPABILITY',
+                    required: [CAPABILITIES.PARTNER_INVENTORY_WRITE]
                 });
             }
         }
@@ -64,4 +66,4 @@ export const requireHotelAccess = ({ manage = false } = {}) =>
  * to accidentally leak.
  */
 export const hotelScopeFor = (viewer) =>
-    isAdmin(viewer) ? {} : { supplierId: viewer?.partnerId ?? '__none__' };
+    isStaff(viewer) ? {} : { supplierId: viewer?.partnerId ?? '__none__' };

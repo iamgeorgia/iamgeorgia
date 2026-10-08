@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { prisma } from '../db/index.js';
 import { hashToken } from '../lib/tokens.js';
 import { UnauthorizedError, ForbiddenError } from '../lib/errors.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 
 export const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN'];
 export const PARTNER_ROLES = ['PARTNER_OWNER', 'PARTNER_ADMIN', 'PARTNER_AGENT', 'PARTNER_FINANCE'];
@@ -14,9 +15,6 @@ export const PARTNER_ROLES = ['PARTNER_OWNER', 'PARTNER_ADMIN', 'PARTNER_AGENT',
  */
 export const TRANSFER_OPS_ROLES = [...ADMIN_ROLES, 'DISPATCHER'];
 
-/** Roles allowed to see a partner's bank details. */
-export const FINANCIAL_ROLES = [...ADMIN_ROLES, 'PARTNER_OWNER', 'PARTNER_FINANCE'];
-
 /**
  * Whether a viewer is platform staff.
  *
@@ -26,10 +24,20 @@ export const FINANCIAL_ROLES = [...ADMIN_ROLES, 'PARTNER_OWNER', 'PARTNER_FINANC
  * with itself. Takes a viewer that may be undefined: an anonymous caller is
  * simply not an admin.
  */
-export const isAdmin = (viewer) => Boolean(viewer) && ADMIN_ROLES.includes(viewer.role);
+export const isAdmin = (viewer) => can(viewer, CAPABILITIES.PLATFORM_ADMIN);
 
-/** Whether a viewer may run transfer operations: every admin, plus dispatchers. */
-export const isTransferOps = (viewer) => Boolean(viewer) && TRANSFER_OPS_ROLES.includes(viewer.role);
+/**
+ * Whether a viewer sits on the transfer operations board: reads the legs, the
+ * drivers and the cars. Admins, dispatchers, and the management and
+ * reservations desks. Moving anything on that board is `dispatch.write`.
+ */
+export const isTransferOps = (viewer) => can(viewer, CAPABILITIES.DISPATCH_READ);
+
+/** Platform back office: reads the catalogue as the platform does, unpublished and B2B-only included. */
+export const isStaff = (viewer) => can(viewer, CAPABILITIES.CATALOGUE_READ);
+
+/** Whether a viewer reads every company's bookings, not just its own. */
+export const readsAllBookings = (viewer) => can(viewer, CAPABILITIES.BOOKINGS_READ);
 
 /**
  * Whether a viewer buys at trade.
@@ -48,7 +56,9 @@ export const isTransferOps = (viewer) => Boolean(viewer) && TRANSFER_OPS_ROLES.i
  * system caller, a test — is taken at its word.
  */
 export const isTrade = (viewer) => {
-    if (isAdmin(viewer)) {
+    // The booking desks read as the platform. A dispatcher reads the catalogue
+    // to run the fleet, and that is not a commercial agreement either.
+    if (readsAllBookings(viewer)) {
         return true;
     }
 
@@ -58,9 +68,6 @@ export const isTrade = (viewer) => {
 
     return viewer.partner ? viewer.partner.status === 'APPROVED' : true;
 };
-
-/** Roles that may edit a supplier's own inventory, rates and content. */
-export const SUPPLIER_MANAGE_ROLES = ['PARTNER_OWNER', 'PARTNER_ADMIN'];
 
 /**
  * Whether a viewer owns this hotel.
@@ -80,7 +87,29 @@ export const ownsHotel = (viewer, hotel) =>
  * from it would be absurd. Nobody else, ever: a guest seeing the net rate sees
  * the margin.
  */
-export const canViewNetRates = (viewer, hotel) => isAdmin(viewer) || ownsHotel(viewer, hotel);
+export const canViewNetRates = (viewer, hotel) => canViewMargin(viewer) || ownsHotel(viewer, hotel);
+
+/**
+ * Whether a viewer may see the platform's side of the money: the markup, the
+ * margin, and which agency bought.
+ *
+ * Deliberately narrower than `canViewNetRates`. A supplier is entitled to its
+ * own net rate, but the markup on top of it is the platform's commercial
+ * position, and the buying agency is that agency's business — a hotel that
+ * could read both would know every competitor's terms with us.
+ */
+export function canViewMargin(viewer) {
+    return can(viewer, CAPABILITIES.FINANCE_MARGIN_READ);
+}
+
+/**
+ * Whether a viewer may see which agency bought a booking.
+ *
+ * Its own check rather than part of the margin, because the reservations desk
+ * needs the agency to do its job and must still never see what we earn. A
+ * supplier gets neither: the serializers give it `bookedVia` instead.
+ */
+export const canViewBuyer = (viewer) => can(viewer, CAPABILITIES.PARTNERS_READ);
 
 /**
  * The instant a session stops being renewable, no matter how recently it was
@@ -266,9 +295,51 @@ export const requireRole =
         next();
     };
 
-export const requireAdmin = requireRole(...ADMIN_ROLES);
+/**
+ * Gates a route on a capability rather than a role name.
+ *
+ * Several capabilities mean "any of them". 401 without a session, 403 with
+ * one that lacks them — and the 403 names what was required, so the client
+ * can say "you need finance access" rather than a bare "forbidden". The
+ * older role-list guards below are kept as aliases built on this, so a router
+ * that has not been converted yet behaves exactly as before.
+ */
+export const requireCapability =
+    (...anyOf) =>
+    (req, res, next) => {
+        if (!req.user) {
+            throw new UnauthorizedError('Authentication required');
+        }
 
-export const requireTransferOps = requireRole(...TRANSFER_OPS_ROLES);
+        if (!can(req.user, ...anyOf)) {
+            throw new ForbiddenError('Insufficient permissions', {
+                reason: 'INSUFFICIENT_CAPABILITY',
+                required: anyOf
+            });
+        }
+
+        next();
+    };
+
+export const requireAdmin = requireCapability(CAPABILITIES.PLATFORM_ADMIN);
+
+export const requireTransferOps = requireCapability(CAPABILITIES.DISPATCH_READ);
+
+const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * The usual shape of a back-office router: reading needs one capability,
+ * changing anything needs another. Decided by HTTP method, which holds because
+ * every POST, PUT, PATCH and DELETE under /admin is a change — the matrix test
+ * pins that down. A route that needs more than its router says adds its own
+ * `requireCapability` after this.
+ */
+export const requireCapabilityByMethod = ({ read, write }) => {
+    const reading = requireCapability(...read);
+    const writing = requireCapability(...write);
+
+    return (req, res, next) => (READ_METHODS.has(req.method) ? reading : writing)(req, res, next);
+};
 
 /**
  * A partner user — or an admin acting for the platform, which the partner
@@ -359,6 +430,45 @@ export const requireApprovedPartner = (req, res, next) => {
 
     if (status !== 'APPROVED') {
         throw new ForbiddenError('Partner account is not active', { partnerStatus: status ?? null });
+    }
+
+    next();
+};
+
+const PARTNER_BOOKING_CHANGES = [CAPABILITIES.PARTNER_BOOKINGS_WRITE, CAPABILITIES.PARTNER_BOOKINGS_CANCEL];
+
+/**
+ * Gates the public booking routers for partner sessions.
+ *
+ * Those routers serve guests as well, so they cannot require a session; but a
+ * request that *does* carry a partner session books in that partner's name and
+ * at its negotiated terms. Signing in is allowed in every partner status (the
+ * portal explains each one), so without this a suspended, rejected or
+ * still-pending partner could keep creating, amending and cancelling bookings
+ * here long after `requireApprovedPartner` had shut the portal. Guests, staff
+ * and drivers pass straight through.
+ *
+ * It is also where a partner's role is asked whether it books at all: any
+ * change here — booking, holding, amending, cancelling — needs a booking
+ * capability, so a PARTNER_FINANCE user reads the company's bookings and
+ * changes none of them.
+ */
+export const rejectUnapprovedPartner = (req, res, next) => {
+    if (!req.user?.partnerId) {
+        return next();
+    }
+
+    const status = req.user.partner?.status;
+
+    if (status !== 'APPROVED') {
+        throw new ForbiddenError('Partner account is not active', { partnerStatus: status ?? null });
+    }
+
+    if (!READ_METHODS.has(req.method) && !can(req.user, ...PARTNER_BOOKING_CHANGES)) {
+        throw new ForbiddenError('Your role cannot make or change bookings', {
+            reason: 'INSUFFICIENT_CAPABILITY',
+            required: PARTNER_BOOKING_CHANGES
+        });
     }
 
     next();

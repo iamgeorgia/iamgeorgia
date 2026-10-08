@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
-import { authenticate, requireTransferOps } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import { ACTOR } from '../lib/transfer/machines.js';
 import {
@@ -45,7 +46,7 @@ import { toFleetVehiclePublic } from '../serializers/fleet.js';
  */
 export const adminDispatchRoutes = Router();
 
-adminDispatchRoutes.use(authenticate, requireTransferOps);
+adminDispatchRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.DISPATCH_READ], write: [CAPABILITIES.DISPATCH_WRITE] }));
 
 adminDispatchRoutes.get('/legs', validate({ query: dispatchQuerySchema }), async (req, res) => {
     const { legs, ...page } = await listDispatchLegs(req.valid.query);

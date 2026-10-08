@@ -1,5 +1,5 @@
 import { toDateOnly } from '../lib/time.js';
-import { canViewNetRates, isAdmin } from '../middleware/auth.js';
+import { canViewBuyer, canViewMargin, canViewNetRates, isStaff } from '../middleware/auth.js';
 import { localise } from './localise.js';
 import { toCancellationPolicy } from './ratePlan.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
@@ -57,7 +57,7 @@ export const toServiceSummary = (service, locale, viewer, { markupBps } = {}) =>
         summary.sellCents = service.sellCents ?? null;
     }
 
-    if (isAdmin(viewer)) {
+    if (isStaff(viewer)) {
         summary.status = service.status;
         summary.b2cEnabled = service.b2cEnabled;
         summary.supplier = service.supplier ?? null;
@@ -104,7 +104,8 @@ export const toServiceQuote = (quote, viewer, service) => {
         ...(net ? { unitNetCents: quote.unitNetCents } : {}),
         totals: {
             totalCents: quote.totals.totalCents,
-            ...(net ? { netCents: quote.totals.netCents, markupBps: quote.totals.markupBps, marginCents: quote.totals.marginCents } : {})
+            ...(net ? { netCents: quote.totals.netCents } : {}),
+            ...(canViewMargin(viewer) ? { markupBps: quote.totals.markupBps, marginCents: quote.totals.marginCents } : {})
         }
     };
 };
@@ -140,9 +141,17 @@ export const toServiceBookingSummary = (booking, viewer) => {
 
     if (canViewNetRates(viewer, booking.service)) {
         summary.netTotalCents = booking.netTotalCents;
+    }
+
+    if (canViewMargin(viewer)) {
         summary.markupBps = booking.markupBps;
         summary.marginCents = booking.sellTotalCents - booking.netTotalCents;
+    }
+
+    if (canViewBuyer(viewer)) {
         summary.partner = booking.partner ?? null;
+    } else if (canViewNetRates(viewer, booking.service)) {
+        summary.bookedVia = booking.partnerId ? 'AGENCY' : 'DIRECT';
     }
 
     return summary;

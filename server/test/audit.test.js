@@ -157,6 +157,56 @@ describe('audit trail', { skip: dbAvailable ? false : 'Postgres is not reachable
         assert.equal((await request(app).get(`/api/admin/partners/${partner.id}/audit`).set('Cookie', cookie)).status, 403);
     });
 
+    it('records a sign-in and a sign-out against the account', async () => {
+        const { admin, cookie } = await scenario();
+
+        const [signedIn] = await prisma.auditLog.findMany({
+            where: { entityType: AUDIT_ENTITY.user, entityId: admin.id, action: 'USER_LOGIN_SUCCEEDED' }
+        });
+        assert.equal(signedIn.actorUserId, admin.id);
+        assert.ok('userAgent' in signedIn.metadata);
+
+        await request(app).post('/api/auth/logout').set('Cookie', cookie);
+
+        const out = await prisma.auditLog.count({
+            where: { entityType: AUDIT_ENTITY.user, entityId: admin.id, action: 'USER_LOGGED_OUT' }
+        });
+        assert.equal(out, 1);
+    });
+
+    it('serves the whole trail, filtered, to the roles that audit', async () => {
+        const { admin, partner, cookie } = await scenario();
+
+        await request(app).post(`/api/admin/partners/${partner.id}/approve`).set('Cookie', cookie).send({});
+
+        const byEntity = await request(app)
+            .get(`/api/admin/audit?entityType=${AUDIT_ENTITY.partner}&entityId=${partner.id}`)
+            .set('Cookie', cookie);
+
+        assert.equal(byEntity.status, 200);
+        assert.ok(byEntity.body.data.length >= 1);
+        assert.ok(byEntity.body.data.every((entry) => entry.entityId === partner.id && entry.entityType === 'Partner'));
+        assert.equal(byEntity.body.data[0].actor.id, admin.id);
+
+        const byAction = await request(app)
+            .get(`/api/admin/audit?action=PARTNER_APPROVED&actorUserId=${admin.id}`)
+            .set('Cookie', cookie);
+        assert.deepEqual(
+            byAction.body.data.map((entry) => entry.entityId),
+            [partner.id]
+        );
+
+        assert.equal((await request(app).get('/api/admin/audit?action=NOT_A_THING').set('Cookie', cookie)).status, 400);
+
+        const manager = await makeAdmin(tracker, { role: 'MANAGEMENT' });
+        const managerRes = await request(app).get('/api/admin/audit?pageSize=5').set('Cookie', (await signIn(app, manager.email)).cookie);
+        assert.equal(managerRes.status, 200);
+        assert.equal(managerRes.body.pageSize, 5);
+
+        const dispatcher = await makeAdmin(tracker, { role: 'DISPATCHER' });
+        assert.equal((await request(app).get('/api/admin/audit').set('Cookie', (await signIn(app, dispatcher.email)).cookie)).status, 403);
+    });
+
     it('attributes a self-service registration to the applicant, not to nobody', async () => {
         const { partner, cookie } = await scenario();
         const owner = await makePartnerUser(tracker, partner, { isPrimaryContact: false });

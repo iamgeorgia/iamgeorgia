@@ -1,7 +1,8 @@
 import { Router } from 'express';
 
 import { prisma } from '../db/index.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
     archiveTourSchema,
@@ -72,7 +73,7 @@ import { toTourKosherProfile } from '../serializers/package.js';
  */
 export const adminTourRoutes = Router();
 
-adminTourRoutes.use(authenticate, requireAdmin);
+adminTourRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
 
 const reload = (req, locale = 'en') => findTourOr404(req.valid.params.tourId, { locale });
 
