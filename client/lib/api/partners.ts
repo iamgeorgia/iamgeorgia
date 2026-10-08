@@ -199,6 +199,20 @@ export const readActivation = (token: string) =>
     expiresAt: string;
   }>(`/api/auth/activation/${token}`);
 
+/**
+ * Asks for a password-reset email. The server answers 204 whether or not the
+ * address has an account, so the caller must not read anything into success.
+ */
+export const requestPasswordReset = (email: string) =>
+  apiFetch<void>("/api/auth/password/forgot", { method: "POST", body: { email } });
+
+/** Sets a new password from a reset link. Ends every session; the user signs in again. */
+export const resetPasswordWithToken = (token: string, password: string) =>
+  apiFetch<void>(`/api/auth/password/reset/${encodeURIComponent(token)}`, {
+    method: "POST",
+    body: { password },
+  });
+
 export const setPasswordFromActivation = (token: string, password: string) =>
   apiFetch<Session>(`/api/auth/activation/${token}`, {
     method: "POST",

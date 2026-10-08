@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -98,6 +99,15 @@ export function SignInForm({ redirectTo = "/admin" }: { redirectTo?: string }) {
           />
         </div>
       </div>
+
+      <p className="mt-3 text-end text-[0.8125rem]">
+        <Link
+          href={path("/forgot-password")}
+          className="text-on-dark-muted underline-offset-4 transition-colors hover:text-on-dark hover:underline"
+        >
+          Forgot your password?
+        </Link>
+      </p>
 
       {error && (
         <p

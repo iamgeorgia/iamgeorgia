@@ -175,7 +175,7 @@ export const article = {
     {
       type: "list",
       items: [
-        "Resetting or changing a staff password. There is no **Forgot password** link and no change-password screen.",
+        "Changing a staff password from inside the panel. A forgotten password is reset by its owner with **Forgot your password?** on the sign-in screen.",
         "Creating a new administrator or dispatcher account. Only driver and partner logins are created from inside the panel.",
         "Changing a hotel's, tour's or package's slug. Only a service's slug can be edited on screen, and changing any slug breaks links already shared.",
         "Editing a partner's commission rate. The panel shows it and never lets you change it.",

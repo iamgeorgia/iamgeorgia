@@ -90,10 +90,13 @@ export const placeRefFrom = (place: PlaceLike): PlaceRef => {
 };
 
 /** A Places-library `Place`, after `fetchFields`. */
-export const toPlaceRef = (place: google.maps.places.Place): PlaceRef =>
+export const toPlaceRef = (place: google.maps.places.Place, name?: string | null): PlaceRef =>
   placeRefFrom({
     id: place.id,
-    displayName: place.displayName,
+    // `name` comes from the autocomplete prediction. Asking Places for
+    // `displayName` instead is a Pro-tier field, and requesting one in the
+    // call that closes a session bills that call at the dearest tier.
+    displayName: name ?? place.displayName,
     formattedAddress: place.formattedAddress,
     addressComponents: place.addressComponents,
     types: place.types,

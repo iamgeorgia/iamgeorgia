@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -88,6 +89,14 @@ export function PortalSignInForm({ redirectTo = "/portal" }: { redirectTo?: stri
           aria-describedby={error ? "portal-signin-error" : undefined}
           className={cn(field, error ? "border-error" : "border-line focus:border-ink")}
         />
+        <p className="mt-1.5 text-end text-[0.8125rem]">
+          <Link
+            href={path("/forgot-password")}
+            className="text-muted underline-offset-4 transition-colors hover:text-ink hover:underline"
+          >
+            Forgot your password?
+          </Link>
+        </p>
       </div>
 
       {error && (

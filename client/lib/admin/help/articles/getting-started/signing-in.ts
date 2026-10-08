@@ -69,10 +69,19 @@ export const article = {
       text: "Forgotten or changing a password",
     },
     {
+      type: "steps",
+      items: [
+        "On the sign-in screen, choose **Forgot your password?** under the password field.",
+        "Enter the email address you sign in with and choose **Send reset link**. The screen says the same thing whether or not the address has an account, on purpose.",
+        "Open the email and follow the link within an hour. Each link works once.",
+        "Choose a new password and save it. This signs you out on every device, so sign in again with the new password.",
+      ],
+    },
+    {
       type: "callout",
-      tone: "warning",
-      title: "There is no self-service password reset in the panel",
-      text: "The sign-in screen has no **Forgot password?** link, and there is no screen for changing your own password once signed in. The server can reset a password, but the page the reset email would point at does not exist in the site yet. If you have lost your password, contact the developer who manages the platform's accounts — they can issue a new activation link or set one for you.",
+      tone: "info",
+      title: "Changing a password while signed in",
+      text: "The panel has no screen for changing your own password yet. Use **Forgot your password?** instead: it does the same job and also ends any other session on the account.",
     },
     {
       type: "paragraph",

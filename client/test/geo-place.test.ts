@@ -10,6 +10,7 @@ import {
   placeRefFrom,
   postalCodeOf,
   suggestPointKind,
+  toPlaceRef,
 } from "../lib/geo/place";
 
 /**
@@ -144,5 +145,26 @@ describe("formatting", () => {
     assert.equal(locationOf({ latitude: null, longitude: null, place: ref }).place, null);
     assert.equal(locationOf({ latitude: 41.6, longitude: 44.9, place: ref }).place, ref);
     assert.equal(locationOf({ latitude: 41.6, longitude: 44.9 }).place, null);
+  });
+});
+
+describe("toPlaceRef", () => {
+  // The picker no longer asks Places for `displayName` (a Pro-tier field that
+  // would bill the whole session at the dearest rate), so the name comes from
+  // the suggestion the user picked.
+  it("takes the name from the suggestion when the place was fetched without one", () => {
+    const { displayName: _omitted, ...withoutName } = airport;
+    void _omitted;
+    const ref = toPlaceRef(withoutName as unknown as google.maps.places.Place, "Tbilisi International Airport");
+
+    assert.equal(ref.name, "Tbilisi International Airport");
+    assert.equal(ref.placeId, "ChIJ-airport");
+    assert.equal(ref.city, "Tbilisi");
+  });
+
+  it("falls back to the place's own name when the suggestion has none", () => {
+    const ref = toPlaceRef(airport as unknown as google.maps.places.Place, null);
+
+    assert.equal(ref.name, "Tbilisi International Airport");
   });
 });

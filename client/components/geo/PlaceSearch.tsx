@@ -68,8 +68,18 @@ const DEFAULT_STRINGS: PlaceSearchStrings = {
 const MIN_CHARS = 3;
 const SEARCH_DEBOUNCE_MS = 300;
 
-/** Only what the normaliser reads. Every extra field is a dearer SKU. */
-const PLACE_FIELDS = ["id", "displayName", "formattedAddress", "location", "addressComponents", "types"];
+/**
+ * Only what the normaliser reads, and only Essentials-tier fields. Google bills
+ * the details call that closes a session at the highest tier among the fields
+ * requested, and `displayName` alone would lift it from Essentials to
+ * Enterprise + Atmosphere, about five times the price. The name is taken from
+ * the suggestion the user picked instead, which the session already paid for.
+ */
+const PLACE_FIELDS = ["id", "formattedAddress", "location", "addressComponents", "types"];
+
+/** The bold part of a suggestion ("The Biltmore Hotel Tbilisi"), else its whole text. */
+const predictionName = (prediction: google.maps.places.PlacePrediction) =>
+  prediction.mainText?.text ?? prediction.text?.text ?? null;
 
 const rowBase = "flex w-full items-start gap-3 px-3 py-2 text-start text-[0.8125rem] transition-colors";
 
@@ -103,6 +113,13 @@ interface PlaceSearchProps {
   /** Keeps the label for screen readers only — when a group label already names the box. */
   labelHidden?: boolean;
   autoComplete?: string;
+  /**
+   * Google place types to keep, at most five (for example `["lodging", "airport"]`).
+   * Omitted, suggestions cover every kind of place.
+   */
+  includedPrimaryTypes?: string[];
+  /** Two-letter region codes to restrict suggestions to. Omitted, results are only biased to Georgia. */
+  includedRegionCodes?: string[];
 }
 
 export function PlaceSearch({
@@ -121,6 +138,8 @@ export function PlaceSearch({
   variant = "admin",
   labelHidden,
   autoComplete = "off",
+  includedPrimaryTypes,
+  includedRegionCodes,
 }: PlaceSearchProps) {
   const strings = { ...DEFAULT_STRINGS, ...overrides };
   const { locale } = useI18n();
@@ -203,6 +222,8 @@ export function PlaceSearch({
           locationBias: GEORGIA_BOUNDS,
           language: locale,
           region: "ge",
+          ...(includedPrimaryTypes?.length ? { includedPrimaryTypes: includedPrimaryTypes.slice(0, 5) } : {}),
+          ...(includedRegionCodes?.length ? { includedRegionCodes } : {}),
         });
         if (stale) return;
         setSuggestions(found.filter((entry) => entry.placePrediction));
@@ -249,7 +270,7 @@ export function PlaceSearch({
       sessionRef.current = null;
 
       onSelect({
-        place: toPlaceRef(place),
+        place: toPlaceRef(place, predictionName(prediction)),
         latitude: place.location?.lat() ?? null,
         longitude: place.location?.lng() ?? null,
         postalCode: postalCodeOf(place.addressComponents),
