@@ -1,6 +1,32 @@
 # I am Georgia — Enterprise B2B Platform Implementation Plan
 
-Planning document only. Nothing in this file has been applied. Line numbers refer to the working tree at commit `499657d` (branch `main`, 2026-10-08) and will drift. After approval, copy this file to `docs/plans/b2b-enterprise-implementation-plan.md` as the first task of Phase 0.
+Approved 2026-10-08; Phases 0–2 implemented (see Status below). Line numbers refer to the working tree at commit `499657d` (branch `main`, 2026-10-08) and have drifted.
+
+## Status (updated 2026-10-09)
+
+| Phase | State | Commits (branch `feat/b2b-phase-0-hardening`) |
+| --- | --- | --- |
+| 0 — Security hardening and critical fixes | **Done** | `fee5cdc` (client), `78a9f3b` (server) |
+| 1 — Employee accounts and RBAC | **Done** | `78a9f3b` (server), `f260fa4` (client) |
+| 2 — Operational finance | **Done** | `86baf34` |
+| 3 — Supplier payment reminders | Not started — needs D7 (who is reminded) | |
+| 4 — InvoiceOcean | Not started — needs D1–D4 | |
+| 5 — Maps hotel search for transfers | Not started — needs the owner's Google keys and Map ID (T0.7 ops) | |
+
+Also shipped on the way: `c651fab` (a hotel booking's `totalCents` now includes the tax already in the rate, matching checkout — fixed the long-standing Postman "03 Confirm the booking" failure) and `08f2930` (browser-extension attributes on `<html>` no longer reported as hydration mismatches).
+
+**Decided by the owner:** D5 (days to pay set per partner, and Finance may move one booking's due date), D6 (what a supplier is owed after a cancellation is a setting on each supplier's terms: same share of the net — the default —, nothing unless non-refundable, or by hand), D8 (reports per currency, no conversion), D11 (confirmed as proposed).
+
+**Where it differs from the plan as written:**
+- Partner-side booking changes are refused for a role without `partner.bookings.write`/`cancel` inside `rejectUnapprovedPartner`; there is no separate middleware.
+- The buying agency is its own visibility check (`canViewBuyer` = `partners.read`), not part of the margin: the reservations desk sees which agency booked and never the margin.
+- Supplier terms live at `/api/admin/finance/terms/:kind/:id` rather than under each product router, because those routers require `catalogue.write` for every change and Finance holds `finance.terms.write`.
+- The ledger is written as idempotent *sync* functions (`services/finance/ledger.service.js`) called after every status change, and reused by `scripts/backfill-finance.js`.
+- A dispatcher keeps the sidebar it had: the catalogue screens are listed for `catalogue.write` or `bookings.read`, though the server grants dispatchers `catalogue.read`.
+
+**Verified on 2026-10-09:** server suite 1,082/1,082; client typecheck, lint (0 errors), tests and production build; an end-to-end scenario of 32 checks across Phases 0–2 on the dev database with `scripts/seed-b2b-demo.js` accounts; a browser walk as every demo role; the full Postman collection (749 requests). Its remaining failures are older or setup-dependent: transfer cancellation quote reads `refundCents` where the API sends `refundableCents`, tours dated search 500, and folders 05 and 07 expect an unapproved partner and kosher fixtures.
+
+**Open follow-ups:** the client still shows catalogue edit buttons to read-only roles (the server refuses the change); allocating an unallocated supplier refund to a specific instalment has no picker; the backfill should be run with `--since` in production; the PartnerSelfUpdate schema silently drops fields a partner may not change rather than refusing them.
 
 ## Context
 
@@ -1185,18 +1211,18 @@ Table D1–D11 above. Blocking for Phase 2 start: D5, D6, D8. Blocking for Phase
 
 Work strictly in this order; after each checkpoint run the listed gates and stop for review.
 
-1. **Checkpoint 0 (setup):** T0.0; confirm Docker DB up; run the full server suite once to baseline (expect green).
-2. T0.1 → T0.2 → T0.3 → T0.4 → T0.5 (server, one PR each or one combined "security hardening" PR). Gate: server suite + `partners.access`, `supplier`, `transfers.foundation` new tests. **Checkpoint 0a.**
-3. T0.6 → T0.7 (client). Gate: `npm run typecheck && npm run lint && npm test && npm run build`; manual reset-password E2E with Mailtrap. **Checkpoint 0b.** Owner creates Google keys and Map ID.
-4. T1.1 → T1.2 → T1.3 → T1.4 → T1.5 (baseline matrix committed). **Checkpoint 1a.**
-5. T1.6 → T1.7 → T1.8 (update matrix expectations deliberately; D11 confirmed). Gate: whole suite. **Checkpoint 1b.**
-6. T1.9 → T1.10 → T1.11 → T1.12 (server users/team/audit). Gate: new suites. **Checkpoint 1c.**
-7. T1.13 → T1.14 → T1.15 → T1.16 → T1.17 (client). Gate: client gates + help registry; demo: invite RESERVATIONS user end-to-end. **Checkpoint 1 complete.**
+1. ✅ **Checkpoint 0 (setup):** T0.0; confirm Docker DB up; run the full server suite once to baseline (expect green).
+2. ✅ T0.1 → T0.2 → T0.3 → T0.4 → T0.5 (server, one PR each or one combined "security hardening" PR). Gate: server suite + `partners.access`, `supplier`, `transfers.foundation` new tests. **Checkpoint 0a.**
+3. ✅ T0.6 → T0.7 (client). Gate: `npm run typecheck && npm run lint && npm test && npm run build`; manual reset-password E2E with Mailtrap. **Checkpoint 0b.** Owner creates Google keys and Map ID (still to do — the code half of T0.7 is done).
+4. ✅ T1.1 → T1.2 → T1.3 → T1.4 → T1.5 (baseline matrix committed). **Checkpoint 1a.**
+5. ✅ T1.6 → T1.7 → T1.8 (update matrix expectations deliberately; D11 confirmed). Gate: whole suite. **Checkpoint 1b.**
+6. ✅ T1.9 → T1.10 → T1.11 → T1.12 (server users/team/audit). Gate: new suites. **Checkpoint 1c.**
+7. ✅ T1.13 → T1.14 → T1.15 → T1.16 → T1.17 (client). Gate: client gates + help registry; demo: invite RESERVATIONS user end-to-end. **Checkpoint 1 complete.**
 8. Lane B may start T5.1 → T5.2 → T5.3 → T5.4 → T5.5 → T5.6 now (independent). Gate per task; demo "Biltmore" flow. **Checkpoint 5 complete.**
-9. T2.1 → T2.2 → T2.3 → T2.4 (schema + ledger unit). **Checkpoint 2a.**
-10. T2.5 → T2.6 (hooks; whole suite must stay green). **Checkpoint 2b.**
-11. T2.7 → T2.8 → T2.9 → T2.10 → T2.11 (routes, terms, reports, statement, backfill). **Checkpoint 2c.**
-12. T2.12 → T2.13 → T2.14 → T2.15 (client + docs). Demo: confirm → records → pay → report. **Checkpoint 2 complete.** Run backfill on dev.
+9. ✅ T2.1 → T2.2 → T2.3 → T2.4 (schema + ledger unit). **Checkpoint 2a.**
+10. ✅ T2.5 → T2.6 (hooks; whole suite must stay green). **Checkpoint 2b.**
+11. ✅ T2.7 → T2.8 → T2.9 → T2.10 → T2.11 (routes, terms, reports, statement, backfill). **Checkpoint 2c.**
+12. ✅ T2.12 → T2.13 → T2.14 → T2.15 (client + docs). Demo: confirm → records → pay → report. **Checkpoint 2 complete.** Run backfill on dev (done 2026-10-09).
 13. T3.1 → T3.2 → T3.3 → T3.4 → T3.5 (server). **Checkpoint 3a.** T3.6 → T3.7 (client, docs). Demo: client scenario reminders. **Checkpoint 3 complete.**
 14. T4.1 → T4.2 → T4.3 → T4.4 → T4.5 → T4.6 (server; stub-server tests). **Checkpoint 4a.** T4.7 → T4.8 (client, docs, sandbox run with the client's InvoiceOcean test account). **Checkpoint 4 complete.**
 15. Final: full Newman run; `docs/plans/b2b-enterprise-implementation-plan.md` updated with "done" marks; audit artifact refreshed.
