@@ -22,7 +22,7 @@ export const article = {
     {
       type: "heading",
       id: "three-groups",
-      text: "Three groups of screens",
+      text: "Four groups of screens",
     },
     {
       type: "definitions",
@@ -35,12 +35,17 @@ export const article = {
         {
           term: "Inventory",
           description:
-            "Destinations, hotels, the transfers catalogue and fleet, tours, packages and services. This is catalogue maintenance: it changes less often, and most of it is only visible to administrators.",
+            "Destinations, hotels, the transfers catalogue and fleet, tours, packages and services. This is catalogue maintenance: it changes less often, and only administrators change it.",
         },
         {
           term: "Network",
           description:
             "Partners — the supplier companies and agencies — and the queue of applications waiting for approval.",
+        },
+        {
+          term: "People",
+          description:
+            "The staff accounts (super admins only) and the audit log — who did what, and when.",
         },
       ],
     },

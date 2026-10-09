@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
-import { ADMIN_ROLES } from "@/types/auth";
+import { homePathFor } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Bookings" };
 
@@ -57,7 +57,7 @@ export default async function PortalBookingsPage({
   if (!session) redirect(localePath(locale, "/portal/sign-in"));
 
   if (!session.partner) {
-    redirect(localePath(locale, ADMIN_ROLES.includes(session.user.role) ? "/admin" : "/"));
+    redirect(localePath(locale, homePathFor(session)));
   }
 
   // Unapproved partners are sent back to the page that explains where they

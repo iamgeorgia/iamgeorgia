@@ -1274,6 +1274,22 @@
       "value": "",
       "type": "string",
       "description": "Captured by 04f from the public catalogue; anchors the recommendations rail."
+    },
+    {
+      "key": "isSuperAdmin",
+      "value": ""
+    },
+    {
+      "key": "staffUserId",
+      "value": ""
+    },
+    {
+      "key": "staffUserEmail",
+      "value": ""
+    },
+    {
+      "key": "partnerCanManageTeam",
+      "value": ""
     }
   ],
   "item": [
@@ -33607,6 +33623,791 @@
                   }
                 }
               ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06n · Admin · Staff, team & audit",
+      "description": "Staff accounts (`/api/admin/users`, super admins only), a partner's own team (`/api/partner/team`, owners and partner admins), and the audit log (`/api/admin/audit`).\n\nThe Staff requests adapt to who `adminEmail` is: a super admin runs the full invite → role change → resend → delete chain; an ordinary administrator gets 403 on each, which is the correct answer. The Team requests need `partnerEmail`; without it they are skipped.",
+      "item": [
+        {
+          "name": "Login — admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "**Expected: 200**. Stores the session, and records whether this admin is a super admin: only a super admin may manage staff, so the Staff requests below expect 403 for an ordinary administrator.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{adminEmail}}\",\n    \"password\": \"{{adminPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const user = pm.response.json().user;",
+                  "pm.test('The session lists its capabilities', () => pm.expect(user.capabilities).to.be.an('array').that.includes('catalogue.read'));",
+                  "pm.collectionVariables.set('isSuperAdmin', user.capabilities.includes('users.staff.manage') ? 'yes' : 'no');",
+                  "pm.collectionVariables.unset('staffUserId');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users?pageSize=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "**Expected: 200** for a super admin (paginated staff accounts, no drivers or partner users); **403** `INSUFFICIENT_CAPABILITY` for anyone else."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const superAdmin = pm.collectionVariables.get('isSuperAdmin') === 'yes';",
+                  "pm.test('Super admin gets 200, anyone else 403', () => pm.response.to.have.status(superAdmin ? 200 : 403));",
+                  "if (!superAdmin) {",
+                  "    pm.test('403 names the missing capability', () => pm.expect(pm.response.json().error.details.required).to.include('users.staff.manage'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — invite a reservations user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "**Expected: 201** `{ user, link, email, emailSent }` for a super admin — the activation link is returned as well as emailed. 403 otherwise.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"pm-staff-{{runId}}@example.test\",\n    \"firstName\": \"Postman\",\n    \"lastName\": \"Staff\",\n    \"role\": \"RESERVATIONS\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const superAdmin = pm.collectionVariables.get('isSuperAdmin') === 'yes';",
+                  "pm.test('Super admin gets 201, anyone else 403', () => pm.response.to.have.status(superAdmin ? 201 : 403));",
+                  "if (!superAdmin) {",
+                  "    pm.test('403 names the missing capability', () => pm.expect(pm.response.json().error.details.required).to.include('users.staff.manage'));",
+                  "}",
+                  "if (pm.response.code === 201) {",
+                  "    const rows = pm.response.json();",
+                  "    pm.test('Invited, not yet active', () => pm.expect(rows.user.status).to.eql('INVITED'));",
+                  "    pm.test('Returns the activation link', () => pm.expect(rows.link.url).to.include('/activate/'));",
+                  "    pm.collectionVariables.set('staffUserId', rows.user.id);",
+                  "    pm.collectionVariables.set('staffUserEmail', rows.user.email);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — invite as super admin is refused (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "**Expected: 400** for a super admin — `SUPER_ADMIN` is never an invitation, only a role change. 403 for anyone else.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"pm-staff-sa-{{runId}}@example.test\",\n    \"firstName\": \"No\",\n    \"lastName\": \"Way\",\n    \"role\": \"SUPER_ADMIN\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const superAdmin = pm.collectionVariables.get('isSuperAdmin') === 'yes';",
+                  "pm.test('Super admin gets 400, anyone else 403', () => pm.response.to.have.status(superAdmin ? 400 : 403));",
+                  "if (!superAdmin) {",
+                  "    pm.test('403 names the missing capability', () => pm.expect(pm.response.json().error.details.required).to.include('users.staff.manage'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — read the invited account",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{staffUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{staffUserId}}"
+              ]
+            },
+            "description": "**Expected: 200** with `status: INVITED`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Runs only when the invite above succeeded, i.e. the collection's admin is a SUPER_ADMIN.",
+                  "if (!pm.collectionVariables.get('staffUserId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — change role to finance",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{staffUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{staffUserId}}",
+                "role"
+              ]
+            },
+            "description": "**Expected: 200** with `role: FINANCE`. The account's sessions end.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"role\": \"FINANCE\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Runs only when the invite above succeeded, i.e. the collection's admin is a SUPER_ADMIN.",
+                  "if (!pm.collectionVariables.get('staffUserId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Role changed', () => pm.expect(pm.response.json().role).to.eql('FINANCE'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — deactivate an invitation (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{staffUserId}}/deactivate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{staffUserId}}",
+                "deactivate"
+              ]
+            },
+            "description": "**Expected: 409** `NOT_ACTIVATED` — an invitation that was never used is deleted, not deactivated.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Runs only when the invite above succeeded, i.e. the collection's admin is a SUPER_ADMIN.",
+                  "if (!pm.collectionVariables.get('staffUserId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 409', () => pm.response.to.have.status(409));",
+                  "pm.test('Reason NOT_ACTIVATED', () => pm.expect(pm.response.json().error.details.reason).to.eql('NOT_ACTIVATED'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — resend the activation link",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{staffUserId}}/activation/resend",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{staffUserId}}",
+                "activation",
+                "resend"
+              ]
+            },
+            "description": "**Expected: 200** with a new `link`; the previous link stops working."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Runs only when the invite above succeeded, i.e. the collection's admin is a SUPER_ADMIN.",
+                  "if (!pm.collectionVariables.get('staffUserId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('A fresh link', () => pm.expect(pm.response.json().link.url).to.include('/activate/'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — delete with the wrong address (400)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{staffUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{staffUserId}}"
+              ]
+            },
+            "description": "**Expected: 400** `CONFIRM_MISMATCH` — the account's email must be typed back.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"confirm\": \"someone-else@example.com\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Runs only when the invite above succeeded, i.e. the collection's admin is a SUPER_ADMIN.",
+                  "if (!pm.collectionVariables.get('staffUserId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Reason CONFIRM_MISMATCH', () => pm.expect(pm.response.json().error.details.reason).to.eql('CONFIRM_MISMATCH'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Staff — delete the invitation",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{staffUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "users",
+                "{{staffUserId}}"
+              ]
+            },
+            "description": "**Expected: 204**. Clean-up for the requests above.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"confirm\": \"{{staffUserEmail}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Runs only when the invite above succeeded, i.e. the collection's admin is a SUPER_ADMIN.",
+                  "if (!pm.collectionVariables.get('staffUserId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 204', () => pm.response.to.have.status(204));",
+                  "pm.collectionVariables.unset('staffUserId');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit log — newest five",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/audit?pageSize=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "**Expected: 200** for super admins, administrators, management and finance — the whole trail, newest first, each entry naming its `entityType` and `entityId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json();",
+                  "pm.test('Paginated', () => pm.expect(rows.pageSize).to.eql(5));",
+                  "pm.test('Entries say what they are about', () => rows.data.forEach((entry) => pm.expect(entry).to.have.property('entityType')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit log — sign-ins only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/audit?action=USER_LOGIN_SUCCEEDED&pageSize=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "USER_LOGIN_SUCCEEDED"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "**Expected: 200**, every row a `USER_LOGIN_SUCCEEDED` (the login at the top of this folder wrote one)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Only sign-ins', () => pm.response.json().data.forEach((entry) => pm.expect(entry.action).to.eql('USER_LOGIN_SUCCEEDED')));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Audit log — unknown action (400)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/audit?action=NOT_A_THING",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "audit"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "NOT_A_THING"
+                }
+              ]
+            },
+            "description": "**Expected: 400** — `action` must be a real audit action."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "**Expected: 200**. The partner requests below need `partnerEmail` set to an owner or partner admin of an approved partner.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{partnerEmail}}\",\n    \"password\": \"{{partnerPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('partnerEmail')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('partnerCanManageTeam', pm.response.json().user.capabilities.includes('partner.team.manage') ? 'yes' : 'no');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Team — list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner/team",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner",
+                "team"
+              ]
+            },
+            "description": "**Expected: 200** for an owner or partner admin of an approved partner — this company only. **403** for an agent or finance user."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('partnerEmail')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const allowed = pm.collectionVariables.get('partnerCanManageTeam') === 'yes';",
+                  "pm.test('Owner/admin 200, other roles 403', () => pm.response.to.have.status(allowed ? 200 : 403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Team — invite with a platform role (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner/team",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner",
+                "team"
+              ]
+            },
+            "description": "**Expected: 400** — a team invitation is `PARTNER_ADMIN`, `PARTNER_AGENT` or `PARTNER_FINANCE` only. 403 for a role that cannot manage the team.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"pm-team-{{runId}}@example.test\",\n    \"firstName\": \"No\",\n    \"lastName\": \"Way\",\n    \"role\": \"ADMIN\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('partnerEmail')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const allowed = pm.collectionVariables.get('partnerCanManageTeam') === 'yes';",
+                  "pm.test('400 for owner/admin, 403 otherwise', () => pm.response.to.have.status(allowed ? 400 : 403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Team — someone outside the company (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner/team/postman-missing-user",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner",
+                "team",
+                "postman-missing-user"
+              ]
+            },
+            "description": "**Expected: 404** — every id is looked up inside the caller's company, so another company's member is simply not found."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('partnerEmail')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const allowed = pm.collectionVariables.get('partnerCanManageTeam') === 'yes';",
+                  "pm.test('404 for owner/admin, 403 otherwise', () => pm.response.to.have.status(allowed ? 404 : 403));"
+                ]
+              }
             }
           ]
         }

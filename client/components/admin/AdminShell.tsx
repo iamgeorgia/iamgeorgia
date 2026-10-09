@@ -59,10 +59,13 @@ function NotificationBell({ badges }: { badges: AdminBadges }) {
 }
 
 const ROLE_LABELS: Record<string, string> = {
+  SUPER_ADMIN: "Super admin",
+  ADMIN: "Administrator",
+  MANAGEMENT: "Management",
+  RESERVATIONS: "Reservations",
+  FINANCE: "Finance",
   DISPATCHER: "Dispatcher",
   DRIVER: "Driver",
-  SUPER_ADMIN: "Administrator",
-  ADMIN: "Operations",
 };
 
 /** "Tamar Gelashvili" -> "TG". Falls back to the email for a one-word name. */
@@ -156,12 +159,12 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
       <div className="flex min-h-svh w-full bg-background">
         <Suspense
           fallback={
-            <AdminSidebar role={user.role} badges={NO_BADGES} open={navOpen} onClose={() => setNavOpen(false)} />
+            <AdminSidebar capabilities={user.capabilities ?? []} badges={NO_BADGES} open={navOpen} onClose={() => setNavOpen(false)} />
           }
         >
           <WithBadges badges={badges}>
             {(resolved) => (
-              <AdminSidebar role={user.role} badges={resolved} open={navOpen} onClose={() => setNavOpen(false)} />
+              <AdminSidebar capabilities={user.capabilities ?? []} badges={resolved} open={navOpen} onClose={() => setNavOpen(false)} />
             )}
           </WithBadges>
         </Suspense>

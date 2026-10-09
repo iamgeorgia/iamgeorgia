@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { useViewer } from "@/lib/auth/useViewer";
 import { cn } from "@/lib/utils";
-import { ADMIN_ROLES, type Session } from "@/types/auth";
+import { isStaff, type Session } from "@/types/auth";
 
 /**
  * The way from the public site into whichever back office the viewer belongs to.
@@ -37,7 +37,7 @@ export function destinationFor(
   session: Session | null,
   t: ReturnType<typeof useI18n>["t"],
 ): Destination {
-  if (session && ADMIN_ROLES.includes(session.user.role)) {
+  if (isStaff(session)) {
     return { href: "/admin", label: t.nav.account.admin, icon: ShieldCheck };
   }
 

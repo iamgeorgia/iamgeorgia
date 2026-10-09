@@ -420,7 +420,14 @@ export const deleteUser = (scope, id, { confirm }, actor, req) =>
         await tx.user.delete({ where: { id } });
     });
 
-/** Exactly one primary contact per partner; this moves it. */
+/**
+ * Exactly one primary contact per partner; this moves it.
+ *
+ * Held to the same ceiling as every other change here, on both ends: the
+ * member who gains it and the member who loses it. Otherwise a partner admin
+ * could take the role of the company's voice from its owner by naming
+ * themselves.
+ */
 export const setPrimaryContact = (scope, id, actor, req) =>
     prisma.$transaction(async (tx) => {
         const user = await findInTx(tx, id, scope);
@@ -433,10 +440,16 @@ export const setPrimaryContact = (scope, id, actor, req) =>
             return user;
         }
 
+        assertWithinCeiling(actor, user.role);
+
         const previous = await tx.user.findFirst({
             where: { partnerId: scope.partnerId, isPrimaryContact: true },
-            select: { id: true, email: true }
+            select: { id: true, email: true, role: true }
         });
+
+        if (previous) {
+            assertWithinCeiling(actor, previous.role);
+        }
 
         await tx.user.updateMany({
             where: { partnerId: scope.partnerId, isPrimaryContact: true },

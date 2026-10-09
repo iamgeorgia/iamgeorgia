@@ -166,6 +166,20 @@ describe('a partner managing its team', { skip: dbAvailable ? false : 'Postgres 
         await request(app).patch(`/api/partner/team/${owner.id}/primary-contact`).set('Cookie', ownerCookie);
     });
 
+    it('does not let a partner admin take the primary contact from the owner', async () => {
+        const self = await request(app).patch(`/api/partner/team/${teamAdmin.id}/primary-contact`).set('Cookie', adminCookie);
+
+        assert.equal(self.status, 403);
+        assert.equal(self.body.error.details.reason, 'ROLE_ABOVE_CEILING');
+
+        // Even to an agent: the owner holds it, and an admin cannot take it from an owner.
+        const toAgent = await request(app).patch(`/api/partner/team/${agent.id}/primary-contact`).set('Cookie', adminCookie);
+        assert.equal(toAgent.status, 403);
+
+        const current = await prisma.user.findUnique({ where: { id: owner.id } });
+        assert.equal(current.isPrimaryContact, true);
+    });
+
     it('deactivates an agent, who is signed out at once; the admin may do that much', async () => {
         const target = await makePartnerUser(tracker, partner, { role: 'PARTNER_AGENT', isPrimaryContact: false });
         const { cookie } = await signIn(app, target.email);

@@ -13,7 +13,7 @@ import {
 } from "../lib/admin/help";
 import { helpRoutePatterns, matchHelpRoute } from "../lib/admin/help/routes";
 import { buildHelpSearchIndex, searchHelp } from "../lib/admin/help/search";
-import { adminNavigation, adminSectionItems, isAdminNavSection } from "../lib/admin/navigation";
+import { adminNavigation, adminSectionItems, isAdminNavSection, navigationFor } from "../lib/admin/navigation";
 
 /**
  * Keeps the manual honest against the page tree.
@@ -41,6 +41,7 @@ const CATEGORY_PREFIX: Record<string, string> = {
   "transfers-catalogue": "tc",
   "fleet-drivers": "fd",
   partners: "pt",
+  people: "pp",
   media: "md",
   publishing: "pb",
   reference: "rf",
@@ -68,12 +69,19 @@ function panelRoutes(): string[] {
 const byId = new Map(helpArticles.map((article) => [article.id, article]));
 const categoryIds = new Set(helpCategories.map((category) => category.id));
 
+/**
+ * What a dispatcher's session carries — `ROLE_CAPABILITIES.DISPATCHER` in
+ * `server/lib/permissions.js`. Written out rather than imported because the
+ * client never holds the role table; a change there shows up here as a test
+ * to update, which is the point.
+ */
+const DISPATCHER_CAPABILITIES = ["catalogue.read", "dispatch.read", "dispatch.write", "notifications.read"];
+
+/** Every screen the sidebar offers a dispatcher. */
 const opsRoutes = new Set(
-  adminNavigation.flatMap((group) =>
+  navigationFor(DISPATCHER_CAPABILITIES).flatMap((group) =>
     group.entries.flatMap((entry) =>
-      (isAdminNavSection(entry) ? adminSectionItems(entry) : [entry])
-        .filter((item) => item.ops)
-        .map((item) => item.href),
+      (isAdminNavSection(entry) ? adminSectionItems(entry) : [entry]).map((item) => item.href),
     ),
   ),
 );

@@ -6,7 +6,7 @@ import { PortalSignInForm } from "@/components/partners/PortalSignInForm";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
-import { ADMIN_ROLES } from "@/types/auth";
+import { homePathFor } from "@/types/auth";
 
 export const metadata: Metadata = {
   title: "Sign in",
@@ -19,7 +19,7 @@ export default async function PortalSignInPage() {
 
   // Already signed in: the portal home works out where they belong.
   if (session) {
-    redirect(localePath(locale, ADMIN_ROLES.includes(session.user.role) ? "/admin" : "/portal"));
+    redirect(localePath(locale, homePathFor(session) === "/" ? "/portal" : homePathFor(session)));
   }
 
   return (

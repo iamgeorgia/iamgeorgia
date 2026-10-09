@@ -10,6 +10,7 @@ import { quickStartFor } from "@/lib/admin/help";
 import { BookingStatusBadge, PartnerStatusBadge } from "@/components/admin/StatusBadge";
 import { listPartners } from "@/lib/api/partners";
 import { getSession } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 import { APPLICATION_STATUSES, formatPartnerDate, partnerKindLabels } from "@/lib/admin/partners";
 import { formatStay, formatStayDate } from "@/lib/admin/bookings";
 import { formatCompactMoney, recentBookings, upcomingArrivals } from "@/lib/admin/metrics";
@@ -30,11 +31,11 @@ import { getI18n, getLocale } from "@/lib/i18n/server";
  * an empty chart over three days of real data would be worse than none.
  */
 export default async function AdminOverviewPage() {
-  // Dispatchers have no business here: every figure on this screen is one
-  // they cannot read. Their day starts on the board.
+  // Every figure on this screen is a booking or a partner. A role that reads
+  // neither — a dispatcher — starts its day on the board instead.
   const session = await getSession();
 
-  if (session?.user.role === "DISPATCHER") {
+  if (!can(session, "bookings.read")) {
     redirect(localePath(await getLocale(), "/admin/transfers/dispatch"));
   }
 

@@ -7,7 +7,7 @@ import { ApiError, serverFetchOptional } from "@/lib/api/client";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
-import { ADMIN_ROLES } from "@/types/auth";
+import { homePathFor } from "@/types/auth";
 import type { PartnerFinancial } from "@/types";
 
 export const metadata: Metadata = { title: "Settings" };
@@ -28,7 +28,7 @@ export default async function PortalSettingsPage() {
   if (!session) redirect(localePath(locale, "/portal/sign-in"));
 
   if (!session.partner) {
-    redirect(localePath(locale, ADMIN_ROLES.includes(session.user.role) ? "/admin" : "/"));
+    redirect(localePath(locale, homePathFor(session)));
   }
 
   // Editing a company is gated on approval server-side, so an unapproved

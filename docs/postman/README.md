@@ -90,7 +90,7 @@ several results that look wrong are deliberate.
 captured; folder 06 asserts against the booking folder 03 created. Running
 folder 06 alone will show a couple of skipped assertions, not failures.
 
-**The admin folders write.** Folders 06b–06m create their own records — a
+**The admin folders write.** Folders 06b–06n create their own records — a
 hotel, a partner, a tour, a route, a car, a driver and so on — every one named
 with the run token (`pm-hotel-<runId>`, plate `PM-<runId>`,
 `pm-<runId>@example.test`) and archived or deleted again at the end of the
@@ -148,6 +148,7 @@ report, or `--folder "03 · Hotel search & booking"` to run one folder.
 | **06k · Admin — Orders** | Detail, cancellation quote, per-item confirm / decline / cancel, whole-order cancel |
 | **06l · Admin — Services** | A service from draft to published, translations, the bookings register with confirm / decline / cancel, retire and delete |
 | **06m · Admin — Packages** | A package template with a hotel slot: validation of slots, kosher profile and override, translations, gallery, publish, retire, delete |
+| **06n · Admin — Staff, team & audit** | Staff accounts (super admins: invite → role change → resend → delete; anyone else is asserted to get 403), a partner's own team (needs `partnerEmail`), and the audit log with its filters |
 | **07 · Kosher** | Kosher services and certification on a hotel, the kosher search filters, a requirement the hotel cannot meet |
 | **08 · Security & error contract** | Requests that are *supposed* to fail: 401, 403, 404, 400, 413, 429, and the cross-site write check |
 

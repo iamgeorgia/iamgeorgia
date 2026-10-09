@@ -15,7 +15,7 @@ import {
 import { partnerKindLabels } from "@/lib/admin/partners";
 import { cn } from "@/lib/utils";
 import type { Partner, PartnerFinancial } from "@/types";
-import type { SessionUser } from "@/types/auth";
+import { can, type SessionUser } from "@/types/auth";
 
 /**
  * Partner profile settings.
@@ -47,12 +47,12 @@ export function PortalSettings({
 }) {
   return (
     <div className="mt-10 space-y-6">
-      <CompanySection partner={partner} />
+      {/* Absent for a role that may not edit the company (an agent, a
+          finance user): a form that answers 403 on save is worse than none. */}
+      {can(user, "partner.profile.write") && <CompanySection partner={partner} />}
       <AccountSection user={user} />
       {/* Absent entirely for a role that may not see bank details. */}
-      {(user.role === "PARTNER_OWNER" || user.role === "PARTNER_FINANCE") && (
-        <FinancialSection financial={financial} />
-      )}
+      {can(user, "partner.financial.read") && <FinancialSection financial={financial} />}
       <PasswordSection />
     </div>
   );

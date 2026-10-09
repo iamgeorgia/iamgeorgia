@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { serverFetchOptional } from "@/lib/api/client";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
-import { TRANSFER_OPS_ROLES, homePathFor, type Session } from "@/types/auth";
+import { homePathFor, isStaff, type Session } from "@/types/auth";
 
 /**
  * Who the viewer is, during a server render.
@@ -33,7 +33,7 @@ export async function requireAdminSession(): Promise<Session> {
     redirect(localePath(locale, "/admin/sign-in"));
   }
 
-  if (!TRANSFER_OPS_ROLES.includes(session.user.role)) {
+  if (!isStaff(session)) {
     // Signed in, but as a partner or a driver. Their own panel is where they
     // belong.
     redirect(localePath(locale, homePathFor(session)));

@@ -1005,13 +1005,13 @@ Phase 0 Hardening ──┬──> Phase 1 Accounts & RBAC ──> Phase 2 Opera
 | D2 | Invoice language per partner (InvoiceOcean has no Georgian or Hebrew) | Phase 4 | `en`; `ru` for partners whose preferred locale is ru |
 | D3 | Invoice numbering series and department in InvoiceOcean | Phase 4 | Account default series; one department |
 | D4 | Tax treatment of transfers/tours/services on invoices (VAT rate per product type; exempt supplies) | Phase 4 | Same 18% included for all; FINANCE can override per line |
-| D5 | Partner payment terms (due days after confirmation) default and per-partner overrides | Phase 2 | 14 days; per-partner field |
-| D6 | Supplier payment terms per hotel contract (the 30%/3 days and 70%/−7 days example); whether a supplier is owed anything on cancellation | Phase 2/3 | Terms editable per hotel; on cancellation the payable becomes the supplier's share of the cancellation charge only if marked non-refundable, else VOID |
+| D5 | Partner payment terms (due days after confirmation) default and per-partner overrides | Phase 2 | **Decided 2026-10-09:** due days set per partner (no fixed platform rule; 14 only as the starting value for a new partner), and Finance may override the due date on a single receivable (`PATCH /admin/finance/receivables/:id` `dueAt`, audited) |
+| D6 | Supplier payment terms per hotel contract (the 30%/3 days and 70%/−7 days example); whether a supplier is owed anything on cancellation | Phase 2/3 | **Decided 2026-10-09: depends on the supplier.** `SupplierPaymentTerms.cancellationLiability` ∈ `PROPORTIONAL` (owed the same share of net as the charge taken: 50% charged → 50% of net), `NONE_UNLESS_NON_REFUNDABLE`, `MANUAL` (payable flagged for Finance to set). Default `PROPORTIONAL` when a supplier has no terms. Finance can always adjust a single payable (audited, reason required). Replaces the `nonRefundable` boolean as the cancellation switch in `applyCancellationInTx` |
 | D7 | Who receives payment reminders (FINANCE role users + a finance mailbox?) and at which offsets | Phase 3 | FINANCE and ADMIN in-app; `FINANCE_OPS_EMAIL`; offsets 7, 3, 1, 0 days and daily overdue |
-| D8 | Reporting currency and whether to convert (no FX today) | Phase 2 | Report per currency, no conversion |
+| D8 | Reporting currency and whether to convert (no FX today) | Phase 2 | **Decided 2026-10-09:** report per currency, no conversion; NBG-rate conversion may be added later |
 | D9 | Accounting software that receives exports (format) | Phase 2 optional | Generic CSV |
 | D10 | Whether admin-verified catalogue coordinates count as platform data under Google's 30-day Places cache rule | Phase 5 | Refresh Places-sourced points monthly until legal confirms |
-| D11 | Role behaviour changes: PARTNER_FINANCE loses booking rights; DISPATCHER loses cancel; ADMIN loses staff management | Phase 1 | As stated |
+| D11 | Role behaviour changes: PARTNER_FINANCE loses booking rights; DISPATCHER loses cancel; ADMIN loses staff management | Phase 1 | **Confirmed 2026-10-08** and implemented |
 
 ---
 

@@ -109,6 +109,14 @@ export const helpCategories: HelpCategory[] = [
     pathPrefixes: ["/admin/partners"],
   },
   {
+    id: "people",
+    title: "Staff & audit log",
+    summary: "Giving colleagues a seat in the panel with the right role, retiring it again, and reading who did what.",
+    iconName: "users",
+    roles: ["ADMIN"],
+    pathPrefixes: ["/admin/users", "/admin/audit"],
+  },
+  {
     id: "media",
     title: "Images & documents",
     summary: "What uploads are accepted, how a cover is chosen, and the difference between removing and deleting.",

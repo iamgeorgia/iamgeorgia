@@ -7,6 +7,7 @@ import { articles as hotels } from "./articles/hotels";
 import { articles as media } from "./articles/media";
 import { articles as packages } from "./articles/packages";
 import { articles as partners } from "./articles/partners";
+import { articles as people } from "./articles/people";
 import { articles as publishing } from "./articles/publishing";
 import { articles as reference } from "./articles/reference";
 import { articles as services } from "./articles/services";
@@ -46,6 +47,7 @@ export const helpArticles: HelpArticle[] = [
   ...transfersCatalogue,
   ...fleetDrivers,
   ...partners,
+  ...people,
   ...media,
   ...publishing,
   ...reference,

@@ -10,11 +10,11 @@ import type { AdminBadges } from "@/lib/admin/navigation";
  * one request, computed in the database.
  */
 
-/** What the API sends: a dispatcher gets `null` for figures they may not see. */
+/** What the API sends: `null` for each queue the viewer's role does not work. */
 interface BadgesResponse {
   pendingPartners: number | null;
   activeBookings: number | null;
-  unassignedLegs: number;
+  unassignedLegs: number | null;
   pendingTourRequests: number | null;
   pendingOrders: number | null;
 }
@@ -53,7 +53,7 @@ export const getAdminBadges = async (): Promise<AdminBadges> => {
   return {
     pendingBookings: badges.activeBookings ?? 0,
     pendingPartners: badges.pendingPartners ?? 0,
-    unassignedLegs: badges.unassignedLegs,
+    unassignedLegs: badges.unassignedLegs ?? 0,
     pendingTourRequests: badges.pendingTourRequests ?? 0,
     pendingOrders: badges.pendingOrders ?? 0,
   };

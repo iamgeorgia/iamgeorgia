@@ -18,6 +18,7 @@ import {
   Route,
   Send,
   ShieldAlert,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,6 +48,7 @@ const NAMED_ICONS: Record<HelpIconName, LucideIcon> = {
   bookOpen: BookOpen,
   circleHelp: CircleHelp,
   shieldAlert: ShieldAlert,
+  users: UsersRound,
 };
 
 export function HelpCategoryIcon({

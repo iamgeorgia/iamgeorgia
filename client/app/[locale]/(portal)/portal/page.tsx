@@ -6,7 +6,7 @@ import { Container } from "@/components/ui/Container";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
-import { ADMIN_ROLES } from "@/types/auth";
+import { homePathFor } from "@/types/auth";
 
 /**
  * What a partner sees when they sign in.
@@ -22,7 +22,7 @@ export default async function PortalHomePage() {
   if (!session) redirect(localePath(locale, "/portal/sign-in"));
 
   if (!session.partner) {
-    redirect(localePath(locale, ADMIN_ROLES.includes(session.user.role) ? "/admin" : "/"));
+    redirect(localePath(locale, homePathFor(session)));
   }
 
   const partner = session.partner;

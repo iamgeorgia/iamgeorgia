@@ -16,6 +16,14 @@ export interface SessionUser {
   partnerId: string | null;
   lastLoginAt: string | null;
   createdAt: string;
+  /**
+   * What this account's role may do, as the server's capability names
+   * (`catalogue.write`, `bookings.cancel`, `partner.team.manage`, …). The
+   * client reads this rather than keeping its own copy of the role table, so
+   * a capability granted or withdrawn on the server reaches the menus at the
+   * next sign-in. Sorted. See `server/lib/permissions.js`.
+   */
+  capabilities: string[];
 }
 
 /**
@@ -36,21 +44,39 @@ export interface Session {
 
 export const ADMIN_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN"];
 
-/** Admins plus dispatchers: everyone who may run transfer operations. */
-export const TRANSFER_OPS_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN", "DISPATCHER"];
+/**
+ * Whether an account holds any of the given capabilities.
+ *
+ * Takes a session, a bare user, or nothing — nobody holds anything — so a
+ * component can ask without checking first. "Any of", like the server's
+ * `requireCapability`. The server enforces every one of these on its own;
+ * this only keeps the screens from offering what would answer 403.
+ */
+export const can = (
+  viewer: Session | SessionUser | null | undefined,
+  ...anyOf: string[]
+): boolean => {
+  if (!viewer) return false;
+  const held = "user" in viewer ? viewer.user.capabilities : viewer.capabilities;
+  return Array.isArray(held) && anyOf.some((capability) => held.includes(capability));
+};
 
 export const isAdmin = (session: Session | null): boolean =>
   Boolean(session) && ADMIN_ROLES.includes(session!.user.role);
 
-export const isTransferOps = (session: Session | null): boolean =>
-  Boolean(session) && TRANSFER_OPS_ROLES.includes(session!.user.role);
+/**
+ * Whether an account sits in the admin panel: every platform role except a
+ * driver. Read off the catalogue capability, which every staff role holds.
+ */
+export const isStaff = (viewer: Session | SessionUser | null | undefined): boolean =>
+  can(viewer, "catalogue.read");
 
 export const isDriver = (session: Session | null): boolean =>
   session?.user.role === "DRIVER";
 
 /** Where a signed-in account belongs, for redirects between the panels. */
 export const homePathFor = (session: Session): string => {
-  if (TRANSFER_OPS_ROLES.includes(session.user.role)) return "/admin";
+  if (isStaff(session)) return "/admin";
   if (session.user.role === "DRIVER") return "/driver";
   if (session.partner) return "/portal";
   return "/";

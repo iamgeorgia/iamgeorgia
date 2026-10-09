@@ -21,7 +21,7 @@ import { ApiError } from "@/lib/api/client";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
-import { ADMIN_ROLES } from "@/types/auth";
+import { homePathFor } from "@/types/auth";
 import type { Booking, CancellationQuote } from "@/types/booking";
 import type { Order } from "@/types/order";
 import type { TourBooking, TourCancellationQuote } from "@/types/tour";
@@ -60,7 +60,7 @@ export default async function PortalBookingPage(
   if (!session) redirect(localePath(locale, "/portal/sign-in"));
 
   if (!session.partner) {
-    redirect(localePath(locale, ADMIN_ROLES.includes(session.user.role) ? "/admin" : "/"));
+    redirect(localePath(locale, homePathFor(session)));
   }
 
   if (session.partner.status !== "APPROVED") {

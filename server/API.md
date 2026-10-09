@@ -1050,7 +1050,9 @@ company's user id is **404**. Differences: invite roles are `PARTNER_ADMIN`
 partner role including `PARTNER_OWNER`; an owner manages everyone (other
 owners included) while an admin manages agents and finance users only (403
 `ROLE_ABOVE_CEILING`); `PATCH /partner/team/:id/primary-contact` moves the one
-primary contact to an active member; a team holds at most `PARTNER_TEAM_MAX`
+primary contact to an active member, within the same ceiling on both the
+member gaining it and the one losing it (so a partner admin cannot take it
+from an owner); a team holds at most `PARTNER_TEAM_MAX`
 members, invited ones included (409 `TEAM_FULL`).
 
 ### Audit log — `/admin/audit`

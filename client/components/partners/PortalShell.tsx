@@ -2,23 +2,25 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarCheck, LayoutDashboard, LogOut, Settings } from "lucide-react";
+import { CalendarCheck, LayoutDashboard, LogOut, Settings, UsersRound } from "lucide-react";
 
 import { signOut } from "@/lib/api/partners";
 import { forgetViewer } from "@/lib/auth/useViewer";
 import { useLocalePath } from "@/lib/i18n/provider";
 import { stripLocale } from "@/lib/i18n/config";
 import { cn } from "@/lib/utils";
-import type { Session } from "@/types/auth";
+import { can, type Session } from "@/types/auth";
 
 /**
  * Only shown to a partner who is through the gate. Someone still waiting on a
  * decision has one page, and offering them navigation into rooms they cannot
  * enter would be a worse experience than offering none.
  */
-const NAV = [
+const NAV: { label: string; href: string; icon: typeof Settings; capability?: string }[] = [
   { label: "Dashboard", href: "/portal/dashboard", icon: LayoutDashboard },
   { label: "Bookings", href: "/portal/bookings", icon: CalendarCheck },
+  // Owners and partner admins only; the server answers 403 to anyone else.
+  { label: "Team", href: "/portal/team", icon: UsersRound, capability: "partner.team.manage" },
   { label: "Settings", href: "/portal/settings", icon: Settings },
 ];
 
@@ -41,6 +43,7 @@ export function PortalShell({
   const path = useLocalePath();
   const current = stripLocale(pathname);
   const approved = session?.partner?.status === "APPROVED";
+  const nav = NAV.filter((item) => !item.capability || can(session, item.capability));
 
   const handleSignOut = async () => {
     try {
@@ -75,7 +78,7 @@ export function PortalShell({
               waits for `lg`. */}
           {approved && (
             <nav aria-label="Partner platform" className="ms-6 hidden items-center gap-1 md:flex">
-              {NAV.map((item) => {
+              {nav.map((item) => {
                 const active = current === item.href || current.startsWith(`${item.href}/`);
 
                 return (
@@ -126,7 +129,7 @@ export function PortalShell({
           aria-label="Partner platform"
           className="flex gap-1 border-b border-line bg-surface px-5 pb-3 sm:px-8 md:hidden"
         >
-          {NAV.map((item) => {
+          {nav.map((item) => {
             const active = current === item.href || current.startsWith(`${item.href}/`);
 
             return (

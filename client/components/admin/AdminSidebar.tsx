@@ -25,8 +25,8 @@ import { cn } from "@/lib/utils";
 interface AdminSidebarProps {
   /** Counts for the queue pills, resolved by the shell. */
   badges: AdminBadges;
-  /** Decides which screens are listed; a dispatcher sees the operations subset. */
-  role: string;
+  /** The signed-in account's capabilities; the sidebar offers what they open. */
+  capabilities: readonly string[];
   /** Mobile drawer state. On `lg` the sidebar is always shown. */
   open: boolean;
   onClose: () => void;
@@ -312,7 +312,7 @@ function NavGroup({
  * can hold a queue, so an operator knows where the work is before clicking
  * anything.
  */
-export function AdminSidebar({ badges, open, onClose, role }: AdminSidebarProps) {
+export function AdminSidebar({ badges, open, onClose, capabilities }: AdminSidebarProps) {
   const pathname = usePathname();
   const path = useLocalePath();
   const canonical = stripLocale(pathname);
@@ -366,7 +366,7 @@ export function AdminSidebar({ badges, open, onClose, role }: AdminSidebarProps)
           aria-label="Admin sections"
           className="scrollbar-dark flex-1 overflow-y-auto overscroll-contain px-3 py-5"
         >
-          {navigationFor(role).map((group) => (
+          {navigationFor(capabilities).map((group) => (
             <NavGroup
               key={group.title}
               title={group.title}

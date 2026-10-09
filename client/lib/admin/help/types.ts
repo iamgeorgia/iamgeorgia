@@ -37,6 +37,7 @@ export type HelpCategoryId =
   | "transfers-catalogue"
   | "fleet-drivers"
   | "partners"
+  | "people"
   | "media"
   | "publishing"
   | "reference";
@@ -62,7 +63,8 @@ export type HelpIconName =
   | "send"
   | "bookOpen"
   | "circleHelp"
-  | "shieldAlert";
+  | "shieldAlert"
+  | "users";
 
 export interface HelpCategory {
   id: HelpCategoryId;

@@ -15,6 +15,9 @@
 export type Role =
   | "SUPER_ADMIN"
   | "ADMIN"
+  | "MANAGEMENT"
+  | "RESERVATIONS"
+  | "FINANCE"
   | "DISPATCHER"
   | "PARTNER_OWNER"
   | "PARTNER_ADMIN"
