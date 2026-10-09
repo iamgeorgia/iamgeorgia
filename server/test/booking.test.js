@@ -288,6 +288,26 @@ describe('bookings', { skip: dbAvailable ? false : 'Postgres is not reachable' }
             assert.equal(inventory.bookedUnits, 1);
         });
 
+        it('reports the total the guest was quoted, tax included in the rate and all', async () => {
+            const { hotel } = await makeSellable();
+            await prisma.hotelTaxFee.create({
+                data: { hotelId: hotel.id, name: 'VAT', basis: 'PERCENT', value: 1800, currency: 'GEL', includedInRate: true }
+            });
+            const offer = await offerFor(hotel);
+            const hold = await request(app).post('/api/bookings/holds').send({ token: offer.token });
+
+            const response = await request(app)
+                .post('/api/bookings')
+                .send({ holdToken: hold.body.token, leadGuest: leadGuest() });
+
+            assert.equal(response.status, 201);
+            assert.ok(offer.quote.totals.taxIncludedCents > 0, 'the fixture really carries an included tax');
+            // The booking page and the checkout must agree: before this, the
+            // booking answered the room price alone and read short by the tax.
+            assert.equal(response.body.totalCents, offer.quote.totals.totalCents);
+            assert.equal(response.body.taxIncludedCents, offer.quote.totals.taxIncludedCents);
+        });
+
         it('books straight from an offer token, without a hold', async () => {
             const { hotel, roomType } = await makeSellable();
             const offer = await offerFor(hotel);

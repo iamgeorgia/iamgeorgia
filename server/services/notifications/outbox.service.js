@@ -737,8 +737,9 @@ const hotelGuestData = (booking) => {
         })),
         currency: booking.currency,
         // What the guest owes: the room price plus the taxes folded into it.
-        // `sellTotalCents` alone is the ex-tax figure the register shows staff,
-        // and a voucher that quoted it would be short by the tax.
+        // `sellTotalCents` alone is the room price before the included tax, and
+        // a voucher that quoted it would be short by the tax. Same sum as the
+        // booking's own `totalCents` (serializers/booking.js).
         totalCents: booking.sellTotalCents + (booking.taxTotalCents ?? 0),
         payableAtPropertyCents: booking.payableAtPropertyCents ?? 0,
         cancellationSummary: booking.rooms[0]?.cancellationSummary ?? null,

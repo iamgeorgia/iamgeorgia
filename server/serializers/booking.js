@@ -72,7 +72,11 @@ export const toBookingSummary = (booking, viewer) => {
         rooms: booking.rooms?.length ?? 0,
         leadGuestName: booking.leadGuestName,
         currency: booking.currency,
-        totalCents: booking.sellTotalCents,
+        // What the guest pays: the rooms plus the tax already included in the
+        // rate — the figure checkout quoted, the hold froze and the voucher
+        // prints. `sellTotalCents` alone is the room price before that tax,
+        // and a booking page showing it read short of what was charged.
+        totalCents: booking.sellTotalCents + (booking.taxTotalCents ?? 0),
         payableAtPropertyCents: booking.payableAtPropertyCents,
         createdAt: booking.createdAt,
         confirmedAt: booking.confirmedAt ?? null,
