@@ -10,10 +10,13 @@ import {
   AdminPanel,
 } from "@/components/admin/AdminPage";
 import { PartnerActions } from "@/components/admin/PartnerActions";
+import { PartnerTermsPanel } from "@/components/admin/finance/PartnerTermsPanel";
 import { PartnerDangerZone } from "@/components/admin/PartnerDangerZone";
 import { InvitationStatusBadge, PartnerStatusBadge } from "@/components/admin/StatusBadge";
 import { ApiError } from "@/lib/api/client";
+import { getPartnerTerms } from "@/lib/api/finance";
 import { getPartner, getPartnerAudit, getPartnerInvitations } from "@/lib/api/partners";
+import { getSession } from "@/lib/auth/session";
 import {
   auditActionLabels,
   formatCommission,
@@ -24,6 +27,8 @@ import {
 } from "@/lib/admin/partners";
 import { getI18n } from "@/lib/i18n/server";
 import type { AuditEntry, Invitation, Partner } from "@/types";
+import { can } from "@/types/auth";
+import type { PartnerTerms } from "@/types/finance";
 
 export async function generateMetadata({
   params,
@@ -49,7 +54,13 @@ export default async function AdminPartnerPage({
   params,
 }: PageProps<"/[locale]/admin/partners/[id]">) {
   const { id } = await params;
-  const { path } = await getI18n();
+  const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
+
+  // Payment terms (D5) are Finance's, read separately: a viewer who may not
+  // read them — or any failure — just leaves the panel out.
+  const termsRequest: Promise<PartnerTerms | null> = can(session, "finance.receivables.read", "partners.write")
+    ? getPartnerTerms(id).catch(() => null)
+    : Promise.resolve(null);
 
   let partner: Partner;
   let audit: AuditEntry[] = [];
@@ -67,6 +78,7 @@ export default async function AdminPartnerPage({
   }
 
   const { review } = partner;
+  const terms = await termsRequest;
 
   return (
     <AdminContainer>
@@ -214,6 +226,8 @@ export default async function AdminPartnerPage({
               </p>
             )}
           </AdminPanel>
+
+          {terms && <PartnerTermsPanel terms={terms} canEdit={can(session, "finance.terms.write")} />}
 
           {partner.notes && (
             <AdminPanel title="Internal note" description="Never shown to the partner.">

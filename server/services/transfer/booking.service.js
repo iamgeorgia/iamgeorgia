@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { prisma } from '../../db/index.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
+import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
 import { BadRequestError, ConflictError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { sqlStateOf } from '../../middleware/errors.js';
@@ -331,6 +332,9 @@ export const confirmTransferBookingInTx = async (tx, prepared, { idempotencyKey 
         req
     });
 
+    // What we now owe the transfer company, on its terms.
+    await syncPayableInTx(tx, 'TRANSFER', created.id, actor, req);
+
     if (!prepared.preferredDriverId) {
         return created;
     }
@@ -405,9 +409,14 @@ export const confirmTransferBooking = async (input, actor, req) => {
     const prepared = await prepareTransferBooking(input, actor);
 
     try {
-        const booking = await prisma.$transaction((tx) =>
-            confirmTransferBookingInTx(tx, prepared, { idempotencyKey }, actor, req)
-        );
+        const booking = await prisma.$transaction(async (tx) => {
+            const created = await confirmTransferBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
+
+            // What the buyer owes; an order's transfer is owed through the order.
+            await syncBookingReceivableInTx(tx, 'TRANSFER', created.id, actor, req);
+
+            return created;
+        });
 
         return { booking, replayed: false };
     } catch (err) {
@@ -670,6 +679,8 @@ export const cancelTransferBookingInTx = async (tx, booking, { reason, waiveChar
         },
         req
     });
+
+    await syncBookingInTx(tx, 'TRANSFER', booking.id, actor, req);
 
     return { booking: result, quote };
 };

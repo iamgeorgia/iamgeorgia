@@ -49,6 +49,7 @@ const VISIBILITY_FOR_CATEGORY = {
     CONTRACT: 'PRIVATE',
     RATE_SHEET: 'PRIVATE',
     INVOICE: 'PRIVATE',
+    PAYMENT_ATTACHMENT: 'PRIVATE',
     VOUCHER: 'PRIVATE',
     IMPORT: 'PRIVATE',
     // A scan of a signed certificate on a permanent public URL is a forgeable

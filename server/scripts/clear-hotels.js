@@ -1,5 +1,6 @@
 import { prisma, disconnect } from '../db/index.js';
 import { removeObjectPrefix } from '../services/media/storage.service.js';
+import { deleteFinanceForBookings } from './lib/finance-cleanup.js';
 
 /**
  * Clears the hotel catalogue completely — bookings, holds, hotels and every
@@ -24,6 +25,8 @@ const assets = await prisma.fileAsset.findMany({
 
 // Child-first: bookings and holds block or reference hotel rows.
 const holds = await prisma.bookingHold.deleteMany({});
+// Finance rows hold their booking with Restrict; they go with it.
+await deleteFinanceForBookings(prisma, { hotelBooking: {}, order: { items: { some: { hotelBookingId: { not: null } } } } });
 const bookings = await prisma.hotelBooking.deleteMany({});
 
 // Cascades take room types, rate plans, rates, inventory, galleries, reviews,

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { ArrowRight, CalendarDays, ExternalLink, FileText, ImageIcon, Languages, Tags } from "lucide-react";
+import { ArrowRight, CalendarDays, ExternalLink, FileText, ImageIcon, Languages, Tags, Wallet } from "lucide-react";
 
 import {
   AdminBreadcrumbs,
@@ -26,6 +26,8 @@ import {
 } from "@/lib/admin/tours";
 import { formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
+import { getSession } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 import type { TourBookingSummary } from "@/types/tour";
 
 export const metadata: Metadata = { title: "Tour" };
@@ -39,7 +41,7 @@ export const metadata: Metadata = { title: "Tour" };
  */
 export default async function AdminTourPage({ params }: PageProps<"/[locale]/admin/tours/[slug]">) {
   const { slug } = await params;
-  const { path } = await getI18n();
+  const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
   let tour;
 
@@ -94,6 +96,16 @@ export default async function AdminTourPage({ params }: PageProps<"/[locale]/adm
       title: "Translations",
       description: "Georgian, Russian and Hebrew prose",
     },
+    ...(can(session, "finance.payables.read", "catalogue.write")
+      ? [
+          {
+            href: `/admin/finance/terms/tours/${tour.id}`,
+            icon: Wallet,
+            title: "Payment terms",
+            description: "When the operator is paid, and what it is owed after a cancellation",
+          },
+        ]
+      : []),
   ];
 
   return (

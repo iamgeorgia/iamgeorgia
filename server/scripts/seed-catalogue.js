@@ -11,6 +11,7 @@ import { publishHotel } from '../services/hotel/hotel.service.js';
 import { uploadFile } from '../services/media/upload.service.js';
 import { addDays, todayInTimezone, dateOnlyToUtc, weekdayOf } from '../lib/time.js';
 import { ClientImageError, createClientImageSource } from './lib/client-images.js';
+import { deleteFinanceForBookings } from './lib/finance-cleanup.js';
 
 /**
  * Seeds the real catalogue from the client's editorial fixtures.
@@ -277,6 +278,7 @@ const removeSmokeData = async () => {
                 where: { bookingId: { in: ids } },
                 data: { bookingId: null }
             });
+            await deleteFinanceForBookings(prisma, { hotelBooking: { id: { in: ids } } });
             await prisma.hotelBooking.deleteMany({ where: { id: { in: ids } } });
             console.log(`  removed ${bookings.length} booking(s): ${bookings.map((b) => b.reference).join(', ')}`);
         }

@@ -20,6 +20,7 @@
 
 import { prisma, connect, disconnect } from '../db/index.js';
 import { logger } from '../lib/logger.js';
+import { deleteFinanceForBookings } from './lib/finance-cleanup.js';
 import { quotesForJourney } from '../services/transfer/quote.service.js';
 import { confirmTransferBooking } from '../services/transfer/booking.service.js';
 
@@ -149,6 +150,7 @@ const clear = async () => {
 
     // Legs and extras cascade; audit rows deliberately do not, so they go by
     // hand — the same asymmetry the test tracker deals with.
+    await deleteFinanceForBookings(prisma, { transferBooking: { id: { in: ids } } });
     await prisma.transferBooking.deleteMany({ where: { id: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { entityId: { in: ids } } });
 

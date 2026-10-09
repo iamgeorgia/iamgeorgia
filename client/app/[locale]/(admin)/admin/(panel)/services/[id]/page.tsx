@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { Wallet } from "lucide-react";
 
 import {
   AdminBreadcrumbs,
@@ -19,6 +21,8 @@ import { getService, listServiceTranslations } from "@/lib/api/services";
 import { listTourCancellationPolicies } from "@/lib/api/tours";
 import { serviceBasisLabels, serviceCategoryLabels } from "@/lib/admin/services";
 import { getI18n } from "@/lib/i18n/server";
+import { getSession } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Service" };
 
@@ -34,7 +38,7 @@ export default async function AdminServicePage({
   params,
 }: PageProps<"/[locale]/admin/services/[id]">) {
   const { id } = await params;
-  const { path } = await getI18n();
+  const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
   let service;
 
@@ -104,6 +108,18 @@ export default async function AdminServicePage({
             )}
             <ServiceActions service={service} />
           </AdminPanel>
+
+          {can(session, "finance.payables.read", "catalogue.write") && (
+            <AdminPanel title="Payment terms" description="When the supplier is paid, and what it is owed after a cancellation.">
+              <Link
+                href={path(`/admin/finance/terms/services/${service.id}`)}
+                className="inline-flex items-center gap-2 text-[0.8125rem] font-medium text-brand-text underline-offset-4 hover:underline"
+              >
+                <Wallet size={15} aria-hidden />
+                Open payment terms
+              </Link>
+            </AdminPanel>
+          )}
 
           <ServiceDangerZone service={service} />
         </div>

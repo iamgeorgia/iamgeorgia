@@ -109,6 +109,14 @@ export const helpCategories: HelpCategory[] = [
     pathPrefixes: ["/admin/partners"],
   },
   {
+    id: "finance",
+    title: "Finance",
+    summary: "What we owe suppliers, what buyers owe us, recording payments and refunds, payment terms, and the reports.",
+    iconName: "wallet",
+    roles: ["ADMIN"],
+    pathPrefixes: ["/admin/finance"],
+  },
+  {
     id: "people",
     title: "Staff & audit log",
     summary: "Giving colleagues a seat in the panel with the right role, retiring it again, and reading who did what.",

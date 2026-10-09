@@ -377,6 +377,8 @@ enum FileCategory {
   TOUR_IMAGE
   /// Photographs of a package: PUBLIC.
   PACKAGE_IMAGE
+  /// Proof of a payment — a bank slip, a transfer confirmation. PRIVATE.
+  PAYMENT_ATTACHMENT
   OTHER
 
   @@map("file_category")
@@ -848,8 +850,10 @@ model Hotel {
   kosher HotelKosherProfile?
 
   packageComponents PackageComponent[]
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  /// When and how this supplier is paid, and what it is owed after a cancellation.
+  paymentTerms      SupplierPaymentTerms?
 
   @@index([destinationId, status])
   @@index([supplierId])
@@ -971,8 +975,10 @@ model Tour {
   kosher            TourKosherProfile?
   packageComponents PackageComponent[]
   pricingRules      PricingRule[]
-  createdAt         DateTime           @default(now()) @map("created_at")
-  updatedAt         DateTime           @updatedAt @map("updated_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  /// When and how this supplier is paid, and what it is owed after a cancellation.
+  paymentTerms      SupplierPaymentTerms?
 
   @@index([destinationId, status])
   @@index([supplierId])
@@ -1299,9 +1305,12 @@ model TourBooking {
   travellers TourBookingTraveller[]
   hold       TourHold?
 
-  orderItem OrderItem?
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  orderItem  OrderItem?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+  /// Finance: what we owe the supplier, and what the buyer owes us (standalone bookings only).
+  payable    SupplierPayable?
+  receivable Receivable?
 
   @@index([tourId, date])
   @@index([tourOptionId, date])
@@ -1459,8 +1468,10 @@ model Service {
   components   PackageComponent[]
   pricingRules PricingRule[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  /// When and how this supplier is paid, and what it is owed after a cancellation.
+  paymentTerms SupplierPaymentTerms?
 
   @@index([status, category])
   @@index([destinationId, status])
@@ -1540,8 +1551,11 @@ model ServiceBooking {
 
   orderItem OrderItem?
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+  /// Finance: what we owe the supplier, and what the buyer owes us (standalone bookings only).
+  payable    SupplierPayable?
+  receivable Receivable?
 
   @@index([serviceId, date])
   @@index([partnerId, createdAt])
@@ -1818,8 +1832,10 @@ model Order {
 
   items OrderItem[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @updatedAt @map("updated_at")
+  /// Finance: what the buyer owes for the whole order.
+  receivable Receivable?
 
   @@index([partnerId, createdAt])
   @@index([status, startDate])
@@ -2518,9 +2534,12 @@ model HotelBooking {
   hold     BookingHold?
   requests HotelBookingRequest[]
 
-  orderItem OrderItem?
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  orderItem  OrderItem?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+  /// Finance: what we owe the supplier, and what the buyer owes us (standalone bookings only).
+  payable    SupplierPayable?
+  receivable Receivable?
 
   @@index([hotelId, checkIn])
   @@index([partnerId, createdAt])
@@ -2821,9 +2840,10 @@ model FileAsset {
   driverPhotos          TransferDriver[]               @relation("DriverPhoto")
   tourImages            TourImage[]                    @relation("TourImages")
 
-  packageImages PackageImage[] @relation("PackageImages")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+  packageImages      PackageImage[]  @relation("PackageImages")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
+  paymentAttachments PaymentRecord[] @relation("PaymentAttachments")
 
   @@index([category, visibility])
   @@index([partnerId])
@@ -3321,6 +3341,21 @@ enum AuditAction {
   USER_LOGIN_SUCCEEDED
   USER_LOGGED_OUT
   USER_PRIMARY_CONTACT_CHANGED
+  SUPPLIER_TERMS_UPDATED
+  PARTNER_TERMS_UPDATED
+  PAYABLE_CREATED
+  PAYABLE_AMOUNT_CHANGED
+  PAYABLE_VOIDED
+  PAYABLE_WAIVED
+  RECEIVABLE_CREATED
+  RECEIVABLE_AMOUNT_CHANGED
+  RECEIVABLE_DUE_DATE_CHANGED
+  RECEIVABLE_VOIDED
+  RECEIVABLE_WAIVED
+  PAYMENT_RECORDED
+  PAYMENT_ALLOCATED
+  REFUND_RECORDED
+  FINANCE_REPORT_EXPORTED
 
   @@map("audit_action")
 }
@@ -3401,6 +3436,7 @@ model User {
   ordersMade          Order[]          @relation("OrderBookedBy")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
+  paymentsRecorded    PaymentRecord[]  @relation("PaymentRecordedBy")
 
   @@index([partnerId])
   @@index([role])
@@ -3522,11 +3558,18 @@ model Partner {
   tourBookings TourBooking[] @relation("PartnerTourBookings")
   tourHolds    TourHold[]    @relation("PartnerTourHolds")
 
-  services        Service[]        @relation("PartnerServices")
-  serviceBookings ServiceBooking[] @relation("PartnerServiceBookings")
-  orders          Order[]          @relation("PartnerOrders")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  services         Service[]           @relation("PartnerServices")
+  serviceBookings  ServiceBooking[]    @relation("PartnerServiceBookings")
+  orders           Order[]             @relation("PartnerOrders")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  /// Days the partner has to pay a booking, counted from the anchor (D5: per partner).
+  paymentDueDays   Int                 @default(14) @map("payment_due_days")
+  paymentDueAnchor ReceivableDueAnchor @default(CONFIRMATION) @map("payment_due_anchor")
+  paymentTermsNote String?             @map("payment_terms_note")
+  receivables      Receivable[]        @relation("PartnerReceivables")
+  supplierPayables SupplierPayable[]   @relation("PartnerSupplierPayables")
+  paymentRecords   PaymentRecord[]     @relation("PartnerPaymentRecords")
 
   @@index([status])
   @@index([country])
@@ -3844,8 +3887,10 @@ model TransferProvider {
   fleetVehicles TransferFleetVehicle[]
   drivers       TransferDriver[]
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  updatedAt    DateTime              @updatedAt @map("updated_at")
+  /// When and how this supplier is paid, and what it is owed after a cancellation.
+  paymentTerms SupplierPaymentTerms?
 
   @@index([partnerId])
   @@index([status])
@@ -4197,9 +4242,12 @@ model TransferBooking {
   assignments TransferAssignment[]
   ratings     TransferDriverRating[]
 
-  orderItem OrderItem?
-  createdAt DateTime   @default(now()) @map("created_at")
-  updatedAt DateTime   @updatedAt @map("updated_at")
+  orderItem  OrderItem?
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+  /// Finance: what we owe the supplier, and what the buyer owes us (standalone bookings only).
+  payable    SupplierPayable?
+  receivable Receivable?
 
   @@index([vehicleId, pickupAt])
   @@index([routeId, pickupAt])
@@ -4848,4 +4896,301 @@ model OutboxEvent {
 
   @@index([processedAt, nextAttemptAt])
   @@map("outbox_events")
+}
+
+// --- Finance --------------------------------------------------------------------
+//
+// Operational finance, not bookkeeping: who owes whom how much, since when, and
+// what has been paid. Every row hangs off a booking or an order by a nullable
+// unique foreign key (the OrderItem exactly-one-child pattern), so the booking
+// tables themselves carry no finance columns. Amounts are integer minor units in
+// the row's own currency; nothing here ever adds two currencies together.
+
+enum FinanceProduct {
+  HOTEL
+  TRANSFER
+  TOUR
+  SERVICE
+
+  @@map("finance_product")
+}
+
+enum SettlementStatus {
+  OPEN
+  PARTIAL
+  PAID
+  /// Nothing is owed any more and nothing was paid: a cancellation that left
+  /// no charge, or an instalment the cancellation made unnecessary.
+  VOID
+  /// Finance decided not to collect or pay what remained, with a reason.
+  WAIVED
+
+  @@map("settlement_status")
+}
+
+enum InstalmentKind {
+  DEPOSIT
+  BALANCE
+
+  @@map("instalment_kind")
+}
+
+/// What a supplier is owed when a booking is cancelled with a charge (D6).
+enum CancellationLiability {
+  /// The same share of the net as the share of the price that was charged:
+  /// 50% charged to the buyer → 50% of the net owed to the supplier.
+  PROPORTIONAL
+  /// Nothing, unless the booking was charged in full (non-refundable), in
+  /// which case the whole net.
+  NONE_UNLESS_NON_REFUNDABLE
+  /// Finance decides each case: the payable stops at what was already paid
+  /// and is flagged for review.
+  MANUAL
+
+  @@map("cancellation_liability")
+}
+
+enum ReceivableDueAnchor {
+  CONFIRMATION
+  ARRIVAL
+
+  @@map("receivable_due_anchor")
+}
+
+enum PaymentDirection {
+  /// Money in: an agency or a guest paying us.
+  IN
+  /// Money out: us paying a supplier.
+  OUT
+
+  @@map("payment_direction")
+}
+
+enum PaymentKind {
+  PAYMENT
+  REFUND
+
+  @@map("payment_kind")
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CASH
+  CARD
+  OTHER
+
+  @@map("payment_method")
+}
+
+/// One row per Hotel, TransferProvider, Tour or Service (exactly one, CHECK).
+/// No row means no terms: a single BALANCE instalment with no due date, and
+/// PROPORTIONAL on cancellation.
+model SupplierPaymentTerms {
+  id                 String            @id @default(cuid())
+  hotelId            String?           @unique @map("hotel_id")
+  hotel              Hotel?            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  transferProviderId String?           @unique @map("transfer_provider_id")
+  transferProvider   TransferProvider? @relation(fields: [transferProviderId], references: [id], onDelete: Cascade)
+  tourId             String?           @unique @map("tour_id")
+  tour               Tour?             @relation(fields: [tourId], references: [id], onDelete: Cascade)
+  serviceId          String?           @unique @map("service_id")
+  service            Service?          @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  /// [{ kind: DEPOSIT|BALANCE, basis: PERCENT|FIXED, value: Int (bps or minor
+  /// units), anchor: CONFIRMATION|ARRIVAL|DEPARTURE, offsetDays: Int }].
+  /// Validated by `jsonFieldSchemas` (validation/domain.js).
+  milestones            Json                  @default("[]")
+  cancellationLiability CancellationLiability @default(PROPORTIONAL) @map("cancellation_liability")
+  /// Local clock time ("HH:MM") instalments fall due at, in the supplier's timezone.
+  cutoffTime            String?               @map("cutoff_time")
+  notes                 String?
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
+
+  @@map("supplier_payment_terms")
+}
+
+/// What we owe a supplier for one booking.
+model SupplierPayable {
+  id                String           @id @default(cuid())
+  product           FinanceProduct
+  hotelBookingId    String?          @unique @map("hotel_booking_id")
+  hotelBooking      HotelBooking?    @relation(fields: [hotelBookingId], references: [id], onDelete: Restrict)
+  transferBookingId String?          @unique @map("transfer_booking_id")
+  transferBooking   TransferBooking? @relation(fields: [transferBookingId], references: [id], onDelete: Restrict)
+  tourBookingId     String?          @unique @map("tour_booking_id")
+  tourBooking       TourBooking?     @relation(fields: [tourBookingId], references: [id], onDelete: Restrict)
+  serviceBookingId  String?          @unique @map("service_booking_id")
+  serviceBooking    ServiceBooking?  @relation(fields: [serviceBookingId], references: [id], onDelete: Restrict)
+
+  /// Null for platform-owned inventory: still a cost, listed under "Platform".
+  supplierPartnerId String?  @map("supplier_partner_id")
+  supplierPartner   Partner? @relation("PartnerSupplierPayables", fields: [supplierPartnerId], references: [id], onDelete: Restrict)
+
+  bookingReference      String                 @map("booking_reference")
+  timezone              String
+  currency              String                 @db.Char(3)
+  /// The net at confirmation. Never changes.
+  originalAmountCents   Int                    @map("original_amount_cents")
+  /// What is owed now: the original, or less after a cancellation.
+  amountCents           Int                    @map("amount_cents")
+  /// Finance's own figure, which every later recomputation respects.
+  amountOverrideCents   Int?                   @map("amount_override_cents")
+  overrideReason        String?                @map("override_reason")
+  paidCents             Int                    @default(0) @map("paid_cents")
+  status                SettlementStatus       @default(OPEN)
+  nextDueAt             DateTime?              @map("next_due_at")
+  /// Raised when the amount needs a person: a MANUAL cancellation, a supplier
+  /// with no terms. Cleared when Finance sets the amount.
+  needsReview           Boolean                @default(false) @map("needs_review")
+  reviewReason          String?                @map("review_reason")
+  cancellationLiability CancellationLiability? @map("cancellation_liability")
+  voidedAt              DateTime?              @map("voided_at")
+  waivedAt              DateTime?              @map("waived_at")
+  /// CONFIRM, BACKFILL or MANUAL.
+  source                String                 @default("CONFIRM")
+  notes                 String?
+  instalments           PayableInstalment[]
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+
+  @@index([status, nextDueAt])
+  @@index([supplierPartnerId, status, createdAt])
+  @@index([product, createdAt])
+  @@index([currency, status])
+  @@map("supplier_payables")
+}
+
+model PayableInstalment {
+  id                  String              @id @default(cuid())
+  payableId           String              @map("payable_id")
+  payable             SupplierPayable     @relation(fields: [payableId], references: [id], onDelete: Cascade)
+  sequence            Int
+  kind                InstalmentKind
+  /// As scheduled at confirmation. Never changes.
+  originalAmountCents Int                 @map("original_amount_cents")
+  amountCents         Int                 @map("amount_cents")
+  paidCents           Int                 @default(0) @map("paid_cents")
+  dueAt               DateTime?           @map("due_at")
+  status              SettlementStatus    @default(OPEN)
+  overdueAlertAt      DateTime?           @map("overdue_alert_at")
+  voidedAt            DateTime?           @map("voided_at")
+  reminders           PayableReminder[]
+  allocations         PaymentAllocation[]
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  @@unique([payableId, sequence])
+  @@index([status, dueAt])
+  @@map("payable_instalments")
+}
+
+/// One row per (instalment, offset) reminded; the unique pair is what makes a
+/// reminder fire once however many sweepers run.
+model PayableReminder {
+  id           String            @id @default(cuid())
+  instalmentId String            @map("instalment_id")
+  instalment   PayableInstalment @relation(fields: [instalmentId], references: [id], onDelete: Cascade)
+  offsetDays   Int               @map("offset_days")
+  sentAt       DateTime          @default(now()) @map("sent_at")
+
+  @@unique([instalmentId, offsetDays])
+  @@index([sentAt])
+  @@map("payable_reminders")
+}
+
+/// What an agency or a guest owes us: one per standalone booking, or one per order.
+model Receivable {
+  id                String           @id @default(cuid())
+  hotelBookingId    String?          @unique @map("hotel_booking_id")
+  hotelBooking      HotelBooking?    @relation(fields: [hotelBookingId], references: [id], onDelete: Restrict)
+  transferBookingId String?          @unique @map("transfer_booking_id")
+  transferBooking   TransferBooking? @relation(fields: [transferBookingId], references: [id], onDelete: Restrict)
+  tourBookingId     String?          @unique @map("tour_booking_id")
+  tourBooking       TourBooking?     @relation(fields: [tourBookingId], references: [id], onDelete: Restrict)
+  serviceBookingId  String?          @unique @map("service_booking_id")
+  serviceBooking    ServiceBooking?  @relation(fields: [serviceBookingId], references: [id], onDelete: Restrict)
+  orderId           String?          @unique @map("order_id")
+  order             Order?           @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  /// The booking or order reference: what a payer quotes on a transfer.
+  reference           String
+  debtorPartnerId     String?             @map("debtor_partner_id")
+  debtorPartner       Partner?            @relation("PartnerReceivables", fields: [debtorPartnerId], references: [id], onDelete: Restrict)
+  debtorEmail         String              @map("debtor_email")
+  debtorName          String              @map("debtor_name")
+  currency            String              @db.Char(3)
+  originalAmountCents Int                 @map("original_amount_cents")
+  amountCents         Int                 @map("amount_cents")
+  paidCents           Int                 @default(0) @map("paid_cents")
+  status              SettlementStatus    @default(OPEN)
+  /// Set at creation from the partner's terms; Finance may move it (D5).
+  dueAt               DateTime?           @map("due_at")
+  overdueAlertAt      DateTime?           @map("overdue_alert_at")
+  voidedAt            DateTime?           @map("voided_at")
+  waivedAt            DateTime?           @map("waived_at")
+  source              String              @default("CONFIRM")
+  notes               String?
+  allocations         PaymentAllocation[]
+  createdAt           DateTime            @default(now()) @map("created_at")
+  updatedAt           DateTime            @updatedAt @map("updated_at")
+
+  @@index([status, dueAt])
+  @@index([debtorPartnerId, status, createdAt])
+  @@index([debtorEmail])
+  @@index([currency, status])
+  @@map("receivables")
+}
+
+/// Money that moved, in either direction. Refunds are rows with kind REFUND,
+/// so a refund and a payment share one table and one idempotency path.
+model PaymentRecord {
+  id                    String              @id @default(cuid())
+  direction             PaymentDirection
+  kind                  PaymentKind         @default(PAYMENT)
+  method                PaymentMethod
+  counterpartyPartnerId String?             @map("counterparty_partner_id")
+  counterpartyPartner   Partner?            @relation("PartnerPaymentRecords", fields: [counterpartyPartnerId], references: [id], onDelete: Restrict)
+  counterpartyName      String?             @map("counterparty_name")
+  counterpartyEmail     String?             @map("counterparty_email")
+  currency              String              @db.Char(3)
+  amountCents           Int                 @map("amount_cents")
+  /// The bank's reference, a receipt number.
+  reference             String?
+  paidAt                DateTime            @map("paid_at")
+  note                  String?
+  /// Required for a refund.
+  reason                String?
+  recordedByUserId      String?             @map("recorded_by_user_id")
+  recordedByUser        User?               @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id], onDelete: SetNull)
+  attachmentAssetId     String?             @map("attachment_asset_id")
+  attachmentAsset       FileAsset?          @relation("PaymentAttachments", fields: [attachmentAssetId], references: [id], onDelete: SetNull)
+  idempotencyKey        String?             @unique @map("idempotency_key")
+  externalPaymentId     String?             @map("external_payment_id")
+  allocations           PaymentAllocation[]
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  @@index([paidAt])
+  @@index([counterpartyPartnerId, paidAt])
+  @@index([direction, kind, paidAt])
+  @@map("payment_records")
+}
+
+/// How much of a payment settled which receivable or instalment. Negative for a refund.
+model PaymentAllocation {
+  id                  String             @id @default(cuid())
+  paymentRecordId     String             @map("payment_record_id")
+  paymentRecord       PaymentRecord      @relation(fields: [paymentRecordId], references: [id], onDelete: Cascade)
+  receivableId        String?            @map("receivable_id")
+  receivable          Receivable?        @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  payableInstalmentId String?            @map("payable_instalment_id")
+  payableInstalment   PayableInstalment? @relation(fields: [payableInstalmentId], references: [id], onDelete: Restrict)
+  amountCents         Int                @map("amount_cents")
+  createdAt           DateTime           @default(now()) @map("created_at")
+
+  @@index([receivableId])
+  @@index([payableInstalmentId])
+  @@index([paymentRecordId])
+  @@map("payment_allocations")
 }

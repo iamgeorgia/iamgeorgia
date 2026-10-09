@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { ConflictError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
+import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextServiceBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, todayInTimezone, zonedTimeToInstant } from '../../lib/time.js';
@@ -239,6 +240,9 @@ export const confirmServiceBookingInTx = async (tx, prepared, { idempotencyKey }
         entityId: created.id
     });
 
+    // Owed to the provider once confirmed; an on-request booking owes nothing yet.
+    await syncPayableInTx(tx, 'SERVICE', created.id, actor, req);
+
     return created;
 };
 
@@ -273,6 +277,8 @@ export const confirmServiceBooking = async (input, actor, req) => {
     try {
         const booking = await prisma.$transaction(async (tx) => {
             const created = await confirmServiceBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
+
+            await syncBookingReceivableInTx(tx, 'SERVICE', created.id, actor, req);
 
             await enqueueBuyerEvent(
                 tx,
@@ -436,6 +442,8 @@ export const cancelServiceBookingInTx = async (tx, booking, { reason, waiveCharg
         entityId: booking.id
     });
 
+    await syncBookingInTx(tx, 'SERVICE', booking.id, actor, req);
+
     return { booking: cancelled, quote };
 };
 
@@ -479,6 +487,8 @@ export const confirmPendingServiceBookingInTx = async (tx, booking, actor, req) 
         metadata: { reference: booking.reference },
         req
     });
+
+    await syncBookingInTx(tx, 'SERVICE', booking.id, actor, req);
 
     return confirmed;
 };

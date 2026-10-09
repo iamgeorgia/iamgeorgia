@@ -1290,6 +1290,22 @@
     {
       "key": "partnerCanManageTeam",
       "value": ""
+    },
+    {
+      "key": "financeReceivableId",
+      "value": ""
+    },
+    {
+      "key": "financeReceivableCurrency",
+      "value": ""
+    },
+    {
+      "key": "financeReceivableOutstanding",
+      "value": ""
+    },
+    {
+      "key": "partnerReadsStatement",
+      "value": ""
     }
   ],
   "item": [
@@ -34406,6 +34422,860 @@
                 "exec": [
                   "const allowed = pm.collectionVariables.get('partnerCanManageTeam') === 'yes';",
                   "pm.test('404 for owner/admin, 403 otherwise', () => pm.response.to.have.status(allowed ? 404 : 403));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06o · Admin · Finance",
+      "description": "Payables, receivables, payments, terms and reports (`/api/admin/finance`), and a partner's own statement (`/api/partner/finance`).\n\nRead-only plus refusals, on purpose: a payment cannot be deleted through the API, so this folder never records a real one. Every POST and PATCH here is one the API must refuse (over-allocation, wrong currency, no reason). Record a real payment by hand against a test receivable when you need to see the happy path — the guide's Part 8b lists what to check.",
+      "item": [
+        {
+          "name": "Login — admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "**Expected: 200**. Every request here needs a staff session with finance access (super admin, admin, management or finance).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{adminEmail}}\",\n    \"password\": \"{{adminPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.unset('financeReceivableId');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Summary — per currency",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/reports/summary",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "reports",
+                "summary"
+              ]
+            },
+            "description": "**Expected: 200** — open and overdue money on both sides, and cash in the last 30 days, one block per currency."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json();",
+                  "pm.test('One block per currency, never a total across them', () => {",
+                  "    const list = rows.currencies ?? rows.rows ?? [];",
+                  "    list.forEach((row) => pm.expect(row.currency).to.match(/^[A-Z]{3}$/));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Margin — by product",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/reports/margin?groupBy=product",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "reports",
+                "margin"
+              ],
+              "query": [
+                {
+                  "key": "groupBy",
+                  "value": "product"
+                }
+              ]
+            },
+            "description": "**Expected: 200** — revenue, cost and margin for bookings confirmed in the period, per product and currency."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json();",
+                  "pm.test('One block per currency, never a total across them', () => {",
+                  "    const list = rows.currencies ?? rows.rows ?? [];",
+                  "    list.forEach((row) => pm.expect(row.currency).to.match(/^[A-Z]{3}$/));",
+                  "});",
+                  "pm.test('Grouped by product', () => pm.expect(rows.groupBy).to.eql('product'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ageing — payables",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/reports/ageing?side=payables",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "reports",
+                "ageing"
+              ],
+              "query": [
+                {
+                  "key": "side",
+                  "value": "payables"
+                }
+              ]
+            },
+            "description": "**Expected: 200** — what we owe suppliers, by how late it is."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json();",
+                  "pm.test('One block per currency, never a total across them', () => {",
+                  "    const list = rows.currencies ?? rows.rows ?? [];",
+                  "    list.forEach((row) => pm.expect(row.currency).to.match(/^[A-Z]{3}$/));",
+                  "});",
+                  "pm.test('Five buckets', () => pm.expect(rows.buckets).to.eql(['current', 'd1_30', 'd31_60', 'd61_90', 'd90_plus']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Margin — as CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/reports/margin?format=csv",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "reports",
+                "margin"
+              ],
+              "query": [
+                {
+                  "key": "format",
+                  "value": "csv"
+                }
+              ]
+            },
+            "description": "**Expected: 200** `text/csv` with a header row. Needs `finance.export`; the export is written to the audit log."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('CSV', () => pm.expect(pm.response.headers.get('Content-Type')).to.include('text/csv'));",
+                  "pm.test('Header row', () => pm.expect(pm.response.text().split('\\r\\n')[0]).to.match(/^Product,Currency,Bookings,Revenue,Cost,Margin/));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payables — open, earliest due first",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payables?status=OPEN&status=PARTIAL&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payables"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "OPEN"
+                },
+                {
+                  "key": "status",
+                  "value": "PARTIAL"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "**Expected: 200**, paginated. Each row has its instalments and `outstandingCents`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Paginated', () => pm.expect(pm.response.json()).to.have.property('totalPages'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payables — needing review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payables?needsReview=true&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payables"
+              ],
+              "query": [
+                {
+                  "key": "needsReview",
+                  "value": "true"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "**Expected: 200**; every row has `needsReview: true` (no supplier terms, or a cancellation left for Finance to decide)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('All flagged', () => pm.response.json().data.forEach((row) => pm.expect(row.needsReview).to.eql(true)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Receivables — open",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/receivables?status=OPEN&pageSize=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "receivables"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "OPEN"
+                },
+                {
+                  "key": "pageSize",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "**Expected: 200**. Stores the first open receivable for the refusals below."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "const first = pm.response.json().data[0];",
+                  "if (first) { pm.collectionVariables.set('financeReceivableId', first.id); pm.collectionVariables.set('financeReceivableCurrency', first.currency); pm.collectionVariables.set('financeReceivableOutstanding', String(first.outstandingCents)); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payments — latest",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payments?pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "pageSize",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "**Expected: 200**, newest first."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment — more than is owed (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "pm-over-{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payments"
+              ]
+            },
+            "description": "**Expected: 422** `ALLOCATION_EXCEEDS_OUTSTANDING`. Nothing is recorded. Skipped when there is no open receivable.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"direction\": \"IN\",\n    \"method\": \"BANK_TRANSFER\",\n    \"currency\": \"{{financeReceivableCurrency}}\",\n    \"amountCents\": 999999999,\n    \"paidAt\": \"2026-10-01T09:00:00Z\",\n    \"allocations\": [\n        {\n            \"receivableId\": \"{{financeReceivableId}}\",\n            \"amountCents\": 999999999\n        }\n    ]\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('financeReceivableId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Reason', () => pm.expect(pm.response.json().error.details.reason).to.eql('ALLOCATION_EXCEEDS_OUTSTANDING'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Payment — wrong currency (422)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "pm-ccy-{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payments"
+              ]
+            },
+            "description": "**Expected: 422** `CURRENCY_MISMATCH` — a payment settles items in its own currency only.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"direction\": \"IN\",\n    \"method\": \"CASH\",\n    \"currency\": \"JPY\",\n    \"amountCents\": 100,\n    \"paidAt\": \"2026-10-01T09:00:00Z\",\n    \"allocations\": [\n        {\n            \"receivableId\": \"{{financeReceivableId}}\",\n            \"amountCents\": 100\n        }\n    ]\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('financeReceivableId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 422', () => pm.response.to.have.status(422));",
+                  "pm.test('Reason', () => pm.expect(pm.response.json().error.details.reason).to.eql('CURRENCY_MISMATCH'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refund without a reason (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payments",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payments"
+              ]
+            },
+            "description": "**Expected: 400** — a refund always carries its reason.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"direction\": \"OUT\",\n    \"kind\": \"REFUND\",\n    \"method\": \"BANK_TRANSFER\",\n    \"currency\": \"GEL\",\n    \"amountCents\": 100,\n    \"paidAt\": \"2026-10-01T09:00:00Z\",\n    \"counterpartyName\": \"Nobody\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Receivable — adjust without a reason (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/receivables/{{financeReceivableId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "receivables",
+                "{{financeReceivableId}}"
+              ]
+            },
+            "description": "**Expected: 400** — moving a due date or writing off always needs a reason.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"dueAt\": \"2027-01-01T20:59:00Z\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('financeReceivableId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supplier terms — read a hotel",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/terms/hotels/{{hotelId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "terms",
+                "hotels",
+                "{{hotelId}}"
+              ]
+            },
+            "description": "**Expected: 200** — the hotel's terms, or the defaults with `isDefault: true`. Skipped without `hotelId`."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('hotelId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Has a cancellation rule', () => pm.expect(['PROPORTIONAL', 'NONE_UNLESS_NON_REFUNDABLE', 'MANUAL']).to.include(pm.response.json().cancellationLiability));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supplier terms — a deposit with no balance (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/terms/hotels/{{hotelId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "terms",
+                "hotels",
+                "{{hotelId}}"
+              ]
+            },
+            "description": "**Expected: 400** — terms are an optional deposit and exactly one balance. Nothing is saved.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"milestones\": [\n        {\n            \"kind\": \"DEPOSIT\",\n            \"basis\": \"PERCENT\",\n            \"value\": 3000,\n            \"anchor\": \"CONFIRMATION\",\n            \"offsetDays\": 3\n        }\n    ],\n    \"cancellationLiability\": \"PROPORTIONAL\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('hotelId')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Supplier terms — unknown kind (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/terms/boats/x",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "terms",
+                "boats",
+                "x"
+              ]
+            },
+            "description": "**Expected: 404**."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login — partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "**Expected: 200**. Needs `partnerEmail` (an owner, partner admin or partner finance user).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{partnerEmail}}\",\n    \"password\": \"{{partnerPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('partnerEmail')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('partnerReadsStatement', pm.response.json().user.capabilities.includes('partner.statement.read') ? 'yes' : 'no');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Partner statement",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/partner/finance/statement",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "partner",
+                "finance",
+                "statement"
+              ]
+            },
+            "description": "**Expected: 200** for an owner, partner admin or finance user — that company's own receivables, `balances` per currency, no internal fields. **403** for an agent."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('partnerEmail')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const allowed = pm.collectionVariables.get('partnerReadsStatement') === 'yes';",
+                  "pm.test('Owner/admin/finance 200, agent 403', () => pm.response.to.have.status(allowed ? 200 : 403));",
+                  "if (allowed) { pm.test('No internal fields', () => pm.response.json().data.forEach((row) => { pm.expect(row).to.not.have.property('debtor'); pm.expect(row).to.not.have.property('notes'); })); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin finance as a partner (403)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/finance/payables",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "finance",
+                "payables"
+              ]
+            },
+            "description": "**Expected: 403** — partners never reach the admin finance screens."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.variables.get('partnerEmail')) { pm.execution.skipRequest(); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 403', () => pm.response.to.have.status(403));"
                 ]
               }
             }

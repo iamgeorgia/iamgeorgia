@@ -14,6 +14,7 @@ import {
     makePartner,
     makePartnerUser,
     signIn,
+    purgeFinance,
     unique
 } from './support/factories.js';
 
@@ -52,6 +53,7 @@ describe('tour bookings', { skip: dbAvailable ? false : 'Postgres is not reachab
             const bookingIds = bookings.map(({ id }) => id);
 
             await prisma.tourHold.updateMany({ where: { bookingId: { in: bookingIds } }, data: { bookingId: null } });
+            await purgeFinance({ tourIds: ids });
             await prisma.tourBooking.deleteMany({ where: { id: { in: bookingIds } } });
             await prisma.tour.deleteMany({ where: { id: { in: ids } } });
             await prisma.auditLog.deleteMany({ where: { entityId: { in: [...ids, ...bookingIds] } } });

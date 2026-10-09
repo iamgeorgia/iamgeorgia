@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { config } from '../../config.js';
 import { prisma } from '../../db/index.js';
 import {
     ConflictError,
@@ -9,6 +10,7 @@ import {
 } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
+import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextHotelBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, toDateOnly } from '../../lib/time.js';
@@ -446,6 +448,10 @@ export const confirmHotelBookingInTx = async (
         entityId: created.id
     });
 
+    // What we now owe the property, on its terms. In this transaction, so a
+    // booking never exists without its payable.
+    await syncPayableInTx(tx, 'HOTEL', created.id, actor, req);
+
     return tx.hotelBooking.findUnique({ where: { id: created.id }, include: bookingInclude });
 };
 
@@ -482,6 +488,10 @@ export const confirmBooking = async (input, actor, req) => {
         const booking = await prisma.$transaction(async (tx) => {
             const created = await confirmHotelBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
+            // What the buyer owes. Here, not in the InTx above: inside an
+            // order the order is what is owed, and the order says so itself.
+            await syncBookingReceivableInTx(tx, 'HOTEL', created.id, actor, req);
+
             // Written with the booking, sent after it: the voucher and the
             // row commit together, and a mail server having a bad afternoon
             // cannot turn a confirmed room into a 500.
@@ -493,7 +503,7 @@ export const confirmBooking = async (input, actor, req) => {
             });
 
             return created;
-        });
+        }, { timeout: config.order.txTimeoutMs });
 
         return { booking, replayed: false, party: prepared.party };
     } catch (err) {
@@ -743,6 +753,9 @@ export const cancelHotelBookingInTx = async (tx, booking, { reason, waiveCharges
         entityType: AUDIT_ENTITY.booking,
         entityId: booking.id
     });
+
+    // Both sides follow the charge: the buyer owes it, the property its share (D6).
+    await syncBookingInTx(tx, 'HOTEL', booking.id, actor, req);
 
     return { booking: cancelled, quote };
 };

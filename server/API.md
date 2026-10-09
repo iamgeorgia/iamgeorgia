@@ -1065,6 +1065,101 @@ known audit action (400 otherwise); `from`/`to` are ISO instants. Successful
 sign-ins (`USER_LOGIN_SUCCEEDED`, with the user agent) and sign-outs
 (`USER_LOGGED_OUT`) are on the trail beside the failures.
 
+## Finance
+
+Operational finance, not bookkeeping: what we owe each supplier, what each
+buyer owes us, and the money that moved. Every amount is integer minor units
+in the record's own currency, and nothing is ever converted or added across
+currencies.
+
+**Where the records come from.** The booking services write them, inside the
+booking's own transaction:
+
+- A **payable** (what we owe the supplier, its net) when a hotel, transfer,
+  tour or service booking is confirmed — including each part of a package.
+  It is split into instalments by the supplier's payment terms (an optional
+  deposit and a balance, each due a number of days from confirmation, arrival
+  or departure, at the terms' cutoff time in the supplier's timezone). No
+  terms: one undated balance, flagged `needsReview: NO_TERMS`.
+- A **receivable** (what the buyer owes, its sell price; for a hotel plus the
+  included tax) for a standalone booking when it is confirmed, or for an
+  order once every request in it is answered. Due `Partner.paymentDueDays`
+  after confirmation (or arrival, per `paymentDueAnchor`); a guest without an
+  account owes at once (`FINANCE_GUEST_DUE_DAYS`, default 0).
+- On **cancellation** the receivable becomes the cancellation charge, and the
+  payable follows the supplier's `cancellationLiability`: `PROPORTIONAL` (the
+  same share of the net as was charged — 50% charged, 50% of the net owed;
+  the default), `NONE_UNLESS_NON_REFUNDABLE` (the whole net if charged in full,
+  else nothing) or `MANUAL` (stops at what was paid, `needsReview:
+  CANCELLATION_MANUAL`). A reduction comes off the balance before the deposit.
+  Money already paid beyond what is now owed shows as `refundDueCents`.
+- A declined request, or a booking still awaiting an answer, owes nothing and
+  has no rows.
+
+Statuses: `OPEN`, `PARTIAL`, `PAID`, `VOID` (nothing owed, nothing paid),
+`WAIVED` (written off by Finance). `scripts/backfill-finance.js [--apply]
+[--since YYYY-MM-DD]` gives older bookings their rows the same way.
+
+All under `/api/admin/finance`. Reading needs `finance.payables.read`,
+`finance.receivables.read`, `finance.payments.read` or `finance.reports.read`
+(super admin, admin, management, finance); changing needs
+`finance.payments.write` or `finance.terms.write` (super admin, admin,
+finance); a CSV export needs `finance.export` as well.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/payables?status&supplierPartnerId&product&currency&dueBefore&needsReview&q&page&pageSize` | `status` repeatable; `supplierPartnerId=PLATFORM` for platform-owned inventory. Each row: `booking { kind, id, reference, status }`, `supplier`, amounts (`original`, `amount`, `paid`, `outstanding`, `refundDue`), `status`, `nextDueAt`, `needsReview`/`reviewReason`, `instalments[]` |
+| GET | `/payables/:id` | Instalments carry their `allocations[]` with the payment each came from |
+| PATCH | `/payables/:id` | `{ amountOverrideCents?: int or null, waive?: true, notes?, reason }` — `reason` always required. An override is what the supplier is owed from then on, kept through every later recalculation (null hands it back to the rules); 422 `ABOVE_ORIGINAL` past the booked net. `waive` writes off what is left |
+| POST | `/payables/:id/instalments/:sequence/pay` | `{ method, paidAt, amountCents?, reference?, note? }` — an OUT payment of the instalment's outstanding amount (or `amountCents`). 201 `{ payment, replayed }` |
+| GET | `/receivables?status&debtorPartnerId&currency&dueBefore&overdue&q&page&pageSize` | `debtorPartnerId=GUEST` for guests without an account. Each row: `subject { kind: HOTEL, TRANSFER, TOUR, SERVICE or ORDER, id, reference, status }`, `debtor { partner, name, email }`, amounts, `dueAt`, `overdue` |
+| GET | `/receivables/:id` | With `allocations[]` |
+| PATCH | `/receivables/:id` | `{ dueAt?: ISO or null, waive?: true, notes?, reason }` — moving the due date is audited as `RECEIVABLE_DUE_DATE_CHANGED`; a later date re-arms the overdue alert |
+| GET | `/payments?direction&kind&method&currency&counterpartyPartnerId&from&to&q&page&pageSize` | |
+| GET | `/payments/:id` | |
+| POST | `/payments` | See below. `Idempotency-Key` header (8–200 chars): a retry answers 200 with the original and `replayed: true`; the same key for a different amount, currency or direction is 409 `IDEMPOTENCY_KEY_REUSED` |
+| POST | `/payments/:id/allocations` | `{ allocations: [...] }` — spreads what an earlier payment left unallocated |
+| GET | `/reports/summary?currency&from&to&format` | Per currency: receivables open / overdue / refund due, payables open / overdue / due within 7 days / needing review, and cash in and out in the period (`from`/`to` are dates, Tbilisi days, last 30 by default) |
+| GET | `/reports/margin?currency&from&to&groupBy&format` | Bookings confirmed in the period, grouped by `product`, `supplier` or `partner`: `bookings`, `revenueCents` (what the buyer owes for them now), `costCents` (what suppliers are owed now), `marginCents`, `marginBps`. A package line counts at its own product's price |
+| GET | `/reports/ageing?side&currency&format` | `side=receivables` or `payables`: open money per counterparty in `current` (not yet due or undated), `d1_30`, `d31_60`, `d61_90`, `d90_plus` |
+| GET/PUT | `/terms/:kind/:id` | `kind` = `hotels`, `transfer-providers`, `tours`, `services`. `{ milestones, cancellationLiability, cutoffTime?, notes? }`; GET answers the defaults with `isDefault: true` when none are saved. New terms apply to bookings confirmed afterwards; existing schedules are not moved |
+| GET/PATCH | `/partners/:id/terms` | `{ paymentDueDays (0–365), paymentDueAnchor: CONFIRMATION or ARRIVAL, paymentTermsNote }` |
+
+`?format=csv` on any report answers `text/csv` (amounts in major units) and is
+audited as `FINANCE_REPORT_EXPORTED`.
+
+A payment:
+
+```json
+POST /api/admin/finance/payments   Idempotency-Key: 6b0e…
+{
+  "direction": "IN", "kind": "PAYMENT", "method": "BANK_TRANSFER",
+  "currency": "GEL", "amountCents": 120000, "paidAt": "2026-10-07T09:30:00Z",
+  "reference": "TBC-88213",
+  "allocations": [{ "receivableId": "…", "amountCents": 80000 }, { "receivableId": "…", "amountCents": 40000 }]
+}
+```
+
+`IN`+`PAYMENT` settles receivables; `OUT`+`PAYMENT` settles supplier
+instalments (`payableInstalmentId`); `OUT`+`REFUND` gives a buyer money back
+(negative allocations on receivables); `IN`+`REFUND` is a supplier giving us
+money back. A refund needs a `reason`. Instead of `allocations`, `allocate: {
+mode: "OLDEST_DUE", partnerId }` settles that partner's open items earliest
+due first; with neither, the payment is recorded unallocated. 422 reasons:
+`ALLOCATION_EXCEEDS_OUTSTANDING`, `ALLOCATIONS_EXCEED_PAYMENT`,
+`CURRENCY_MISMATCH`, `WRONG_TARGET`; 409 `NOT_SETTLEABLE` for a closed item.
+The payer or payee is taken from what is settled when not given.
+
+### A partner's own money — `/partner/finance`
+
+`partner.statement.read` (owner, partner admin, partner finance), approved
+partners only, always scoped to the session's company.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/partner/finance/statement?status&page&pageSize` | `balances[]` per currency (`outstandingCents`, `overdueCents`, `creditCents`) and the agency's receivables with the payments against each — no supplier, no net, no internal notes |
+| GET | `/partner/finance/payables?status&page&pageSize` | For a supplier: what we owe it for its own bookings — its net and its schedule, nothing of ours |
+
 ## Supplier extranet
 
 `/partner/hotels`, guarded by `authenticate + requireApprovedPartner`, scoped to

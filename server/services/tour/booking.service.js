@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
+import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextTourBookingReference } from '../../lib/reference.js';
 import { dateOnlyToUtc, toDateOnly } from '../../lib/time.js';
@@ -313,6 +314,9 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
         entityId: created.id
     });
 
+    // Owed to the operator once confirmed; an on-request booking owes nothing yet.
+    await syncPayableInTx(tx, 'TOUR', created.id, actor, req);
+
     return tx.tourBooking.findUnique({ where: { id: created.id }, include: tourBookingInclude });
 };
 
@@ -350,6 +354,8 @@ export const confirmTourBooking = async (input, actor, req) => {
     try {
         const booking = await prisma.$transaction(async (tx) => {
             const created = await confirmTourBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
+
+            await syncBookingReceivableInTx(tx, 'TOUR', created.id, actor, req);
 
             await enqueueTravellerEvent(
                 tx,
@@ -566,6 +572,8 @@ export const cancelTourBookingInTx = async (tx, booking, { reason, waiveCharges 
         entityId: booking.id
     });
 
+    await syncBookingInTx(tx, 'TOUR', booking.id, actor, req);
+
     return { booking: cancelled, quote };
 };
 
@@ -622,6 +630,10 @@ export const confirmPendingTourBookingInTx = async (tx, booking, actor, req) => 
         metadata: { reference: booking.reference },
         req
     });
+
+    // The yes is what makes it owed, on both sides. A booking inside an order
+    // is skipped on the buyer's side by the ledger itself.
+    await syncBookingInTx(tx, 'TOUR', booking.id, actor, req);
 
     return confirmed;
 };

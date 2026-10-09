@@ -162,6 +162,46 @@ const restDaySchema = z
     })
     .strict();
 
+/**
+ * When a supplier is paid for a booking: an optional deposit and the balance.
+ *
+ * The balance never states an amount — it is whatever the deposit leaves,
+ * so a rounding cent can never be owed twice or not at all. Each instalment
+ * falls due a number of days from an anchor (negative: before it), at the
+ * terms' cutoff time in the supplier's timezone. An empty list is "no
+ * schedule": one undated balance, which Finance sees as "needs terms".
+ */
+const milestoneTiming = {
+    anchor: z.enum(['CONFIRMATION', 'ARRIVAL', 'DEPARTURE']),
+    offsetDays: z.number().int().min(-365).max(365)
+};
+
+const depositMilestoneSchema = z
+    .object({
+        kind: z.literal('DEPOSIT'),
+        basis: z.enum(['PERCENT', 'FIXED']),
+        // Basis points for PERCENT (3000 = 30%), minor units for FIXED.
+        value: z.number().int().positive().max(100_000_000),
+        ...milestoneTiming
+    })
+    .strict()
+    .refine((milestone) => milestone.basis !== 'PERCENT' || milestone.value < 10_000, {
+        message: 'A percentage deposit must be less than 100%; a full prepayment is the balance itself',
+        path: ['value']
+    });
+
+const balanceMilestoneSchema = z.object({ kind: z.literal('BALANCE'), ...milestoneTiming }).strict();
+
+export const paymentMilestonesSchema = z
+    .array(z.union([depositMilestoneSchema, balanceMilestoneSchema]))
+    .max(2)
+    .refine(
+        (list) =>
+            list.length === 0 ||
+            (list.filter((m) => m.kind === 'BALANCE').length === 1 && list.filter((m) => m.kind === 'DEPOSIT').length <= 1),
+        { message: 'Terms are an optional deposit and exactly one balance' }
+    );
+
 // Which Json field on which model is validated by which schema. The Prisma
 // extension in db/index.js walks this map on every write.
 export const jsonFieldSchemas = {
@@ -173,6 +213,9 @@ export const jsonFieldSchemas = {
     },
     OutboxEvent: {
         payload: openObjectSchema
+    },
+    SupplierPaymentTerms: {
+        milestones: paymentMilestonesSchema
     },
     Destination: {
         gallery: gallerySchema,

@@ -13,6 +13,9 @@
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
+/** The API origin, for the rare link the browser follows itself (a CSV download). */
+export const API_BASE_URL = BASE_URL;
+
 /** The server's error envelope: `{ error: { message, details? } }`. */
 export interface ApiErrorBody {
   message: string;

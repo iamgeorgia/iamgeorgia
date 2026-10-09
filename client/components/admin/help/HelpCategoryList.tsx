@@ -19,6 +19,7 @@ import {
   Send,
   ShieldAlert,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,6 +50,7 @@ const NAMED_ICONS: Record<HelpIconName, LucideIcon> = {
   circleHelp: CircleHelp,
   shieldAlert: ShieldAlert,
   users: UsersRound,
+  wallet: Wallet,
 };
 
 export function HelpCategoryIcon({

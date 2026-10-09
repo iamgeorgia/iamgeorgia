@@ -10,6 +10,7 @@ import {
   ImageIcon,
   MapPin,
   Star,
+  Wallet,
 } from "lucide-react";
 
 import {
@@ -31,6 +32,8 @@ import { formatStay } from "@/lib/admin/bookings";
 import { cardImage } from "@/lib/admin/hotels";
 import { formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
+import { getSession } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Property" };
 
@@ -67,7 +70,7 @@ export default async function AdminHotelPage({
   params,
 }: PageProps<"/[locale]/admin/hotels/[slug]">) {
   const { slug } = await params;
-  const { path } = await getI18n();
+  const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
   let hotel;
 
@@ -129,6 +132,16 @@ export default async function AdminHotelPage({
       title: "Kosher",
       description: kosherSummary(hotel.kosher),
     },
+    ...(can(session, "finance.payables.read", "catalogue.write")
+      ? [
+          {
+            href: `/admin/finance/terms/hotels/${hotel.id}`,
+            icon: Wallet,
+            title: "Payment terms",
+            description: "When the property is paid, and what it is owed after a cancellation",
+          },
+        ]
+      : []),
   ];
 
   return (

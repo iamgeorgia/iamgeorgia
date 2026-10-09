@@ -199,6 +199,18 @@ export const config = {
         forgotPasswordLimit: numberEnv('AUTH_FORGOT_PASSWORD_LIMIT', (nodeEnv === 'test' ? 10_000 : 5))
     },
 
+    finance: {
+        // Payables and receivables are dated in the supplier's (or Georgia's)
+        // own time: an instalment "due on the 12th" is due at this local time.
+        defaultTimezone: process.env.FINANCE_DEFAULT_TIMEZONE || 'Asia/Tbilisi',
+        cutoffTime: process.env.FINANCE_CUTOFF_TIME || '10:00',
+        // A buyer's deadline runs to the end of its last day.
+        receivableCutoffTime: '23:59',
+        // A guest without an account pays at booking; a partner has its own
+        // days (Partner.paymentDueDays, D5).
+        guestDueDays: numberEnv('FINANCE_GUEST_DUE_DAYS', 0)
+    },
+
     partners: {
         // Members a partner may have, invited ones included. A ceiling rather
         // than a plan limit: the number is there to stop a runaway script, not

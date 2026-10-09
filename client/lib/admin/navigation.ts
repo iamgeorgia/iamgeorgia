@@ -1,4 +1,7 @@
 import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Banknote,
   BedDouble,
   Boxes,
   Bus,
@@ -12,7 +15,9 @@ import {
   ConciergeBell,
   ClipboardCheck,
   Globe2,
+  ChartColumn,
   Handshake,
+  Landmark,
   LayoutDashboard,
   Map,
   MapPin,
@@ -268,6 +273,19 @@ export const adminNavigation: AdminNavGroup[] = [
         badgeKey: "pendingPartners",
         capability: "partners.read",
       },
+    ],
+  },
+  {
+    // Who owes whom: what we owe suppliers, what buyers owe us, the money
+    // that moved, and the reports over it. Management reads it all; Finance
+    // also records payments; the desks and dispatch do not see it.
+    title: "Finance",
+    entries: [
+      { label: "Finance overview", href: "/admin/finance", icon: Landmark, capability: "finance.payables.read" },
+      { label: "Payables", href: "/admin/finance/payables", icon: ArrowUpRight, capability: "finance.payables.read" },
+      { label: "Receivables", href: "/admin/finance/receivables", icon: ArrowDownLeft, capability: "finance.receivables.read" },
+      { label: "Payments", href: "/admin/finance/payments", icon: Banknote, capability: "finance.payments.read" },
+      { label: "Reports", href: "/admin/finance/reports", icon: ChartColumn, capability: "finance.reports.read" },
     ],
   },
   {

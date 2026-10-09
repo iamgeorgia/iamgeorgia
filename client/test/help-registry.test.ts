@@ -42,6 +42,7 @@ const CATEGORY_PREFIX: Record<string, string> = {
   "fleet-drivers": "fd",
   partners: "pt",
   people: "pp",
+  finance: "fn",
   media: "md",
   publishing: "pb",
   reference: "rf",

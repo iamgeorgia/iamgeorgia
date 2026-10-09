@@ -5,6 +5,7 @@ import { config } from '../../config.js';
 import { ConflictError, GoneError, HttpError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
+import { syncOrderReceivableInTx } from '../finance/ledger.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextOrderReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, toDateOnly, todayInTimezone } from '../../lib/time.js';
@@ -437,6 +438,10 @@ export const rollUpOrderStatus = async (tx, orderId, actor, req) => {
 
     const updated = await tx.order.update({ where: { id: orderId }, data, include: orderInclude });
 
+    // The order's receivable follows its lines: created once every request is
+    // answered, then each cancelled line owes its charge and a declined one nothing.
+    await syncOrderReceivableInTx(tx, orderId, actor, req);
+
     if (next !== order.status) {
         await recordAudit(tx, {
             action: next === 'CONFIRMED' ? 'ORDER_CONFIRMED' : next === 'CANCELLED' ? 'ORDER_CANCELLED' : next === 'COMPLETED' ? 'ORDER_COMPLETED' : 'ORDER_AMENDED',
@@ -549,6 +554,8 @@ export const confirmOrder = async (input, actor, req) => {
                     data: { status, requestDeadlineAt: deadlines[0] ?? null, ...(status === 'CONFIRMED' ? { confirmedAt: new Date() } : {}) },
                     include: orderInclude
                 });
+
+                await syncOrderReceivableInTx(tx, created.id, actor, req);
 
                 await enqueueEvent(tx, {
                     topic: status === 'CONFIRMED' ? TOPICS.ORDER_CONFIRMED : TOPICS.ORDER_REQUESTED,
@@ -854,6 +861,8 @@ export const cancelOrderInTx = async (tx, order, { reason, waiveCharges = false 
         data: { status: 'CANCELLED', cancelledAt: new Date(), cancellationChargeCents: chargeCents, cancellationReason: reason ?? null, requestDeadlineAt: null },
         include: orderInclude
     });
+
+    await syncOrderReceivableInTx(tx, order.id, actor, req);
 
     await recordAudit(tx, {
         action: 'ORDER_CANCELLED',

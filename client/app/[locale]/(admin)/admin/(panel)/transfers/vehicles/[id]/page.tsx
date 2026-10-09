@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Wallet } from "lucide-react";
 
 import {
   AdminBreadcrumbs,
@@ -15,6 +17,8 @@ import { ApiError } from "@/lib/api/client";
 import { getAdminTransferVehicle } from "@/lib/api/transfers";
 import { featureLabels, vehicleClassLabels } from "@/lib/admin/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { getSession } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 import type { TransferVehicle } from "@/types/transfer";
 
 export const metadata: Metadata = { title: "Vehicle class" };
@@ -29,7 +33,7 @@ export default async function AdminTransferVehiclePage({
   params,
 }: PageProps<"/[locale]/admin/transfers/vehicles/[id]">) {
   const { id } = await params;
-  const { path } = await getI18n();
+  const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
   let vehicle: TransferVehicle;
 
@@ -95,6 +99,21 @@ export default async function AdminTransferVehiclePage({
               than an edit.
             </p>
           </AdminPanel>
+
+          {vehicle.provider && can(session, "finance.payables.read", "catalogue.write") && (
+            <AdminPanel
+              title="Payment terms"
+              description={`Set per supplier, so they cover every class ${vehicle.provider.name} operates.`}
+            >
+              <Link
+                href={path(`/admin/finance/terms/transfer-providers/${vehicle.provider.id}`)}
+                className="inline-flex items-center gap-2 text-[0.8125rem] font-medium text-brand-text underline-offset-4 hover:underline"
+              >
+                <Wallet size={15} aria-hidden />
+                Open payment terms
+              </Link>
+            </AdminPanel>
+          )}
 
           <TransferVehicleDangerZone vehicle={vehicle} />
         </div>

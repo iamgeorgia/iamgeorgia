@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { CalendarCheck, LayoutDashboard, LogOut, Settings, UsersRound } from "lucide-react";
+import { CalendarCheck, LayoutDashboard, LogOut, Settings, UsersRound, Wallet } from "lucide-react";
 
 import { signOut } from "@/lib/api/partners";
 import { forgetViewer } from "@/lib/auth/useViewer";
@@ -21,6 +21,8 @@ const NAV: { label: string; href: string; icon: typeof Settings; capability?: st
   { label: "Bookings", href: "/portal/bookings", icon: CalendarCheck },
   // Owners and partner admins only; the server answers 403 to anyone else.
   { label: "Team", href: "/portal/team", icon: UsersRound, capability: "partner.team.manage" },
+  // What the company owes us and, for a supplier, what we owe it.
+  { label: "Finance", href: "/portal/finance", icon: Wallet, capability: "partner.statement.read" },
   { label: "Settings", href: "/portal/settings", icon: Settings },
 ];
 
@@ -127,7 +129,9 @@ export function PortalShell({
       {approved && (
         <nav
           aria-label="Partner platform"
-          className="flex gap-1 border-b border-line bg-surface px-5 pb-3 sm:px-8 md:hidden"
+          // Five entries do not fit a phone; the strip scrolls on its own
+          // rather than widening the page.
+          className="flex gap-1 overflow-x-auto border-b border-line bg-surface px-5 pb-3 sm:px-8 md:hidden"
         >
           {nav.map((item) => {
             const active = current === item.href || current.startsWith(`${item.href}/`);
@@ -138,7 +142,7 @@ export function PortalShell({
                 href={path(item.href)}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  "inline-flex h-9 flex-1 items-center justify-center gap-2 rounded-sm text-[0.8125rem] transition-colors",
+                  "inline-flex h-9 flex-1 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm px-2.5 text-[0.8125rem] transition-colors",
                   active ? "bg-surface-soft font-medium text-ink" : "text-muted",
                 )}
               >

@@ -51,6 +51,117 @@ const testPasswordHash = async () => (sharedHash ??= await hashPassword(TEST_PAS
  */
 const createdInvitationIds = new Set();
 
+/**
+ * Deletes the finance rows that hang off a tracker's records: allocations and
+ * the payments they belong to, then payables (instalments cascade) and
+ * receivables. Matched by the booking's product, the order's package or
+ * partner, the debtor or supplier partner, and the user who recorded a
+ * payment, so every way a test can create one is covered.
+ */
+export const purgeFinance = async ({
+    partnerIds = [],
+    hotelIds = [],
+    tourIds = [],
+    serviceIds = [],
+    packageIds = [],
+    transferBookingIds = [],
+    transferVehicleIds = [],
+    transferRouteIds = [],
+    userIds = []
+} = {}) => {
+    const orderMatch = {
+        OR: [
+            { packageId: { in: packageIds } },
+            { partnerId: { in: partnerIds } },
+            { bookedByUserId: { in: userIds } },
+            { items: { some: { hotelBooking: { hotelId: { in: hotelIds } } } } },
+            { items: { some: { tourBooking: { tourId: { in: tourIds } } } } },
+            { items: { some: { serviceBooking: { serviceId: { in: serviceIds } } } } }
+        ]
+    };
+    const transferMatch = {
+        OR: [
+            { id: { in: transferBookingIds } },
+            { vehicleId: { in: transferVehicleIds } },
+            { routeId: { in: transferRouteIds } },
+            { partnerId: { in: partnerIds } },
+            { bookedByUserId: { in: userIds } }
+        ]
+    };
+    const bookingMatch = (product) => ({
+        OR: [{ [product]: { in: product === 'hotelId' ? hotelIds : product === 'tourId' ? tourIds : serviceIds } }, { partnerId: { in: partnerIds } }, { bookedByUserId: { in: userIds } }]
+    });
+
+    const [receivables, payables] = await Promise.all([
+        prisma.receivable.findMany({
+            where: {
+                OR: [
+                    { debtorPartnerId: { in: partnerIds } },
+                    { hotelBooking: bookingMatch('hotelId') },
+                    { tourBooking: bookingMatch('tourId') },
+                    { serviceBooking: bookingMatch('serviceId') },
+                    { transferBooking: transferMatch },
+                    { order: orderMatch }
+                ]
+            },
+            select: { id: true }
+        }),
+        prisma.supplierPayable.findMany({
+            where: {
+                OR: [
+                    { supplierPartnerId: { in: partnerIds } },
+                    { hotelBooking: bookingMatch('hotelId') },
+                    { tourBooking: bookingMatch('tourId') },
+                    { serviceBooking: bookingMatch('serviceId') },
+                    { transferBooking: transferMatch },
+                    { hotelBooking: { orderItem: { order: orderMatch } } },
+                    { tourBooking: { orderItem: { order: orderMatch } } },
+                    { serviceBooking: { orderItem: { order: orderMatch } } },
+                    { transferBooking: { orderItem: { order: orderMatch } } }
+                ]
+            },
+            select: { id: true }
+        })
+    ]);
+
+    const receivableIds = receivables.map(({ id }) => id);
+    const payableIds = payables.map(({ id }) => id);
+
+    const payments = await prisma.paymentRecord.findMany({
+        where: {
+            OR: [
+                { counterpartyPartnerId: { in: partnerIds } },
+                { recordedByUserId: { in: userIds } },
+                { allocations: { some: { receivableId: { in: receivableIds } } } },
+                { allocations: { some: { payableInstalment: { payableId: { in: payableIds } } } } }
+            ]
+        },
+        select: { id: true }
+    });
+
+    if (payments.length > 0) {
+        await prisma.paymentRecord.deleteMany({ where: { id: { in: payments.map(({ id }) => id) } } });
+    }
+
+    await prisma.paymentAllocation.deleteMany({
+        where: { OR: [{ receivableId: { in: receivableIds } }, { payableInstalment: { payableId: { in: payableIds } } }] }
+    });
+
+    if (payableIds.length > 0) {
+        await prisma.supplierPayable.deleteMany({ where: { id: { in: payableIds } } });
+    }
+
+    if (receivableIds.length > 0) {
+        await prisma.receivable.deleteMany({ where: { id: { in: receivableIds } } });
+    }
+
+    const financeIds = [...receivableIds, ...payableIds, ...payments.map(({ id }) => id)];
+
+    if (financeIds.length > 0) {
+        await prisma.auditLog.deleteMany({ where: { entityId: { in: financeIds } } });
+    }
+};
+
 export const createTracker = () => {
     const partnerIds = new Set();
     const userIds = new Set();
@@ -173,6 +284,23 @@ export const createTracker = () => {
             if (entityIds.length > 0) {
                 await prisma.auditLog.deleteMany({ where: { entityId: { in: entityIds } } });
             }
+
+            // Finance before anything it points at: payables and receivables
+            // hold their booking, order and partner with Restrict, so a
+            // booking with money attached cannot quietly disappear. One sweep
+            // over everything this tracker made, by the same keys the steps
+            // below use to find bookings and orders.
+            await purgeFinance({
+                partnerIds: [...partnerIds],
+                hotelIds: [...hotelIds],
+                tourIds: [...tourIds],
+                serviceIds: [...serviceIds],
+                packageIds: [...packageIds],
+                transferBookingIds: [...transferBookingIds],
+                transferVehicleIds: [...transferVehicleIds],
+                transferRouteIds: [...transferRouteIds],
+                userIds: [...userIds]
+            });
 
             // Orders first: an order item holds its child booking with Restrict,
             // so no hotel, tour or service booking below can go while an item

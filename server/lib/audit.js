@@ -61,5 +61,10 @@ export const AUDIT_ENTITY = {
     serviceBooking: 'ServiceBooking',
     package: 'Package',
     order: 'Order',
-    orderItem: 'OrderItem'
+    orderItem: 'OrderItem',
+    supplierPaymentTerms: 'SupplierPaymentTerms',
+    supplierPayable: 'SupplierPayable',
+    payableInstalment: 'PayableInstalment',
+    receivable: 'Receivable',
+    paymentRecord: 'PaymentRecord'
 };

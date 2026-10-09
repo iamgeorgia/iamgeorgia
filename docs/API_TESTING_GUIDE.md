@@ -1599,6 +1599,78 @@ and every partner role → `403`.
 Sign in and out first: `USER_LOGIN_SUCCEEDED` and `USER_LOGGED_OUT` rows
 appear against the account.
 
+## Part 8b — Finance
+
+What we owe suppliers (**payables**), what buyers owe us (**receivables**),
+and the **payments** that settle them. All under `/api/admin/finance`. Full
+contract in `server/API.md` → "Finance".
+
+**Who:** reads — `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE`. Changes
+(payments, adjustments, terms) — `SUPER_ADMIN`, `ADMIN`, `FINANCE`. A
+`MANAGEMENT` user gets `403` on every POST/PUT/PATCH here; `RESERVATIONS`,
+`DISPATCHER` and every partner role get `403` on all of it.
+
+### The records appear on their own
+
+Book something and check, don't create finance rows by hand:
+
+| Do this | Expect |
+| --- | --- |
+| Confirm a hotel, transfer, tour or service booking | `GET /payables?q=<reference>` shows one payable for its net; a standalone booking also has a receivable (`GET /receivables?q=<reference>`) for its price |
+| Book an on-request tour, before the operator answers | No payable, no receivable |
+| The operator confirms it | Both appear |
+| Book a package (order) | A payable for each part; **one** receivable for the order, once every request in it is answered |
+| Cancel inside a free window | Receivable `VOID`; payable `VOID` |
+| Cancel with a 50% charge | Receivable = the charge; payable per the supplier's terms: same share of the net by default |
+
+### Payments
+
+| Request | Expected |
+| --- | --- |
+| `POST /payments` IN, allocations to two receivables, `Idempotency-Key` header | `201`; both receivables move to `PAID` / `PARTIAL` |
+| The same request again, same key | `200`, `replayed: true`, nothing paid twice |
+| Same key, different amount | `409` `IDEMPOTENCY_KEY_REUSED` |
+| An allocation larger than what is outstanding | `422` `ALLOCATION_EXCEEDS_OUTSTANDING` |
+| A USD payment against a GEL receivable | `422` `CURRENCY_MISMATCH` |
+| An OUT payment allocated to a receivable | `422` `WRONG_TARGET` |
+| A refund without `reason` | `400` |
+| `allocate: { mode: "OLDEST_DUE", partnerId }` | `201`; the partner's earliest-due items are settled first, any rest is `unallocatedCents` |
+| `POST /payables/:id/instalments/1/pay` | `201`; the instalment `PAID`, the payable `PARTIAL`, `nextDueAt` moves to the balance |
+
+### Finance's own hand
+
+| Request | Expected |
+| --- | --- |
+| `PATCH /payables/:id` `{ amountOverrideCents }` without `reason` | `400` |
+| …above the booked net | `422` `ABOVE_ORIGINAL` |
+| …with a reason | `200`; `amountOverrideCents` set, `needsReview` cleared |
+| `PATCH /payables/:id` `{ waive: true, reason }` | `200`, `WAIVED` |
+| `PATCH /receivables/:id` `{ dueAt, reason }` | `200`; the audit log has `RECEIVABLE_DUE_DATE_CHANGED` |
+
+### Terms
+
+| Request | Expected |
+| --- | --- |
+| `PUT /terms/hotels/:id` with a deposit and no balance | `400` |
+| …with `[{ kind: "BALANCE", anchor: "ARRIVAL", offsetDays: -7 }]` and `cancellationLiability: "MANUAL"` | `200` |
+| `GET /terms/boats/:id` | `404` |
+| `PATCH /partners/:id/terms` `{ paymentDueDays: 30 }` | `200`; the next booking that partner confirms is due 30 days later |
+
+### Reports
+
+`GET /reports/summary`, `/reports/margin?groupBy=product`, `/reports/ageing?side=payables`
+— `200`, one row per **currency**, never a total across currencies.
+`?format=csv` — `200` `text/csv` with a header row; `403` without
+`finance.export`; the audit log gains `FINANCE_REPORT_EXPORTED`.
+
+### A partner's own view
+
+`GET /api/partner/finance/statement` as an owner or finance user — `200`, only
+that company's receivables, with `balances` per currency and no `debtor`,
+`notes` or net. As an agent — `403`. A second partner never sees the first
+one's rows. `GET /api/partner/finance/payables` as a supplier — its own net
+and schedule, nothing of ours.
+
 ## Part 9 — Kosher
 
 Kosher support is three separate claims, trusted differently, and most of what is

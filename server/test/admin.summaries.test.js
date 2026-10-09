@@ -17,6 +17,7 @@ import {
     makeTransferProvider,
     makeTransferVehicle,
     signIn,
+    purgeFinance,
     unique
 } from './support/factories.js';
 
@@ -87,6 +88,7 @@ describe('admin summaries', { skip: dbAvailable ? false : 'Postgres is not reach
 
     after(async () => {
         // Bookings first: the hotel cannot be deleted while it has history.
+        await purgeFinance({ hotelIds: [hotel.id] });
         await prisma.hotelBooking.deleteMany({ where: { id: { in: bookingIds } } });
         await tracker.cleanup();
         await disconnect();
