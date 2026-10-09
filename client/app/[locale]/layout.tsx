@@ -122,11 +122,16 @@ export default async function RootLayout(props: LayoutProps<"/[locale]">) {
   const { dir, htmlLang } = localeMeta[locale];
 
   return (
+    // `suppressHydrationWarning` covers this element's own attributes only:
+    // browser extensions (dark-mode ones such as Night Eye, translators,
+    // password managers) write attributes onto <html> before React hydrates,
+    // which is not a mismatch in our markup. Anything inside still warns.
     <html
       lang={htmlLang}
       dir={dir}
       className={`${fraunces.variable} ${inter.variable} ${notoGeorgian.variable} ${notoHebrew.variable} h-full antialiased`}
       data-locale={locale}
+      suppressHydrationWarning
     >
       {/*
         The root layout deliberately holds no chrome. Marketing pages get the
