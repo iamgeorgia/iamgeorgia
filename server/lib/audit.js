@@ -30,6 +30,7 @@ export const AUDIT_ENTITY = {
     invitation: 'Invitation',
     user: 'User',
     role: 'AccessRole',
+    approval: 'ApprovalRequest',
     destination: 'Destination',
     hotel: 'Hotel',
     roomType: 'RoomType',

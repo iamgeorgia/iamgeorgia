@@ -99,16 +99,34 @@ export const findPayableOr404 = async (id, client = prisma) => {
  * keeps it (null hands the figure back to the rules). `waive` writes off what
  * is left. Either clears the review flag: a person has looked.
  */
-export const adjustPayable = (id, { amountOverrideCents, waive, reason, notes }, actor, req) =>
-    prisma.$transaction(async (tx) => {
+export const adjustPayable = (id, input, actor, req) => prisma.$transaction((tx) => adjustPayableInTx(tx, id, input, actor, req));
+
+/**
+ * The transaction's half, for an approval to run in its own: `via` names
+ * the request it was asked through, and travels on every audit row so the
+ * trail reads "approved by X, asked by Y".
+ */
+export const adjustPayableInTx = async (tx, id, { amountOverrideCents, waive, reason, notes }, actor, req, via = null) => {
+    {
         const payable = await findPayableOr404(id, tx);
+        const trail = via ? { approvalId: via.approvalId, requestedByUserId: via.requestedByUserId } : {};
 
         if (payable.status === 'WAIVED') {
             throw new ConflictError('This payable has been waived', { reason: 'WAIVED' });
         }
 
-        if (notes !== undefined) {
+        if (notes !== undefined && (notes ?? null) !== (payable.notes ?? null)) {
             await tx.supplierPayable.update({ where: { id }, data: { notes } });
+
+            await recordAudit(tx, {
+                action: 'PAYABLE_NOTES_CHANGED',
+                actor,
+                entityType: AUDIT_ENTITY.supplierPayable,
+                entityId: id,
+                summary: `Changed the notes on the supplier payable for ${payable.bookingReference}`,
+                metadata: { from: payable.notes ?? null, to: notes ?? null },
+                req
+            });
         }
 
         if (amountOverrideCents !== undefined) {
@@ -140,7 +158,7 @@ export const adjustPayable = (id, { amountOverrideCents, waive, reason, notes },
                     amountOverrideCents === null
                         ? `Handed ${payable.bookingReference} back to the supplier's terms`
                         : `Set the supplier payable for ${payable.bookingReference} to ${(amountOverrideCents / 100).toFixed(2)} ${payable.currency}`,
-                metadata: { from: payable.amountCents, override: amountOverrideCents, reason, manual: true },
+                metadata: { from: payable.amountCents, override: amountOverrideCents, reason, manual: true, ...trail },
                 req
             });
         }
@@ -160,13 +178,14 @@ export const adjustPayable = (id, { amountOverrideCents, waive, reason, notes },
                 entityType: AUDIT_ENTITY.supplierPayable,
                 entityId: id,
                 summary: `Waived what was left on the supplier payable for ${payable.bookingReference}`,
-                metadata: { outstandingCents: Math.max(0, payable.amountCents - payable.paidCents), reason },
+                metadata: { outstandingCents: Math.max(0, payable.amountCents - payable.paidCents), reason, ...trail },
                 req
             });
         }
 
         return findPayableOr404(id, tx);
-    });
+    }
+};
 
 // --- Receivables ----------------------------------------------------------------
 
@@ -214,16 +233,30 @@ export const findReceivableOr404 = async (id, client = prisma) => {
 };
 
 /** Moves a due date (D5) or writes off what is left. */
-export const adjustReceivable = (id, { dueAt, waive, reason, notes }, actor, req) =>
-    prisma.$transaction(async (tx) => {
+export const adjustReceivable = (id, input, actor, req) => prisma.$transaction((tx) => adjustReceivableInTx(tx, id, input, actor, req));
+
+/** The transaction's half; `via` as on `adjustPayableInTx`. */
+export const adjustReceivableInTx = async (tx, id, { dueAt, waive, reason, notes }, actor, req, via = null) => {
+    {
         const receivable = await findReceivableOr404(id, tx);
+        const trail = via ? { approvalId: via.approvalId, requestedByUserId: via.requestedByUserId } : {};
 
         if (receivable.status === 'WAIVED') {
             throw new ConflictError('This receivable has been waived', { reason: 'WAIVED' });
         }
 
-        if (notes !== undefined) {
+        if (notes !== undefined && (notes ?? null) !== (receivable.notes ?? null)) {
             await tx.receivable.update({ where: { id }, data: { notes } });
+
+            await recordAudit(tx, {
+                action: 'RECEIVABLE_NOTES_CHANGED',
+                actor,
+                entityType: AUDIT_ENTITY.receivable,
+                entityId: id,
+                summary: `Changed the notes on ${receivable.reference}`,
+                metadata: { from: receivable.notes ?? null, to: notes ?? null },
+                req
+            });
         }
 
         if (dueAt !== undefined && String(dueAt) !== String(receivable.dueAt)) {
@@ -239,7 +272,7 @@ export const adjustReceivable = (id, { dueAt, waive, reason, notes }, actor, req
                 entityType: AUDIT_ENTITY.receivable,
                 entityId: id,
                 summary: `Moved the due date of ${receivable.reference}`,
-                metadata: { from: receivable.dueAt, to: dueAt, reason },
+                metadata: { from: receivable.dueAt, to: dueAt, reason, ...trail },
                 req
             });
         }
@@ -253,13 +286,14 @@ export const adjustReceivable = (id, { dueAt, waive, reason, notes }, actor, req
                 entityType: AUDIT_ENTITY.receivable,
                 entityId: id,
                 summary: `Waived what was left on ${receivable.reference}`,
-                metadata: { outstandingCents: Math.max(0, receivable.amountCents - receivable.paidCents), reason },
+                metadata: { outstandingCents: Math.max(0, receivable.amountCents - receivable.paidCents), reason, ...trail },
                 req
             });
         }
 
         return findReceivableOr404(id, tx);
-    });
+    }
+};
 
 // --- Payments ----------------------------------------------------------------------
 

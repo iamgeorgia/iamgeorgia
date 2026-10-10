@@ -14,6 +14,7 @@ import {
     invitationUrl,
     activationUrl,
     passwordResetUrl,
+    adminApprovalUrl,
     adminPayableUrl,
     adminReceivableUrl,
     portalFinanceUrl
@@ -57,6 +58,25 @@ const sampleData = {
     invitationReissued: { companyName: 'Rooms Hotel', url: invitationUrl('tok2'), expiresAt },
     passwordReset: { url: passwordResetUrl('tok3'), expiresAt },
     staffAccountActivation: { contactName: 'Tamar', roleLabel: 'Finance', url: activationUrl('tok4'), expiresAt },
+    approvalRequested: {
+        reference: 'APR-000012',
+        kindLabel: 'Refund',
+        summary: 'Refund of 50.00 GEL to a buyer: Goodwill',
+        requestedByName: 'Pikria Finance',
+        amountCents: 5_000,
+        currency: 'GEL',
+        note: 'Agreed with the agency',
+        url: adminApprovalUrl('apr1')
+    },
+    approvalDecided: {
+        reference: 'APR-000012',
+        kindLabel: 'Refund',
+        summary: 'Refund of 50.00 GEL to a buyer: Goodwill',
+        status: 'APPROVED',
+        decidedByName: 'Salome Superadmin',
+        note: null,
+        url: adminApprovalUrl('apr1')
+    },
     financePayableDue: {
         ...payableSample,
         daysUntil: 3,

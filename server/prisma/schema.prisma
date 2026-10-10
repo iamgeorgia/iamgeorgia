@@ -3182,6 +3182,13 @@ enum AuditAction {
   USER_OVERRIDE_GRANTED
   USER_OVERRIDE_REVOKED
 
+  APPROVAL_REQUESTED
+  APPROVAL_APPROVED
+  APPROVAL_REJECTED
+  APPROVAL_CANCELLED
+  PAYABLE_NOTES_CHANGED
+  RECEIVABLE_NOTES_CHANGED
+
   PARTNER_INVITED
   PARTNER_CREATED
   PARTNER_UPDATED
@@ -3457,6 +3464,8 @@ model User {
   /// column goes.
   roles               UserRole[]               @relation("UserRoles")
   capabilityOverrides UserCapabilityOverride[] @relation("UserOverrides")
+  approvalsRequested  ApprovalRequest[]        @relation("ApprovalRequestedBy")
+  approvalsDecided    ApprovalRequest[]        @relation("ApprovalDecidedBy")
 
   @@index([partnerId])
   @@index([role])
@@ -4505,6 +4514,8 @@ enum NotificationKind {
   FINANCE_PAYMENT_RECEIVED
   FINANCE_INVOICE_ISSUED
   FINANCE_INVOICE_SYNC_FAILED
+  APPROVAL_REQUESTED
+  APPROVAL_DECIDED
 
   @@map("notification_kind")
 }
@@ -5310,4 +5321,71 @@ model UserCapabilityOverride {
 
   @@unique([userId, capability])
   @@map("user_capability_overrides")
+}
+
+// ---------------------------------------------------------------------------
+// Approvals
+//
+// A money action one person asks for and another approves: the refund, the
+// write-off, the override, the moved deadline. The request carries the
+// exact input the executing service will run with; approving runs it, in
+// the approver's name, in the same transaction that marks the request
+// approved — so a request is either done or still pending, never half.
+// ---------------------------------------------------------------------------
+
+enum ApprovalKind {
+  REFUND
+  PAYABLE_OVERRIDE
+  PAYABLE_WAIVE
+  RECEIVABLE_DUE_DATE
+  RECEIVABLE_WAIVE
+
+  @@map("approval_kind")
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+
+  @@map("approval_status")
+}
+
+model ApprovalRequest {
+  id        String         @id @default(cuid())
+  reference String         @unique
+  kind      ApprovalKind
+  status    ApprovalStatus @default(PENDING)
+
+  /// What the action is about: a receivable, a payable, or (for a refund) the receivable or instalment it settles.
+  subjectType String @map("subject_type")
+  subjectId   String @map("subject_id")
+  /// The exact body the executing service runs with on approval.
+  payload     Json
+  amountCents Int?    @map("amount_cents")
+  currency    String? @db.Char(3)
+  summary     String
+
+  requestedByUserId String?   @map("requested_by_user_id")
+  requestedBy       User?     @relation("ApprovalRequestedBy", fields: [requestedByUserId], references: [id], onDelete: SetNull)
+  requestNote       String?   @map("request_note")
+  decidedByUserId   String?   @map("decided_by_user_id")
+  decidedBy         User?     @relation("ApprovalDecidedBy", fields: [decidedByUserId], references: [id], onDelete: SetNull)
+  decidedAt         DateTime? @map("decided_at")
+  decisionNote      String?   @map("decision_note")
+
+  /// What approving produced: the payment record, or the adjusted row.
+  executedEntityType String? @map("executed_entity_type")
+  executedEntityId   String? @map("executed_entity_id")
+  /// Why the last approval attempt failed, left for the approver; the request stays pending.
+  lastError          String? @map("last_error")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([status, createdAt])
+  @@index([requestedByUserId, status])
+  @@index([subjectType, subjectId, status])
+  @@map("approval_requests")
 }

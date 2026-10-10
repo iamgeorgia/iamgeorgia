@@ -6,6 +6,7 @@ import { CAPABILITIES, can } from '../lib/permissions.js';
 import { dateOnlyToUtc } from '../lib/time.js';
 import { countDueInstalments } from '../services/finance/reminder.service.js';
 import { countUnreadNotifications } from '../services/notifications/notification.service.js';
+import { countPendingApprovals } from '../services/finance/approval.service.js';
 
 /**
  * The queue counts on the admin panel's sidebar, in one request.
@@ -49,7 +50,7 @@ adminBadgeRoutes.get('/', async (req, res) => {
     const today = dateOnlyToUtc(new Date().toISOString().slice(0, 10));
     const until = new Date(today.getTime() + (LEG_WINDOW_DAYS + 1) * 86_400_000);
 
-    const [pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders, paymentsDue, unreadNotifications] =
+    const [pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders, paymentsDue, unreadNotifications, pendingApprovals] =
         await Promise.all([
             partners ? prisma.partner.count({ where: { status: { in: PENDING_PARTNER_STATUSES } } }) : null,
             bookings ? prisma.hotelBooking.count({ where: { status: { in: ACTIVE_BOOKING_STATUSES } } }) : null,
@@ -63,8 +64,10 @@ adminBadgeRoutes.get('/', async (req, res) => {
             // Supplier instalments overdue or due this week: the Finance → Payables badge.
             payables ? countDueInstalments({ days: PAYMENTS_WINDOW_DAYS }) : null,
             // The bell. Everyone has one; it counts only the viewer's own rows.
-            countUnreadNotifications(req.user.id)
+            countUnreadNotifications(req.user.id),
+            // Requests waiting on this viewer's decision; null for someone who decides none.
+            countPendingApprovals(req.user)
         ]);
 
-    res.json({ pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders, paymentsDue, unreadNotifications });
+    res.json({ pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders, paymentsDue, unreadNotifications, pendingApprovals });
 });

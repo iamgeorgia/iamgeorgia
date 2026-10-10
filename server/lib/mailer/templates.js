@@ -31,6 +31,7 @@ export const bookingManageUrl = (reference, email) =>
 export const adminPayableUrl = (id) => link(`/admin/finance/payables/${encodeURIComponent(id)}`);
 export const adminReceivableUrl = (id) => link(`/admin/finance/receivables/${encodeURIComponent(id)}`);
 export const portalFinanceUrl = () => link('/portal/finance');
+export const adminApprovalUrl = (id) => link(`/admin/finance/approvals/${encodeURIComponent(id)}`);
 
 const formatDate = (date) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format(date);
@@ -1215,6 +1216,50 @@ export const templates = {
     // here carries bank details: the money moves outside the platform.
 
     /** A supplier instalment is due in `daysUntil` calendar days (0 = today). To the finance mailbox. */
+    /** A refund or an adjustment waits on a second person. To the finance mailbox. */
+    approvalRequested: ({ reference, kindLabel, summary, requestedByName, amountCents, currency, note, url }) => {
+        const amount = amountCents != null && currency ? formatMoney(amountCents, currency) : null;
+
+        return {
+            subject: `Approval needed: ${kindLabel}${amount ? `, ${amount}` : ''} (${reference})`,
+            text: plain([
+                `${requestedByName} asked for approval of a ${kindLabel.toLowerCase()}: ${summary}`,
+                note ? `Their note: ${note}` : null,
+                `Decide it here:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: `Approval · ${reference}`,
+                heading: `${kindLabel} waiting on you`,
+                preheader: summary,
+                paragraphs: [`<strong>${escapeHtml(requestedByName)}</strong> asked for approval: ${escapeHtml(summary)}`, note ? `Their note: ${escapeHtml(note)}` : null].filter(Boolean),
+                facts: [
+                    ...(amount ? [{ label: 'Amount', value: amount, strong: true }] : []),
+                    { label: 'Kind', value: kindLabel },
+                    { label: 'Asked by', value: requestedByName }
+                ],
+                cta: { label: 'Open the request', url },
+                footer: 'Nobody decides what they asked for themselves; the request waits for another approver.'
+            })
+        };
+    },
+
+    /** The requester hears how it went. */
+    approvalDecided: ({ reference, kindLabel, summary, status, decidedByName, note, url }) => {
+        const verb = status === 'APPROVED' ? 'approved' : 'rejected';
+
+        return {
+            subject: `${kindLabel} ${verb}: ${reference}`,
+            text: plain([`${decidedByName} ${verb} your request: ${summary}`, note ? `Their note: ${note}` : null, `See it here:\n${url}`]),
+            html: layout({
+                eyebrow: `Approval · ${reference}`,
+                heading: `${kindLabel} ${verb}`,
+                preheader: summary,
+                paragraphs: [`<strong>${escapeHtml(decidedByName)}</strong> ${verb} your request: ${escapeHtml(summary)}`, note ? `Their note: ${escapeHtml(note)}` : null].filter(Boolean),
+                cta: { label: 'Open the request', url }
+            })
+        };
+    },
+
     financePayableDue: ({ supplierName, subjectName, bookingReference, instalmentLabel, amountCents, currency, dueAt, timezone, daysUntil, url }) => {
         const amount = formatMoney(amountCents, currency);
         const who = subjectName && subjectName !== supplierName ? `${subjectName} (${supplierName})` : subjectName ?? supplierName;

@@ -4,6 +4,7 @@ import { config } from '../../config.js';
 import { prisma } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import {
+    adminApprovalUrl,
     adminPayableUrl,
     adminReceivableUrl,
     bookingManageUrl,
@@ -23,6 +24,7 @@ import { CAPABILITIES } from '../../lib/permissions.js';
 import { daysBetween, todayInTimezone } from '../../lib/time.js';
 import { issueRatingToken } from '../../lib/transfer/ratingToken.js';
 import { usersWithCapability } from '../rbac/access.js';
+import { APPROVE_CAPABILITY_FOR_KIND } from '../finance/approval.service.js';
 import { contactRevealed } from '../../serializers/dispatch.js';
 import { sqlStateOf } from '../../middleware/errors.js';
 
@@ -856,7 +858,86 @@ const handlers = {
         if (to) {
             await sendMail({ to, template: 'paymentReceipt', data });
         }
+    },
+
+    /** A refund or an adjustment waits on a second person: everyone who may decide it, minus whoever asked. */
+    [TOPICS.APPROVAL_REQUESTED]: async ({ approvalId }) => {
+        const request = await prisma.approvalRequest.findUnique({ where: { id: approvalId }, include: { requestedBy: true } });
+        if (!request || request.status !== 'PENDING') return;
+
+        const approvers = (await usersWithCapability(APPROVE_CAPABILITY_FOR_KIND[request.kind], { partnerId: null })).filter((id) => id !== request.requestedByUserId);
+        const kindLabel = APPROVAL_KIND_LABELS[request.kind];
+        const requestedByName = request.requestedBy ? [request.requestedBy.firstName, request.requestedBy.lastName].filter(Boolean).join(' ') : 'Someone';
+
+        await notify(approvers, {
+            kind: 'APPROVAL_REQUESTED',
+            title: `Approval needed: ${kindLabel}${request.amountCents != null && request.currency ? `, ${formatMoney(request.amountCents, request.currency)}` : ''}`,
+            body: request.summary,
+            payload: { approvalId, reference: request.reference, kind: request.kind },
+            entityType: 'ApprovalRequest',
+            entityId: approvalId
+        });
+
+        if (config.finance.opsEmail) {
+            await sendMail({
+                to: config.finance.opsEmail,
+                template: 'approvalRequested',
+                data: {
+                    reference: request.reference,
+                    kindLabel,
+                    summary: request.summary,
+                    requestedByName,
+                    amountCents: request.amountCents,
+                    currency: request.currency,
+                    note: request.requestNote,
+                    url: adminApprovalUrl(approvalId)
+                }
+            });
+        }
+    },
+
+    /** The requester hears how it went. */
+    [TOPICS.APPROVAL_DECIDED]: async ({ approvalId }) => {
+        const request = await prisma.approvalRequest.findUnique({ where: { id: approvalId }, include: { requestedBy: true, decidedBy: true } });
+        if (!request || !['APPROVED', 'REJECTED'].includes(request.status) || !request.requestedByUserId) return;
+
+        const kindLabel = APPROVAL_KIND_LABELS[request.kind];
+        const decidedByName = request.decidedBy ? [request.decidedBy.firstName, request.decidedBy.lastName].filter(Boolean).join(' ') : 'An approver';
+        const verb = request.status === 'APPROVED' ? 'approved' : 'rejected';
+
+        await notify([request.requestedByUserId], {
+            kind: 'APPROVAL_DECIDED',
+            title: `${kindLabel} ${verb}: ${request.reference}`,
+            body: request.decisionNote ?? request.summary,
+            payload: { approvalId, reference: request.reference, kind: request.kind, status: request.status },
+            entityType: 'ApprovalRequest',
+            entityId: approvalId
+        });
+
+        if (request.requestedBy?.isActive) {
+            await sendMail({
+                to: request.requestedBy.email,
+                template: 'approvalDecided',
+                data: {
+                    reference: request.reference,
+                    kindLabel,
+                    summary: request.summary,
+                    status: request.status,
+                    decidedByName,
+                    note: request.decisionNote,
+                    url: adminApprovalUrl(approvalId)
+                }
+            });
+        }
     }
+};
+
+const APPROVAL_KIND_LABELS = {
+    REFUND: 'Refund',
+    PAYABLE_OVERRIDE: 'Supplier amount override',
+    PAYABLE_WAIVE: 'Supplier write-off',
+    RECEIVABLE_DUE_DATE: 'Due date change',
+    RECEIVABLE_WAIVE: 'Write-off'
 };
 
 // --- Finance lookups ------------------------------------------------------------

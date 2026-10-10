@@ -1194,6 +1194,40 @@ names each item once, its payer or payee must own every item it settles
 | PATCH | `/receivables/:id` | `{ dueAt?: ISO or null, waive?: true, notes?, reason }` — moving the due date is audited as `RECEIVABLE_DUE_DATE_CHANGED`; a later date re-arms the overdue alert |
 | GET | `/payments?direction&kind&method&currency&counterpartyPartnerId&from&to&q&page&pageSize` | |
 | GET | `/payments/:id` | |
+**A second person for money going out or written off.** A refund
+(`POST /payments` with `kind: REFUND`), a supplier amount override or
+write-off (`PATCH /payables/:id` with `amountOverrideCents` or `waive`) and
+a moved deadline or write-off on a receivable (`PATCH /receivables/:id` with
+`dueAt` or `waive`) are refused on those routes with 403
+`{ reason: "APPROVAL_REQUIRED", kind }` unless the caller holds
+`finance.refunds.execute` / `finance.adjustments.execute` — which nobody is
+seeded with, a super admin included, and which only a role can carry. The
+notes alone need `finance.notes.write`, and are on the trail
+(`PAYABLE_NOTES_CHANGED`, `RECEIVABLE_NOTES_CHANGED`). Everyone else asks:
+
+### Approval requests — `/admin/approvals`
+
+Opening one needs `finance.refunds.request` or `finance.adjustments.request`
+(accountant, finance operator, super admin); deciding one needs
+`finance.refunds.approve` / `finance.adjustments.approve` (seeded on the
+super admin alone, given to others by role). Nobody decides what they asked
+for themselves (403 `SELF_APPROVAL`). A requester sees their own requests; an
+approver sees every request of the kinds they decide; anyone else's id is
+404. Approvers are told in-app and at `FINANCE_OPS_EMAIL`; the requester is
+told how it went.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/admin/approvals?status&kind&mine&page&pageSize` | `{ data: [{ id, reference: "APR-000012", kind, status, subjectType, subjectId, payload, amountCents, currency, summary, requestedBy, requestNote, decidedBy, decidedAt, decisionNote, executedEntityType, executedEntityId, lastError }] }` |
+| POST | `/admin/approvals` | `{ kind, subjectId?, payload, note? }`. `kind` ∈ `REFUND` (payload: the refund body `POST /payments` takes), `PAYABLE_OVERRIDE` / `PAYABLE_WAIVE` (`subjectId` the payable; payload the `PATCH /payables/:id` body with just that change), `RECEIVABLE_DUE_DATE` / `RECEIVABLE_WAIVE` (likewise for a receivable). The payload is validated with the executing route's own schema, so what the approver reads is what will run. 201 |
+| GET | `/admin/approvals/:id` | |
+| POST | `/admin/approvals/:id/approve` | `{ note? }`. Runs the action in the approver's name, in the same transaction that marks the request approved: done or still pending, never half. The usual audit row (`REFUND_RECORDED`, `PAYABLE_WAIVED`, …) carries `approvalId` and `requestedByUserId`. If the action can no longer run (the payable was written off meanwhile) the request stays `PENDING` with `lastError` set and the error is answered (409/422) |
+| POST | `/admin/approvals/:id/reject` | `{ note? }` |
+| POST | `/admin/approvals/:id/cancel` | The requester withdraws a pending request |
+
+`GET /admin/badges` carries `pendingApprovals`: requests waiting on the
+viewer's decision, `null` for someone who decides none.
+
 | POST | `/payments` | See below. `Idempotency-Key` header (8–200 chars): a retry answers 200 with the original and `replayed: true`; the same key for a different amount, currency or direction is 409 `IDEMPOTENCY_KEY_REUSED` |
 | POST | `/payments/:id/allocations` | `{ allocations: [...] }` — spreads what an earlier payment left unallocated |
 | GET | `/reports/summary?currency&from&to&format` | Per currency: receivables open / overdue / refund due, payables open / overdue / due within 7 days / needing review, and cash in and out in the period (`from`/`to` are dates, Tbilisi days, last 30 by default) |

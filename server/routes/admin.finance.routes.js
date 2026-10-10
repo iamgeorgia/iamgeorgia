@@ -6,7 +6,7 @@ import { authenticate, requireCapability } from '../middleware/auth.js';
 import { CAPABILITIES, can } from '../lib/permissions.js';
 import { idempotencyKeyFrom } from '../lib/idempotency.js';
 import { addDays, todayInTimezone, zonedTimeToInstant } from '../lib/time.js';
-import { NotFoundError } from '../lib/errors.js';
+import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import {
     payableQuerySchema,
     receivableQuerySchema,
@@ -104,9 +104,39 @@ adminFinanceRoutes.get(
     }
 );
 
+/**
+ * A refund or an adjustment is done with no second person only by someone
+ * given that on purpose (`finance.*.execute`, which nobody is seeded with);
+ * everyone else opens a request at /admin/approvals for another to decide.
+ * The notes beside a payable or receivable are their own capability.
+ */
+const executeOr403 = (capability, kindOf) => (req, res, next) => {
+    const kind = kindOf(req.body ?? {});
+
+    if (kind && !can(req.user, capability)) {
+        throw new ForbiddenError('This needs a second person: open an approval request', {
+            reason: 'APPROVAL_REQUIRED',
+            kind,
+            required: [capability]
+        });
+    }
+
+    next();
+};
+
+const notesOr403 = (req, res, next) => {
+    if (req.body?.notes !== undefined && !can(req.user, C.FINANCE_NOTES_WRITE)) {
+        throw new ForbiddenError('Your role cannot change the notes', { reason: 'INSUFFICIENT_CAPABILITY', required: [C.FINANCE_NOTES_WRITE] });
+    }
+
+    next();
+};
+
 adminFinanceRoutes.patch(
     '/payables/:id',
     requireCapability(C.FINANCE_PAYMENTS_WRITE),
+    executeOr403(C.FINANCE_ADJUSTMENTS_EXECUTE, (body) => (body.amountOverrideCents !== undefined ? 'PAYABLE_OVERRIDE' : body.waive ? 'PAYABLE_WAIVE' : null)),
+    notesOr403,
     validate({ params: financeIdParamSchema, body: adjustPayableSchema }),
     async (req, res) => {
         res.json(toPayable(await adjustPayable(req.valid.params.id, req.valid.body, req.user, req)));
@@ -155,6 +185,8 @@ adminFinanceRoutes.get(
 adminFinanceRoutes.patch(
     '/receivables/:id',
     requireCapability(C.FINANCE_PAYMENTS_WRITE),
+    executeOr403(C.FINANCE_ADJUSTMENTS_EXECUTE, (body) => (body.dueAt !== undefined ? 'RECEIVABLE_DUE_DATE' : body.waive ? 'RECEIVABLE_WAIVE' : null)),
+    notesOr403,
     validate({ params: financeIdParamSchema, body: adjustReceivableSchema }),
     async (req, res) => {
         res.json(toReceivable(await adjustReceivable(req.valid.params.id, req.valid.body, req.user, req)));
@@ -186,6 +218,7 @@ adminFinanceRoutes.get(
 adminFinanceRoutes.post(
     '/payments',
     requireCapability(C.FINANCE_PAYMENTS_WRITE),
+    executeOr403(C.FINANCE_REFUNDS_EXECUTE, (body) => (body.kind === 'REFUND' ? 'REFUND' : null)),
     validate({ body: recordPaymentSchema }),
     async (req, res) => {
         const { payment, replayed } = await recordPayment(

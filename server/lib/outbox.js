@@ -59,7 +59,11 @@ export const TOPICS = Object.freeze({
     PAYABLE_INSTALMENT_DUE: 'finance.payable.instalment_due',
     PAYABLE_INSTALMENT_OVERDUE: 'finance.payable.instalment_overdue',
     RECEIVABLE_OVERDUE: 'finance.receivable.overdue',
-    PAYMENT_RECORDED: 'finance.payment.recorded'
+    PAYMENT_RECORDED: 'finance.payment.recorded',
+
+    // Approvals: a request opened for someone else to decide, and decided.
+    APPROVAL_REQUESTED: 'finance.approval.requested',
+    APPROVAL_DECIDED: 'finance.approval.decided'
 });
 
 /** Writes one event on the given client — a transaction handle, in practice. */

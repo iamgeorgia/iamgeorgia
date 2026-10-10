@@ -52,6 +52,20 @@ export const CAPABILITIES = Object.freeze({
     FINANCE_EXPORT: 'finance.export',
     /** A partner's commission rate: the one figure on a partner that is money. */
     FINANCE_COMMISSION_WRITE: 'finance.commission.write',
+    /** The free-text notes on a payable or receivable. */
+    FINANCE_NOTES_WRITE: 'finance.notes.write',
+    /**
+     * Refunds and adjustments (write-offs, overrides, moved deadlines) are
+     * asked for by one person and approved by another. `request` opens one,
+     * `approve` decides it — never one's own — and `execute` does it with no
+     * second person, which nobody is seeded with.
+     */
+    FINANCE_REFUNDS_REQUEST: 'finance.refunds.request',
+    FINANCE_REFUNDS_APPROVE: 'finance.refunds.approve',
+    FINANCE_REFUNDS_EXECUTE: 'finance.refunds.execute',
+    FINANCE_ADJUSTMENTS_REQUEST: 'finance.adjustments.request',
+    FINANCE_ADJUSTMENTS_APPROVE: 'finance.adjustments.approve',
+    FINANCE_ADJUSTMENTS_EXECUTE: 'finance.adjustments.execute',
 
     INVOICES_READ: 'invoices.read',
     INVOICES_WRITE: 'invoices.write',
@@ -96,6 +110,12 @@ const FINANCE_READ = [
 
 const FINANCE_WRITE = [C.FINANCE_PAYMENTS_WRITE, C.FINANCE_TERMS_WRITE, C.INVOICES_WRITE];
 
+/** Opening a refund or an adjustment for someone else to approve, and the notes beside it. */
+const FINANCE_ASK = [C.FINANCE_NOTES_WRITE, C.FINANCE_REFUNDS_REQUEST, C.FINANCE_ADJUSTMENTS_REQUEST];
+
+/** Deciding what others asked for. Seeded on the super admin alone; given to others by role. */
+const FINANCE_APPROVE = [C.FINANCE_REFUNDS_APPROVE, C.FINANCE_ADJUSTMENTS_APPROVE];
+
 /**
  * Everything an ADMIN does: the whole operation, short of managing staff and
  * settings — and short of moving money. An admin reads every figure, sets
@@ -132,7 +152,7 @@ const PARTNER_MEMBER = [C.NOTIFICATIONS_READ, C.PARTNER_BOOKINGS_READ];
  * seed, the tests, and any viewer built from a bare `{ role }`.
  */
 export const DEFAULT_ROLE_LISTS = {
-    SUPER_ADMIN: [...ADMIN, ...FINANCE_WRITE, C.USERS_STAFF_MANAGE, C.ROLES_MANAGE, C.SETTINGS_WRITE],
+    SUPER_ADMIN: [...ADMIN, ...FINANCE_WRITE, ...FINANCE_ASK, ...FINANCE_APPROVE, C.USERS_STAFF_MANAGE, C.ROLES_MANAGE, C.SETTINGS_WRITE],
     ADMIN,
     /** Reads everything, margins included; writes nothing. */
     MANAGEMENT: [C.AUDIT_READ, ...PLATFORM_READ, ...FINANCE_READ.filter((cap) => cap !== C.PARTNERS_FINANCIAL_READ)],
@@ -151,6 +171,7 @@ export const DEFAULT_ROLE_LISTS = {
         C.NOTIFICATIONS_READ,
         ...FINANCE_READ,
         ...FINANCE_WRITE,
+        ...FINANCE_ASK,
         C.FINANCE_COMMISSION_WRITE
     ],
     /** Confirms the day's payments and watches the debts; narrower than the accountant. */
@@ -162,7 +183,8 @@ export const DEFAULT_ROLE_LISTS = {
         C.FINANCE_PAYABLES_READ,
         C.FINANCE_RECEIVABLES_READ,
         C.FINANCE_PAYMENTS_READ,
-        C.FINANCE_PAYMENTS_WRITE
+        C.FINANCE_PAYMENTS_WRITE,
+        ...FINANCE_ASK
     ],
     /** Assigns drivers and cars; reads the catalogue to do it; no money, no partners. */
     DISPATCHER: [C.CATALOGUE_READ, C.DISPATCH_READ, C.DISPATCH_WRITE, C.NOTIFICATIONS_READ],
@@ -243,10 +265,9 @@ export const isPartnerCapability = (capability) => capability.startsWith('partne
  *
  * A super admin holds everything *computed*, so a capability added in code
  * is theirs with no data change — except these, which are the ones a role
- * must be given on purpose. Empty today; the approval phase lists the
- * "execute without approval" capabilities here.
+ * must be given on purpose: moving money with no second person.
  */
-export const WITHHELD_FROM_SUPER_ADMIN = Object.freeze([]);
+export const WITHHELD_FROM_SUPER_ADMIN = Object.freeze([C.FINANCE_REFUNDS_EXECUTE, C.FINANCE_ADJUSTMENTS_EXECUTE]);
 
 /**
  * What an account may do, from what was loaded for it.

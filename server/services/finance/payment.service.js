@@ -301,6 +301,73 @@ const sameRequest = (existing, input) =>
     existing.currency === input.currency;
 
 /**
+ * The transaction's half of recording a payment, for an approval to run in
+ * its own. `via` names the request it was asked through, and travels on the
+ * audit row so the trail reads "approved by X, asked by Y".
+ */
+export const recordPaymentInTx = async (tx, input, actor, req, via = null) => {
+    const target = targetKind(input);
+
+    await assertAttachment(tx, input.attachmentAssetId);
+
+    const plan = await planAllocations(tx, input, target);
+    const party = counterpartyFrom(input, target, plan);
+
+    const created = await tx.paymentRecord.create({
+        data: {
+            direction: input.direction,
+            kind: input.kind,
+            method: input.method,
+            ...party,
+            currency: input.currency,
+            amountCents: input.amountCents,
+            reference: input.reference ?? null,
+            paidAt: input.paidAt,
+            note: input.note ?? null,
+            reason: input.reason ?? null,
+            recordedByUserId: actor?.id ?? null,
+            attachmentAssetId: input.attachmentAssetId ?? null,
+            idempotencyKey: input.idempotencyKey ?? null
+        }
+    });
+
+    await applyPlan(tx, input, target, created, plan);
+
+    const allocated = plan.reduce((sum, entry) => sum + entry.cents, 0);
+    const verb = input.kind === 'REFUND' ? 'Refund' : 'Payment';
+    const way = input.direction === 'IN' ? 'received' : 'sent';
+
+    await recordAudit(tx, {
+        action: input.kind === 'REFUND' ? 'REFUND_RECORDED' : 'PAYMENT_RECORDED',
+        actor,
+        entityType: AUDIT_ENTITY.paymentRecord,
+        entityId: created.id,
+        summary: `${verb} ${way}: ${money(input.amountCents, input.currency)}${input.reference ? ` (${input.reference})` : ''}`,
+        metadata: {
+            direction: input.direction,
+            kind: input.kind,
+            method: input.method,
+            amountCents: input.amountCents,
+            allocatedCents: allocated,
+            targets: plan.map(({ row, cents }) => ({ id: row.id, cents })),
+            ...(via ? { approvalId: via.approvalId, requestedByUserId: via.requestedByUserId } : {})
+        },
+        req
+    });
+
+    // The receipt to the payer, written with the payment so that a dead mail
+    // server cannot turn a recorded payment into a 500.
+    await enqueueEvent(tx, {
+        topic: TOPICS.PAYMENT_RECORDED,
+        payload: { paymentId: created.id },
+        entityType: AUDIT_ENTITY.paymentRecord,
+        entityId: created.id
+    });
+
+    return tx.paymentRecord.findUnique({ where: { id: created.id }, include: paymentInclude });
+};
+
+/**
  * Records a payment and settles what it pays.
  *
  * `allocations` names the items and amounts; `allocate` asks for the oldest
@@ -309,8 +376,6 @@ const sameRequest = (existing, input) =>
  * not allocated is reported as `unallocatedCents`.
  */
 export const recordPayment = async (input, actor, req) => {
-    const target = targetKind(input);
-
     if (input.idempotencyKey) {
         const existing = await prisma.paymentRecord.findUnique({ where: { idempotencyKey: input.idempotencyKey }, include: paymentInclude });
 
@@ -324,64 +389,7 @@ export const recordPayment = async (input, actor, req) => {
     }
 
     try {
-        const payment = await prisma.$transaction(async (tx) => {
-            await assertAttachment(tx, input.attachmentAssetId);
-
-            const plan = await planAllocations(tx, input, target);
-            const party = counterpartyFrom(input, target, plan);
-
-            const created = await tx.paymentRecord.create({
-                data: {
-                    direction: input.direction,
-                    kind: input.kind,
-                    method: input.method,
-                    ...party,
-                    currency: input.currency,
-                    amountCents: input.amountCents,
-                    reference: input.reference ?? null,
-                    paidAt: input.paidAt,
-                    note: input.note ?? null,
-                    reason: input.reason ?? null,
-                    recordedByUserId: actor?.id ?? null,
-                    attachmentAssetId: input.attachmentAssetId ?? null,
-                    idempotencyKey: input.idempotencyKey ?? null
-                }
-            });
-
-            await applyPlan(tx, input, target, created, plan);
-
-            const allocated = plan.reduce((sum, entry) => sum + entry.cents, 0);
-            const verb = input.kind === 'REFUND' ? 'Refund' : 'Payment';
-            const way = input.direction === 'IN' ? 'received' : 'sent';
-
-            await recordAudit(tx, {
-                action: input.kind === 'REFUND' ? 'REFUND_RECORDED' : 'PAYMENT_RECORDED',
-                actor,
-                entityType: AUDIT_ENTITY.paymentRecord,
-                entityId: created.id,
-                summary: `${verb} ${way}: ${money(input.amountCents, input.currency)}${input.reference ? ` (${input.reference})` : ''}`,
-                metadata: {
-                    direction: input.direction,
-                    kind: input.kind,
-                    method: input.method,
-                    amountCents: input.amountCents,
-                    allocatedCents: allocated,
-                    targets: plan.map(({ row, cents }) => ({ id: row.id, cents }))
-                },
-                req
-            });
-
-            // The receipt to the payer, written with the payment so that a
-            // dead mail server cannot turn a recorded payment into a 500.
-            await enqueueEvent(tx, {
-                topic: TOPICS.PAYMENT_RECORDED,
-                payload: { paymentId: created.id },
-                entityType: AUDIT_ENTITY.paymentRecord,
-                entityId: created.id
-            });
-
-            return tx.paymentRecord.findUnique({ where: { id: created.id }, include: paymentInclude });
-        });
+        const payment = await prisma.$transaction((tx) => recordPaymentInTx(tx, input, actor, req));
 
         return { payment, replayed: false };
     } catch (err) {

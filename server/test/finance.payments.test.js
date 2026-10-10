@@ -43,7 +43,24 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
 
     before(async () => {
         for (const role of ['ACCOUNTANT', 'MANAGEMENT', 'TOUR_OPERATOR', 'ADMIN']) {
-            cookies[role] = (await signIn(app, (await makeAdmin(tracker, { role })).email)).cookie;
+            const user = await makeAdmin(tracker, { role });
+            cookies[role] = (await signIn(app, user.email)).cookie;
+
+            // Refunds and adjustments need a second person unless the account
+            // was given the right to do them alone. This suite is about the
+            // ledger, not the approval step (finance.approvals.test.js is), so
+            // its accountant is given exactly that, by the one road there is:
+            // a row nobody can write through the API.
+            if (role === 'ACCOUNTANT') {
+                await prisma.userCapabilityOverride.createMany({
+                    data: ['finance.refunds.execute', 'finance.adjustments.execute'].map((capability) => ({
+                        userId: user.id,
+                        capability,
+                        effect: 'GRANT',
+                        reason: 'Executes alone in this suite'
+                    }))
+                });
+            }
         }
 
         supplier = await makePartner(tracker, { kind: 'TRANSPORT' });
