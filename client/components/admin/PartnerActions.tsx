@@ -2,12 +2,12 @@
 
 import { useRouter } from "next/navigation";
 import { AnimatePresence, m } from "framer-motion";
-import { Check, Copy, Loader2, MailPlus, PauseCircle, RotateCcw, X } from "lucide-react";
+import { Ban, Check, Copy, Loader2, MailPlus, PauseCircle, RotateCcw, ShieldBan, ShieldCheck, X } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
-import { describeError } from "@/lib/api/client";
-import { resendInvitation, reviewPartner, type ReviewAction } from "@/lib/api/partners";
+import { ApiError, describeError } from "@/lib/api/client";
+import { blockPartner, resendInvitation, reviewPartner, terminatePartner, unblockPartner, type ReviewAction } from "@/lib/api/partners";
 import { cn } from "@/lib/utils";
 import type { Partner, PartnerStatus } from "@/types";
 
@@ -21,9 +21,23 @@ import type { Partner, PartnerStatus } from "@/types";
  * it returns is what gets shown here.
  */
 
-type Pending = ReviewAction | "resend" | null;
+type Pending = ReviewAction | "resend" | "block" | "unblock" | "terminate" | null;
 
-const CAN: Record<ReviewAction | "resend", PartnerStatus[]> = {
+const ALL_STATUSES: PartnerStatus[] = [
+  "INVITED",
+  "REGISTRATION_IN_PROGRESS",
+  "PENDING_APPROVAL",
+  "APPROVED",
+  "REJECTED",
+  "SUSPENDED",
+  "BLOCKED",
+];
+
+const CAN: Record<ReviewAction | "resend" | "block" | "unblock" | "terminate", PartnerStatus[]> = {
+  block: ["APPROVED", "SUSPENDED"],
+  unblock: ["BLOCKED"],
+  // Final, and possible from anywhere but the end state itself.
+  terminate: ALL_STATUSES,
   approve: ["PENDING_APPROVAL", "REGISTRATION_IN_PROGRESS"],
   reject: ["PENDING_APPROVAL", "REGISTRATION_IN_PROGRESS"],
   suspend: ["APPROVED"],
@@ -43,6 +57,11 @@ export function PartnerActions({ partner }: { partner: Partner }) {
   const [internalNote, setInternalNote] = useState("");
   const [suspending, setSuspending] = useState(false);
   const [suspendReason, setSuspendReason] = useState("");
+  const [blocking, setBlocking] = useState(false);
+  const [blockReason, setBlockReason] = useState("");
+  const [terminating, setTerminating] = useState(false);
+  const [terminateReason, setTerminateReason] = useState("");
+  const [terminateConfirm, setTerminateConfirm] = useState("");
 
   const allows = (action: keyof typeof CAN) => CAN[action].includes(partner.status);
 
@@ -66,6 +85,44 @@ export function PartnerActions({ partner }: { partner: Partner }) {
       );
       // The page is a Server Component; refreshing is what re-reads the record
       // rather than patching a local copy that could drift from the server's.
+      router.refresh();
+    } catch (caught) {
+      const reasonCode =
+        caught instanceof ApiError && caught.details && typeof caught.details === "object"
+          ? (caught.details as { reason?: string }).reason
+          : undefined;
+      setError(
+        action === "approve" && reasonCode === "CONTRACT_MISSING"
+          ? "This partner cannot be approved yet: no signed contract is on file. File it in the Contract panel on this page, or mark the contract as not required there."
+          : describeError(caught),
+      );
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const runLifecycle = async (action: "block" | "unblock" | "terminate") => {
+    setPending(action);
+    setError(null);
+    setMessage(null);
+
+    try {
+      if (action === "block") await blockPartner(partner.id, blockReason.trim());
+      else if (action === "unblock") await unblockPartner(partner.id);
+      else await terminatePartner(partner.id, terminateReason.trim(), terminateConfirm.trim());
+
+      setBlocking(false);
+      setTerminating(false);
+      setBlockReason("");
+      setTerminateReason("");
+      setTerminateConfirm("");
+      setMessage(
+        action === "block"
+          ? "Blocked. Nobody at this company can sign in or book until you unblock it."
+          : action === "unblock"
+            ? "Unblocked. The company can sign in again."
+            : "Terminated. This cannot be undone.",
+      );
       router.refresh();
     } catch (caught) {
       setError(describeError(caught));
@@ -258,6 +315,113 @@ export function PartnerActions({ partner }: { partner: Partner }) {
             </m.div>
           )}
         </AnimatePresence>
+
+        {allows("block") && !blocking && !terminating && (
+          <button type="button" disabled={busy} onClick={() => setBlocking(true)} className={danger}>
+            <ShieldBan size={15} aria-hidden />
+            Block partner
+          </button>
+        )}
+
+        {blocking && (
+          <div className="space-y-3 rounded-sm bg-surface-soft p-3">
+            <div>
+              <label htmlFor="block-reason" className="mb-1.5 block text-[0.75rem] font-medium text-muted">
+                Why is this partner being blocked?
+              </label>
+              <textarea
+                id="block-reason"
+                rows={3}
+                value={blockReason}
+                onChange={(event) => setBlockReason(event.target.value)}
+                className={field}
+              />
+            </div>
+            <p className="text-[0.75rem] text-muted">
+              Sign-in and booking are refused straight away. Nothing is deleted, and you can unblock later.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={busy || blockReason.trim().length === 0}
+                onClick={() => runLifecycle("block")}
+                className={danger}
+              >
+                {spinner("block")}
+                Confirm block
+              </button>
+              <button type="button" disabled={busy} onClick={() => setBlocking(false)} className={secondary}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {allows("unblock") && (
+          <button type="button" disabled={busy} onClick={() => runLifecycle("unblock")} className={primary}>
+            {spinner("unblock") ?? <ShieldCheck size={15} aria-hidden />}
+            Unblock partner
+          </button>
+        )}
+
+        {allows("terminate") && !terminating && !blocking && (
+          <button type="button" disabled={busy} onClick={() => setTerminating(true)} className={danger}>
+            <Ban size={15} aria-hidden />
+            Terminate partner
+          </button>
+        )}
+
+        {terminating && (
+          <div className="space-y-3 rounded-sm border border-error/40 bg-error/5 p-3">
+            <p className="text-[0.8125rem] leading-relaxed font-medium text-error-text">
+              Terminating ends the relationship for good. It cannot be undone, and the company
+              can never sign in again. Bookings and ledger entries are kept.
+            </p>
+            <div>
+              <label htmlFor="terminate-reason" className="mb-1.5 block text-[0.75rem] font-medium text-muted">
+                Why is this partner being terminated?
+              </label>
+              <textarea
+                id="terminate-reason"
+                rows={3}
+                value={terminateReason}
+                onChange={(event) => setTerminateReason(event.target.value)}
+                className={field}
+              />
+            </div>
+            <div>
+              <label htmlFor="terminate-confirm" className="mb-1.5 block text-[0.75rem] font-medium text-muted">
+                Type <span className="font-mono">{partner.reference}</span> to confirm
+              </label>
+              <input
+                id="terminate-confirm"
+                value={terminateConfirm}
+                onChange={(event) => setTerminateConfirm(event.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                className={cn(field, "font-mono")}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={
+                  busy ||
+                  terminateReason.trim().length === 0 ||
+                  terminateConfirm.trim().toUpperCase() !== partner.reference
+                }
+                onClick={() => runLifecycle("terminate")}
+                className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm bg-error px-4 text-[0.8125rem] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              >
+                {spinner("terminate")}
+                Terminate permanently
+              </button>
+              <button type="button" disabled={busy} onClick={() => setTerminating(false)} className={secondary}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
 
         {allows("reactivate") && (
           <button type="button" disabled={busy} onClick={() => run("reactivate")} className={primary}>

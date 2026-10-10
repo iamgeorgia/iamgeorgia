@@ -31,6 +31,7 @@ import type {
   TourOption,
 } from "@/types/tour";
 import { cn } from "@/lib/utils";
+import { BookingErrorText } from "@/components/booking/BookingErrorText";
 
 interface TourDeparturesProps {
   tour: { slug: string; title: string; durationLabel: string; durationDays: number };
@@ -125,7 +126,7 @@ export function TourDepartures({ tour, stay, availability }: TourDeparturesProps
           className="flex items-start gap-2.5 rounded-sm border border-error/30 bg-error/5 px-4 py-3 text-sm text-error-text"
         >
           <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-          {t.booking.errors[errorKey]}
+          <BookingErrorText errorKey={errorKey} />
         </p>
       )}
 

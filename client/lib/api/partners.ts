@@ -10,6 +10,9 @@ import type {
   PartnerLink,
   PartnerStatus,
   PartnerSummary,
+  PartnerTermsAcceptance,
+  ProductAccessEntry,
+  ProductAccessInput,
 } from "@/types/partner";
 import type { Session, SessionUser } from "@/types/auth";
 
@@ -119,6 +122,9 @@ export interface AdminCreatePartnerInput {
   financial?: Record<string, unknown>;
   commissionRateBps?: number;
   notes?: string;
+  /** Mode "approve" only: the filed PDF (uploaded as media first), or an explicit "not needed". */
+  contract?: { assetId: string; signedAt: string; version?: string };
+  contractRequired?: boolean;
   documents?: { label: string; received: boolean }[];
 }
 
@@ -165,6 +171,63 @@ export const readFinancial = (id: string) =>
 export const saveFinancial = (id: string, body: Record<string, unknown>) =>
   apiFetch<PartnerFinancial>(`/api/admin/partners/${id}/financial`, { method: "PUT", body });
 
+// --- Contract, lifecycle and product access (admin) -----------------------
+
+export interface ContractLink {
+  url: string;
+  expiresAt: string;
+}
+
+/** Files the signed agreement. The PDF travels as multipart, not JSON. */
+export const uploadContract = (id: string, input: { file: File; signedAt: string; version?: string }) => {
+  const form = new FormData();
+  form.append("file", input.file);
+  form.append("signedAt", input.signedAt);
+  if (input.version?.trim()) form.append("version", input.version.trim());
+  return apiFetch<Partner>(`/api/admin/partners/${id}/contract`, { method: "POST", rawBody: form, timeoutMs: 60_000 });
+};
+
+/** A short-lived signed link to the PDF. */
+export const getContractLink = (id: string) => apiFetch<ContractLink>(`/api/admin/partners/${id}/contract`);
+
+export const setContractRequirement = (id: string, contractRequired: boolean, reason: string) =>
+  apiFetch<Partner>(`/api/admin/partners/${id}/contract-requirement`, {
+    method: "PUT",
+    body: { contractRequired, reason },
+  });
+
+export const blockPartner = (id: string, reason: string) =>
+  apiFetch<Partner>(`/api/admin/partners/${id}/block`, { method: "POST", body: { reason } });
+
+export const unblockPartner = (id: string) =>
+  apiFetch<Partner>(`/api/admin/partners/${id}/unblock`, { method: "POST", body: {} });
+
+/** Final. `confirm` is the partner's own reference, typed by the operator. */
+export const terminatePartner = (id: string, reason: string, confirm: string) =>
+  apiFetch<Partner>(`/api/admin/partners/${id}/terminate`, { method: "POST", body: { reason, confirm } });
+
+export const getProductAccess = (id: string) =>
+  apiFetch<{ data: ProductAccessEntry[] }>(`/api/admin/partners/${id}/product-access`);
+
+/** Replaces the whole list. */
+export const setProductAccess = (id: string, entries: ProductAccessInput[]) =>
+  apiFetch<{ data: ProductAccessEntry[] }>(`/api/admin/partners/${id}/product-access`, {
+    method: "PUT",
+    body: { entries },
+  });
+
+export const getProductAccessServer = (id: string) =>
+  serverFetch<{ data: ProductAccessEntry[] }>(`/api/admin/partners/${id}/product-access`);
+
+// --- Platform terms and contract (partner portal) ---------------------------
+
+export const getOwnTerms = () => serverFetch<PartnerTermsAcceptance>("/api/partner/terms");
+
+export const acceptTerms = (version: string) =>
+  apiFetch<Partner>("/api/partner/terms/accept", { method: "POST", body: { version } });
+
+export const getOwnContractLink = () => apiFetch<ContractLink>("/api/partner/contract");
+
 // --- Public registration ----------------------------------------------------
 
 export interface RegistrationInput {
@@ -172,7 +235,13 @@ export interface RegistrationInput {
   contact: Record<string, unknown>;
   financial: Record<string, unknown>;
   password: string;
+  /** Required: the version the applicant was shown and agreed to. */
+  terms?: { accepted: true; version: string };
 }
+
+/** The same preview the page loaded, fetched again from the browser. */
+export const readInvitationPreview = (token: string) =>
+  apiFetch<InvitationPreview>(`/api/invitations/${token}`);
 
 export const acceptInvitation = (token: string, body: RegistrationInput) =>
   apiFetch<{ reference: string; status: PartnerStatus; companyName: string }>(

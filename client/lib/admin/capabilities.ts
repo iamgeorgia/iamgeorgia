@@ -54,6 +54,8 @@ export const capabilityAreas: CapabilityArea[] = [
       "partners.read": c("Partners: read", "See partner companies and applications"),
       "partners.write": c("Partners: manage", "Approve, edit, suspend and register partners"),
       "partners.financial.read": c("Partners: bank details", "See a partner's bank details and payment terms"),
+      "partners.contract.write": c("File partner contracts", "Upload a partner's signed contract and say when one is not needed"),
+      "partners.access.write": c("Set what a partner may sell", "Choose which hotels, tours and other products a partner can see and book"),
     },
   },
   {
@@ -142,6 +144,7 @@ export const capabilityAreas: CapabilityArea[] = [
       "partner.inventory.write": c("Inventory: edit", "Edit the company's hotel rates and availability"),
       "partner.statement.read": c("Statement: read", "See the account statement"),
       "partner.invoices.read": c("Invoices: read", "See and download invoices"),
+      "partner.terms.accept": c("Accept the platform terms", "Accept a new version of the platform terms for the company"),
     },
   },
 ];

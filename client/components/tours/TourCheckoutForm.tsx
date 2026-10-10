@@ -26,6 +26,7 @@ import { formatMoney } from "@/lib/money";
 import type { BookingGuestType } from "@/types/booking";
 import type { TourTravellerInput } from "@/types/tour";
 import { cn } from "@/lib/utils";
+import { BookingErrorText } from "@/components/booking/BookingErrorText";
 
 interface TourCheckoutFormProps {
   /** From the URL, so a refresh resumes the same hold rather than taking another. */
@@ -487,7 +488,7 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
                   <span>
                     {errorKey === "creditLimit" && creditFigures
                       ? fill(t.booking.errors.creditLimit, creditFigures)
-                      : t.booking.errors[errorKey]}
+                      : <BookingErrorText errorKey={errorKey} />}
                     {needsNewOffer(errorKey) && (
                       <>
                         {" "}

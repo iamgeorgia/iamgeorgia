@@ -2075,6 +2075,8 @@ export const en = {
     title: "Something went wrong on our side",
     body: "The page did not load as it should. Nothing has been booked and nothing has been charged — try again, or head back to the homepage.",
     reference: "Reference: {digest}",
+    accountBlocked: "Your company's access has been blocked. Contact us.",
+    accountTerminated: "Your company no longer has an account on the platform.",
   },
 
   /**
@@ -2321,6 +2323,8 @@ export const en = {
       priceChanged: "The price for this room has changed. Go back and choose again.",
       notFound: "We could not find that.",
       creditLimit: "Your company has reached its credit limit ({used} of {limit}). Settle open invoices or contact us.",
+      termsOutdated: "Your company must accept the updated platform terms before booking again.",
+      termsOutdatedLink: "Review the terms",
     },
     nav: {
       manage: "Your booking",

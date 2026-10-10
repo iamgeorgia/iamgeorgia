@@ -6,7 +6,7 @@ import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
-import { describeError } from "@/lib/api/client";
+import { ApiError, describeError } from "@/lib/api/client";
 import { deletePartner } from "@/lib/api/partners";
 import { useLocalePath } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
@@ -46,7 +46,14 @@ export function PartnerDangerZone({ partner }: { partner: Partner }) {
       router.replace(path("/admin/partners"));
       router.refresh();
     } catch (caught) {
-      setError(describeError(caught));
+      const details = caught instanceof ApiError && caught.details && typeof caught.details === "object"
+        ? (caught.details as { reason?: string; bookings?: number; ledgerEntries?: number })
+        : null;
+      setError(
+        details?.reason === "USE_TERMINATE"
+          ? `This partner has ${details.bookings ?? 0} booking${details.bookings === 1 ? "" : "s"} and ${details.ledgerEntries ?? 0} ledger entr${details.ledgerEntries === 1 ? "y" : "ies"}, so it cannot be deleted. Use Terminate partner in the Review panel instead: it ends the relationship and keeps the records.`
+          : describeError(caught),
+      );
       setDeleting(false);
     }
   };

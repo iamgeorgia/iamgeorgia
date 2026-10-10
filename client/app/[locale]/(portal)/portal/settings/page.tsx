@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { Container } from "@/components/ui/Container";
+import { PortalAgreements } from "@/components/partners/PortalAgreements";
 import { PortalSettings } from "@/components/partners/PortalSettings";
 import { ApiError, serverFetchOptional } from "@/lib/api/client";
 import { getSession } from "@/lib/auth/session";
@@ -37,6 +38,11 @@ export default async function PortalSettingsPage() {
     redirect(localePath(locale, "/portal"));
   }
 
+  // A new version of the platform terms locks the portal until the owner accepts it.
+  if (session.partner.terms?.outdated) {
+    redirect(localePath(locale, "/portal/terms"));
+  }
+
   let financial: PartnerFinancial | null = null;
 
   try {
@@ -61,6 +67,8 @@ export default async function PortalSettingsPage() {
           user={session.user}
           financial={financial}
         />
+
+        <PortalAgreements partner={session.partner} />
       </div>
     </Container>
   );

@@ -6,6 +6,7 @@ import { Check, Copy, Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { ApiError, describeError } from "@/lib/api/client";
+import { uploadMedia } from "@/lib/api/media";
 import { createPartner, type AdminCreatePartnerInput } from "@/lib/api/partners";
 import { PARTNER_KINDS, partnerKindLabels } from "@/lib/admin/partners";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -139,6 +140,12 @@ export function PartnerRegistrationForm() {
     email: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  // Only used when the partner is created already approved: approval needs a
+  // signed contract on file, or an explicit statement that none is needed.
+  const [contractFile, setContractFile] = useState<File | null>(null);
+  const [contractSignedAt, setContractSignedAt] = useState("");
+  const [contractVersion, setContractVersion] = useState("");
+  const [noContract, setNoContract] = useState(false);
 
   const full = values.mode !== "invite";
 
@@ -237,9 +244,29 @@ export function PartnerRegistrationForm() {
       ...(trimmed(values.notes) ? { notes: values.notes.trim() } : {}),
     };
 
+    if (values.mode === "approve" && !noContract) {
+      if (!contractFile || !contractSignedAt) {
+        setFormError("Add the signed contract and the date it was signed, or tick that no contract is needed.");
+        return;
+      }
+    }
+
     setSubmitting(true);
 
     try {
+      if (values.mode === "approve") {
+        if (noContract) {
+          body.contractRequired = false;
+        } else if (contractFile) {
+          const asset = await uploadMedia(contractFile, "CONTRACT");
+          body.contract = {
+            assetId: asset.id,
+            signedAt: contractSignedAt,
+            ...(contractVersion.trim() ? { version: contractVersion.trim() } : {}),
+          };
+        }
+      }
+
       const created = await createPartner(body);
 
       setResult({
@@ -527,6 +554,41 @@ export function PartnerRegistrationForm() {
           error={errors.bankName}
         />
       </Section>
+
+      {values.mode === "approve" && (
+        <Section
+          title="Contract"
+          description="A partner cannot be approved without a signed contract, unless none is needed."
+        >
+          <label className="flex items-start gap-2.5 sm:col-span-2">
+            <input
+              type="checkbox"
+              checked={noContract}
+              onChange={(event) => setNoContract(event.target.checked)}
+              className="mt-0.5 size-4 shrink-0 accent-brand"
+            />
+            <span className="text-[0.875rem] text-body">This partner does not need a contract</span>
+          </label>
+          {!noContract && (
+            <>
+              <div className="sm:col-span-2">
+                <label htmlFor="contract-file" className="mb-1.5 block text-[0.8125rem] font-medium text-ink">
+                  Signed contract (PDF)
+                </label>
+                <input
+                  id="contract-file"
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  onChange={(event) => setContractFile(event.target.files?.[0] ?? null)}
+                  className="block w-full text-[0.8125rem] text-body"
+                />
+              </div>
+              <Field id="contractSignedAt" label="Signed on" type="date" value={contractSignedAt} onChange={setContractSignedAt} />
+              <Field id="contractVersion" label="Version (optional)" value={contractVersion} onChange={setContractVersion} />
+            </>
+          )}
+        </Section>
+      )}
 
       <Section title="Internal note" description="Never shown to the partner." single>
         <div className="sm:col-span-2">

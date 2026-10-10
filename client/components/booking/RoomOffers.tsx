@@ -19,6 +19,7 @@ import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import type { Offer, RoomAvailability, StayQuery } from "@/types/booking";
 import { cn } from "@/lib/utils";
+import { BookingErrorText } from "@/components/booking/BookingErrorText";
 
 interface RoomOffersProps {
   hotelSlug: string;
@@ -98,7 +99,7 @@ export function RoomOffers({
           className="flex items-start gap-2.5 rounded-sm border border-error/30 bg-error/5 px-4 py-3 text-sm text-error-text"
         >
           <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-          {t.booking.errors[errorKey]}
+          <BookingErrorText errorKey={errorKey} />
         </p>
       )}
 

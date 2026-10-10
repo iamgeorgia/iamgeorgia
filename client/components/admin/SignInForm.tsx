@@ -8,7 +8,8 @@ import { useState } from "react";
 import { describeError } from "@/lib/api/client";
 import { signIn } from "@/lib/api/partners";
 import { forgetViewer } from "@/lib/auth/useViewer";
-import { useLocalePath } from "@/lib/i18n/provider";
+import { accountBlockKey } from "@/lib/auth/accountBlock";
+import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,6 +27,7 @@ import { cn } from "@/lib/utils";
 export function SignInForm({ redirectTo = "/admin" }: { redirectTo?: string }) {
   const router = useRouter();
   const path = useLocalePath();
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +51,8 @@ export function SignInForm({ redirectTo = "/admin" }: { redirectTo?: string }) {
       router.replace(path(redirectTo));
       router.refresh();
     } catch (caught) {
-      setError(describeError(caught));
+      const blocked = accountBlockKey(caught);
+      setError(blocked ? t.error[blocked] : describeError(caught));
       setSubmitting(false);
     }
   };

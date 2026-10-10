@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Check, Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 
 import { ApiError, describeError } from "@/lib/api/client";
-import { acceptInvitation } from "@/lib/api/partners";
+import { acceptInvitation, readInvitationPreview } from "@/lib/api/partners";
 import { PARTNER_KINDS, partnerKindLabels } from "@/lib/admin/partners";
 import { useLocalePath } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
@@ -48,9 +48,9 @@ interface Values {
   confirmPassword: string;
 }
 
-type Errors = Partial<Record<keyof Values, string>>;
+type Errors = Partial<Record<keyof Values | "terms", string>>;
 
-const STEPS = ["Company", "Contact", "Payment", "Password"] as const;
+const BASE_STEPS = ["Company", "Contact", "Payment", "Password"] as const;
 
 /** Which step owns which field, so a server error reopens the right one. */
 const STEP_FIELDS: (keyof Values)[][] = [
@@ -96,6 +96,12 @@ export function PartnerRegistrationWizard({
   const company = invitation.company;
   const prefill = invitation.prefill.contact ?? {};
 
+  // The terms the server wants accepted. Refreshed if the version moves on
+  // while the form is open.
+  const [terms, setTerms] = useState(invitation.terms ?? null);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const steps = terms ? ([...BASE_STEPS, "Terms"] as const) : BASE_STEPS;
+
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<Values>({
     // Anything the admin already entered is replayed, so the invitee is not
@@ -133,6 +139,9 @@ export function PartnerRegistrationWizard({
 
   const validateStep = (index: number): Errors => {
     const next: Errors = {};
+    if (index === 4 && terms && !termsAccepted) {
+      next.terms = "Tick the box to accept the terms and continue.";
+    }
     const required = (key: keyof Values, message: string, min = 2) => {
       if (values[key].trim().length < min) next[key] = message;
     };
@@ -185,7 +194,13 @@ export function PartnerRegistrationWizard({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    const found = validateStep(3);
+    // Enter on an earlier step moves on rather than submitting half a form.
+    if (step < steps.length - 1) {
+      advance();
+      return;
+    }
+
+    const found = { ...validateStep(3), ...validateStep(4) };
     setErrors(found);
     setFormError(null);
     if (Object.keys(found).length > 0) return;
@@ -224,10 +239,33 @@ export function PartnerRegistrationWizard({
           ...(optional(values.accountHolder) ? { accountHolder: values.accountHolder.trim() } : {}),
         },
         password: values.password,
+        ...(terms ? { terms: { accepted: true as const, version: terms.version } } : {}),
       });
 
       setDone({ reference: result.reference, companyName: result.companyName });
     } catch (caught) {
+      const details =
+        caught instanceof ApiError && caught.details && typeof caught.details === "object"
+          ? (caught.details as { reason?: string })
+          : null;
+
+      if (details?.reason === "TERMS_VERSION_STALE") {
+        // The terms were updated while this form was open. Fetch the new
+        // version and ask again, so nobody agrees to text they have not seen.
+        setTermsAccepted(false);
+        try {
+          const fresh = await readInvitationPreview(token);
+          setTerms(fresh.terms ?? null);
+        } catch {
+          // The stale copy stays; the next submit will say so again.
+        }
+        setStep(4);
+        setErrors({});
+        setFormError("The platform terms were updated while you were filling this in. Please read the new version and accept it again.");
+        setSubmitting(false);
+        return;
+      }
+
       if (caught instanceof ApiError) {
         const mapped: Errors = {};
 
@@ -284,12 +322,12 @@ export function PartnerRegistrationWizard({
     );
   }
 
-  const last = step === STEPS.length - 1;
+  const last = step === steps.length - 1;
 
   return (
     <form onSubmit={handleSubmit} noValidate className="mt-10">
       <ol className="flex flex-wrap gap-2" aria-label="Registration progress">
-        {STEPS.map((label, index) => (
+        {steps.map((label, index) => (
           <li key={label} className="flex items-center gap-2">
             <span
               aria-current={index === step ? "step" : undefined}
@@ -401,6 +439,55 @@ export function PartnerRegistrationWizard({
             </Fieldset>
           )}
 
+          {step === 4 && terms && (
+            <Fieldset legend="Platform terms" hint="Read the terms, then accept them to send your application.">
+              <div className="space-y-3 sm:col-span-2">
+                <p className="text-[0.9375rem] text-body">
+                  Platform terms, version <span className="font-mono">{terms.version}</span>
+                  {terms.url ? (
+                    <>
+                      {" "}
+                      <a
+                        href={terms.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="text-brand-text underline underline-offset-4"
+                      >
+                        Read the terms
+                      </a>
+                    </>
+                  ) : null}
+                </p>
+                <label className="flex items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={termsAccepted}
+                    onChange={(event) => {
+                      setTermsAccepted(event.target.checked);
+                      setErrors((current) => ({ ...current, terms: undefined }));
+                    }}
+                    aria-invalid={Boolean(errors.terms)}
+                    className="mt-0.5 size-4 shrink-0 accent-brand"
+                  />
+                  <span className="text-[0.875rem] leading-snug text-body">
+                    I have read and accept the platform terms (version {terms.version}) on behalf of{" "}
+                    {values.name.trim() || "my company"}.
+                  </span>
+                </label>
+                {errors.terms && (
+                  <p role="alert" className="text-[0.75rem] text-error-text">
+                    {errors.terms}
+                  </p>
+                )}
+                <p className="text-[0.8125rem] leading-relaxed text-muted">
+                  Submitting sends your application to our partnerships team. You will be able to
+                  sign in straight away to follow its progress, but the platform itself opens once
+                  you are approved.
+                </p>
+              </div>
+            </Fieldset>
+          )}
+
           {step === 3 && (
             <Fieldset
               legend="Choose a password"
@@ -409,7 +496,7 @@ export function PartnerRegistrationWizard({
               <Field id="password" label="Password" required type="password" autoComplete="new-password" value={values.password} onChange={set("password")} error={errors.password} />
               <Field id="confirmPassword" label="Confirm password" required type="password" autoComplete="new-password" value={values.confirmPassword} onChange={set("confirmPassword")} error={errors.confirmPassword} />
 
-              <p className="text-[0.8125rem] leading-relaxed text-muted sm:col-span-2">
+              <p className={cn("text-[0.8125rem] leading-relaxed text-muted sm:col-span-2", terms && "hidden")}>
                 Submitting sends your application to our partnerships team. You will be able to sign
                 in straight away to follow its progress, but the platform itself opens once you are
                 approved.

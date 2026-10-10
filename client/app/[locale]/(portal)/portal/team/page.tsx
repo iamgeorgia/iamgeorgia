@@ -33,6 +33,11 @@ export default async function PortalTeamPage() {
     redirect(localePath(locale, "/portal"));
   }
 
+  // A new version of the platform terms locks the portal until the owner accepts it.
+  if (session.partner.terms?.outdated) {
+    redirect(localePath(locale, "/portal/terms"));
+  }
+
   if (!can(session, "partner.team.manage")) {
     redirect(localePath(locale, "/portal/dashboard"));
   }

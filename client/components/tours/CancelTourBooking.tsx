@@ -13,6 +13,7 @@ import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import type { TourBookingStatus, TourCancellationQuote } from "@/types/tour";
+import { BookingErrorText } from "@/components/booking/BookingErrorText";
 
 interface CancelTourBookingProps {
   reference: string;
@@ -128,7 +129,7 @@ export function CancelTourBooking({ reference, email, status, quote, freeUntil }
             className="mt-4 flex items-start gap-2.5 rounded-sm border border-error/30 bg-error/5 px-4 py-3 text-sm text-error-text"
           >
             <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-            {t.booking.errors[errorKey]}
+            <BookingErrorText errorKey={errorKey} />
           </p>
         )}
 

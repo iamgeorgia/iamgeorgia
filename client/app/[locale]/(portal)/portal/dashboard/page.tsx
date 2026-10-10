@@ -6,6 +6,7 @@ import { ArrowRight } from "lucide-react";
 import { BookingStatusBadge } from "@/components/admin/StatusBadge";
 import { Container } from "@/components/ui/Container";
 import { ApiError, serverFetch } from "@/lib/api/client";
+import { isTermsOutdated } from "@/lib/partners/terms";
 import { listPartnerBookings } from "@/lib/api/bookings";
 import { listPartnerOrders } from "@/lib/api/orders";
 import { formatStay } from "@/lib/admin/bookings";
@@ -45,6 +46,10 @@ export default async function PortalDashboardPage() {
   try {
     data = await serverFetch<DashboardResponse>("/api/partner/dashboard");
   } catch (error) {
+    // The owner has not accepted the current platform terms: that page is the only way on.
+    if (error instanceof ApiError && error.status === 403 && isTermsOutdated(error)) {
+      redirect(localePath(locale, "/portal/terms"));
+    }
     if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
       redirect(localePath(locale, error.status === 401 ? "/portal/sign-in" : "/portal"));
     }
@@ -52,6 +57,8 @@ export default async function PortalDashboardPage() {
   }
 
   const { partner, stats } = data;
+
+  if (partner.terms?.outdated) redirect(localePath(locale, "/portal/terms"));
 
   // Only after the dashboard call has established the partner is through the
   // gate — an unapproved one is already redirected above.

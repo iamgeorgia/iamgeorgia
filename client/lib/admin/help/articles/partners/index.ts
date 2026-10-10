@@ -1,6 +1,7 @@
 import type { HelpArticle } from "../../types";
 
 import { article as applications } from "./applications";
+import { article as contractAccessBlock } from "./contract-access-block";
 import { article as detailReview } from "./detail-review";
 import { article as lifecycle } from "./lifecycle";
 import { article as register } from "./register";
@@ -13,4 +14,5 @@ export const articles: HelpArticle[] = [
   registering,
   detailReview,
   lifecycle,
+  contractAccessBlock,
 ];

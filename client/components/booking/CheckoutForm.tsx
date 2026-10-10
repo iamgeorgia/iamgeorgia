@@ -37,6 +37,7 @@ import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import type { BookingGuestInput, BookingGuestType, BookingRequestInput } from "@/types/booking";
 import { cn } from "@/lib/utils";
+import { BookingErrorText } from "@/components/booking/BookingErrorText";
 
 interface CheckoutFormProps {
   /** From the URL, so a refresh resumes the same hold rather than taking another. */
@@ -508,7 +509,7 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
                   <span>
                     {errorKey === "creditLimit" && creditFigures
                       ? fill(t.booking.errors.creditLimit, creditFigures)
-                      : t.booking.errors[errorKey]}
+                      : <BookingErrorText errorKey={errorKey} />}
                     {needsNewOffer(errorKey) && (
                       <>
                         {" "}

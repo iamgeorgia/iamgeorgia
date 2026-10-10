@@ -1986,6 +1986,8 @@ export const he: UiDictionary = {
     title: "משהו השתבש אצלנו",
     body: "הדף לא נטען כמו שצריך. שום דבר לא הוזמן ולא חויב — נסו שוב, או חזרו לדף הבית.",
     reference: "מזהה: {digest}",
+    accountBlocked: "הגישה של החברה שלכם נחסמה. צרו איתנו קשר.",
+    accountTerminated: "לחברה שלכם אין יותר חשבון בפלטפורמה.",
   },
 
   booking: {
@@ -2220,6 +2222,8 @@ export const he: UiDictionary = {
       priceChanged: "המחיר לחדר הזה השתנה. חזרו ובחרו מחדש.",
       notFound: "לא מצאנו.",
       creditLimit: "החברה שלכם הגיעה למסגרת האשראי שלה ({used} מתוך {limit}). הסדירו חשבוניות פתוחות או צרו איתנו קשר.",
+      termsOutdated: "החברה שלכם צריכה לאשר את תנאי הפלטפורמה המעודכנים לפני שתוכל להזמין שוב.",
+      termsOutdatedLink: "לעיון בתנאים",
     },
     nav: {
       manage: "ההזמנה שלכם",

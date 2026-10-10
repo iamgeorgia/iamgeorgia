@@ -6,6 +6,7 @@ import {
   Clock,
   MinusCircle,
   PauseCircle,
+  ShieldBan,
   MailPlus,
   PenLine,
   type LucideIcon,
@@ -142,6 +143,8 @@ const partnerTones: Record<PartnerStatus, { tone: Tone; icon: LucideIcon }> = {
   APPROVED: { tone: "positive", icon: CheckCircle2 },
   REJECTED: { tone: "critical", icon: Ban },
   SUSPENDED: { tone: "critical", icon: PauseCircle },
+  BLOCKED: { tone: "critical", icon: ShieldBan },
+  TERMINATED: { tone: "neutral", icon: Ban },
 };
 
 export function PartnerStatusBadge({

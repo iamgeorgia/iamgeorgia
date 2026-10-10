@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Clock, PauseCircle, PenLine, XCircle } from "lucide-react";
+import { Ban, Clock, PauseCircle, PenLine, ShieldBan, XCircle } from "lucide-react";
 
 import { PortalStatusPanel } from "@/components/partners/PortalStatusPanel";
 import { Container } from "@/components/ui/Container";
@@ -66,6 +66,20 @@ export default async function PortalHomePage() {
       title: "Your account is suspended",
       body: "Access to the platform has been withdrawn for now. Get in touch with your contact at I am Georgia to resolve it.",
       note: partner.review.suspensionReason,
+    },
+    BLOCKED: {
+      icon: ShieldBan,
+      tone: "critical" as const,
+      title: "Your company's access has been blocked",
+      body: "You cannot book or manage anything for now. Contact us to find out why and what happens next.",
+      note: partner.review.blockedReason,
+    },
+    TERMINATED: {
+      icon: Ban,
+      tone: "critical" as const,
+      title: "Your company no longer has an account",
+      body: "Our relationship with your company has ended, so this account is closed. Your past bookings and invoices are kept for the books. Contact us if you have a question.",
+      note: partner.review.terminatedReason,
     },
   } as const;
 

@@ -36,7 +36,9 @@ export type PartnerStatus =
   | "PENDING_APPROVAL"
   | "APPROVED"
   | "REJECTED"
-  | "SUSPENDED";
+  | "SUSPENDED"
+  | "BLOCKED"
+  | "TERMINATED";
 
 export type PartnerKind = "HOTEL" | "TOUR_OPERATOR" | "TRANSPORT" | "EXPERIENCE";
 
@@ -89,6 +91,56 @@ export interface PartnerReview {
   suspendedAt: string | null;
   suspendedBy: PartnerContact | null;
   suspensionReason: string | null;
+  blockedAt: string | null;
+  blockedBy: PartnerContact | null;
+  blockedReason: string | null;
+  terminatedAt: string | null;
+  terminatedBy: PartnerContact | null;
+  terminatedReason: string | null;
+}
+
+/** The signed agreement on file for a partner. */
+export interface PartnerContract {
+  /** False when an admin has marked this partner as not needing one. */
+  required: boolean;
+  onFile: boolean;
+  signedAt: string | null;
+  version: string | null;
+  uploadedAt: string | null;
+  uploadedBy: PartnerContact | null;
+  filename: string | null;
+}
+
+/** The platform terms a partner has agreed to, against the current version. */
+export interface PartnerTermsAcceptance {
+  current: string;
+  url: string | null;
+  acceptedVersion: string | null;
+  acceptedAt: string | null;
+  acceptedBy?: PartnerContact | null;
+  /** The owner must accept the current version before the portal works again. */
+  outdated: boolean;
+}
+
+export type ProductAccessType = "HOTEL" | "TRANSFER" | "TOUR" | "SERVICE" | "PACKAGE";
+export type ProductAccessMode = "ALLOW" | "DENY";
+
+export interface ProductAccessEntry {
+  id: string;
+  productType: ProductAccessType;
+  productId: string;
+  mode: ProductAccessMode;
+  note: string | null;
+  product: { id: string; name: string; slug: string } | null;
+  createdAt: string;
+  createdBy: PartnerContact | null;
+}
+
+export interface ProductAccessInput {
+  productType: ProductAccessType;
+  productId: string;
+  mode: ProductAccessMode;
+  note?: string;
 }
 
 /** The row shape of the partners table and the applications queue. */
@@ -124,6 +176,8 @@ export interface Partner extends PartnerSummary {
   financial?: PartnerFinancial | null;
   /** Admin-only internal note. */
   notes?: string | null;
+  contract: PartnerContract;
+  terms: PartnerTermsAcceptance;
 }
 
 export interface Invitation {
@@ -165,6 +219,8 @@ export interface InvitationPreview {
     email: string | null;
     website: string | null;
   } | null;
+  /** The platform terms the applicant must accept on the last step. */
+  terms?: { version: string; url: string | null };
   prefill: {
     contact?: Partial<Pick<PartnerContact, "firstName" | "lastName" | "position" | "phone">>;
   };

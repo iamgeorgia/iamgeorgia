@@ -3,7 +3,7 @@ import type { HelpArticle } from "../../types";
 /**
  * Partner statuses and transitions, from `schema.prisma` PartnerStatus,
  * `partner.service.js` (transition table) and `admin.partners.routes.js`
- * (notifyDecision). Encodes: the six statuses and what the partner can do in
+ * (notifyDecision). Encodes: the eight statuses and what the partner can do in
  * each; approve from pending or in progress, reject likewise, suspend from
  * approved, reactivate from suspended or rejected, resend from invited,
  * in progress, pending or rejected; approve and reinstate email
@@ -12,7 +12,7 @@ import type { HelpArticle } from "../../types";
 export const article = {
   id: "pt-lifecycle",
   title: "Partner statuses",
-  summary: "The six statuses a partner moves through, which action takes it where, and which of them send an email.",
+  summary: "The eight statuses a partner moves through, which action takes it where, and which of them send an email.",
   category: "partners",
   roles: ["ADMIN"],
   keywords: ["status", "invited", "registration in progress", "pending approval", "approved", "rejected", "suspended", "transition", "email"],
@@ -20,9 +20,9 @@ export const article = {
   blocks: [
     {
       type: "paragraph",
-      text: "A partner is always in exactly one of six statuses. The status decides what the partner can do, which review actions the page offers, and whether the application shows in the queue.",
+      text: "A partner is always in exactly one of eight statuses. The status decides what the partner can do, which review actions the page offers, and whether the application shows in the queue.",
     },
-    { type: "heading", id: "statuses", text: "The six statuses" },
+    { type: "heading", id: "statuses", text: "The eight statuses" },
     {
       type: "table",
       columns: ["Status", "Meaning", "What the partner can do"],
@@ -33,6 +33,8 @@ export const article = {
         ["`APPROVED`", "On the network with full access.", "Everything the portal offers."],
         ["`REJECTED`", "Turned down, with the reason emailed.", "Nothing, until reinstated or re-invited."],
         ["`SUSPENDED`", "Access withdrawn; every open session ended.", "Nothing, until reinstated."],
+        ["`BLOCKED`", "Access withdrawn and sign-in refused. Nothing is deleted.", "Nothing, until an admin unblocks the company."],
+        ["`TERMINATED`", "Final. Accounts are switched off; bookings and balances are kept and the partner cannot be deleted.", "Nothing, ever."],
       ],
     },
     { type: "heading", id: "transitions", text: "Transitions" },
@@ -40,9 +42,12 @@ export const article = {
       type: "table",
       columns: ["Action", "From", "To"],
       rows: [
-        ["**Approve**", "`PENDING_APPROVAL`, `REGISTRATION_IN_PROGRESS`", "`APPROVED`"],
+        ["**Approve** (waits for the signed contract unless the requirement was waived)", "`PENDING_APPROVAL`, `REGISTRATION_IN_PROGRESS`", "`APPROVED`"],
         ["**Reject**", "`PENDING_APPROVAL`, `REGISTRATION_IN_PROGRESS`", "`REJECTED`"],
         ["**Suspend**", "`APPROVED`", "`SUSPENDED`"],
+        ["**Block**", "`APPROVED`, `SUSPENDED`", "`BLOCKED`"],
+        ["**Unblock partner**", "`BLOCKED`", "`APPROVED`"],
+        ["**Terminate**", "Any status except `TERMINATED`", "`TERMINATED` (cannot be undone)"],
         ["**Reinstate partner**", "`SUSPENDED`, `REJECTED`", "`APPROVED`"],
         ["**Send a new invitation link**", "`INVITED`, `REGISTRATION_IN_PROGRESS`, `PENDING_APPROVAL`, `REJECTED`", "Unchanged — a fresh link, the old one withdrawn"],
       ],

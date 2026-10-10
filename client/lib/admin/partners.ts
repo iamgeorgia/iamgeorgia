@@ -17,6 +17,8 @@ export const partnerStatusLabels: Record<PartnerStatus, string> = {
   APPROVED: "Approved",
   REJECTED: "Rejected",
   SUSPENDED: "Suspended",
+  BLOCKED: "Blocked",
+  TERMINATED: "Terminated",
 };
 
 /** What each status means for the partner, for a tooltip or an empty state. */
@@ -27,6 +29,8 @@ export const partnerStatusHints: Record<PartnerStatus, string> = {
   APPROVED: "Full access to the B2B platform.",
   REJECTED: "Declined. No platform access.",
   SUSPENDED: "Access withdrawn. Sessions ended immediately.",
+  BLOCKED: "Sign-in and booking are refused. Nothing is deleted, and an admin can unblock the company.",
+  TERMINATED: "The relationship has ended. Records are kept for the books; this cannot be undone.",
 };
 
 export const partnerKindLabels: Record<PartnerKind, string> = {
@@ -91,6 +95,17 @@ export const auditActionLabels: Record<string, string> = {
   PARTNER_REJECTED: "Rejected",
   PARTNER_SUSPENDED: "Suspended",
   PARTNER_REACTIVATED: "Reinstated",
+  PARTNER_BLOCKED: "Blocked",
+  PARTNER_UNBLOCKED: "Unblocked",
+  PARTNER_TERMINATED: "Terminated",
+  PARTNER_CONTRACT_UPLOADED: "Contract filed",
+  PARTNER_CONTRACT_VIEWED: "Contract opened",
+  PARTNER_CONTRACT_REQUIREMENT_CHANGED: "Contract requirement changed",
+  PARTNER_PRODUCT_ACCESS_CHANGED: "Product access changed",
+  PARTNER_TERMS_ACCEPTED: "Platform terms accepted",
+  PARTNER_CREDIT_LIMIT_CHANGED: "Credit limit changed",
+  PARTNER_CREDIT_WARNING: "Credit limit warning",
+  PENALTY_OVERRIDDEN: "Cancellation charge overridden",
   PARTNER_FINANCIAL_VIEWED: "Bank details viewed",
   PARTNER_FINANCIAL_UPDATED: "Bank details updated",
   INVITATION_RESENT: "Invitation resent",

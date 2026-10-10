@@ -66,6 +66,11 @@ export default async function PortalBookingsPage({
     redirect(localePath(locale, "/portal"));
   }
 
+  // A new version of the platform terms locks the portal until the owner accepts it.
+  if (session.partner.terms?.outdated) {
+    redirect(localePath(locale, "/portal/terms"));
+  }
+
   const { path } = await getI18n();
   const params = await searchParams;
   // Several registers behind one page, because a BKG reference is not a TUR

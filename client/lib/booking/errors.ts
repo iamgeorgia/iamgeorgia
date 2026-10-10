@@ -22,6 +22,7 @@ export type BookingErrorKey =
   | "holdExpired"
   | "priceChanged"
   | "creditLimit"
+  | "termsOutdated"
   | "notFound";
 
 const reasonOf = (error: ApiError): string | null => {
@@ -38,6 +39,9 @@ export function bookingErrorKey(error: unknown): BookingErrorKey {
   switch (reasonOf(error)) {
     case "CREDIT_LIMIT_EXCEEDED":
       return "creditLimit";
+    // The owner has not accepted the current platform terms yet.
+    case "TERMS_OUTDATED":
+      return "termsOutdated";
     case "HOLD_EXPIRED":
       return "holdExpired";
     case "PRICE_CHANGED":
@@ -84,7 +88,7 @@ export function creditLimitFigures(error: unknown): { used: string; limit: strin
 }
 
 /** True when re-choosing a room is the only way forward. */
-export const needsNewOffer = (key: BookingErrorKey): boolean =>
+export const needsNewOffer = (key: string): boolean =>
   key === "soldOut" || key === "holdExpired" || key === "priceChanged";
 
 /**
