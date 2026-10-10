@@ -1,5 +1,6 @@
 import { prisma, disconnect } from '../db/index.js';
 import { hashPassword } from '../lib/password.js';
+import { primaryRoleIdFor } from '../services/rbac/access.js';
 import { nextPartnerReference } from '../lib/reference.js';
 import { cancelHotelBookingInTx } from '../services/hotel/booking.service.js';
 import { cancelTransferBookingInTx } from '../services/transfer/booking.service.js';
@@ -39,6 +40,7 @@ const STAFF = [
     ['management', 'MANAGEMENT', 'Mariam', 'Manager'],
     ['reservations', 'TOUR_OPERATOR', 'Rezo', 'Reservations'],
     ['finance', 'ACCOUNTANT', 'Pikria', 'Finance'],
+    ['finance-operator', 'FINANCE_OPERATOR', 'Nika', 'Operator'],
     ['dispatcher', 'DISPATCHER', 'Dato', 'Dispatcher']
 ];
 
@@ -66,8 +68,8 @@ const seed = async () => {
     for (const [local, role, firstName, lastName] of STAFF) {
         await prisma.user.upsert({
             where: { email: email(local) },
-            update: { passwordHash, role, isActive: true, deactivatedAt: null, deactivatedByUserId: null },
-            create: { email: email(local), firstName, lastName, role, passwordHash }
+            update: { passwordHash, primaryRoleId: await primaryRoleIdFor(prisma, role), isActive: true, deactivatedAt: null, deactivatedByUserId: null },
+            create: { email: email(local), firstName, lastName, primaryRoleId: await primaryRoleIdFor(prisma, role), passwordHash }
         });
     }
 
@@ -104,12 +106,12 @@ const seed = async () => {
         for (const [index, [local, role, firstName, lastName]] of spec.users.entries()) {
             await prisma.user.upsert({
                 where: { email: email(local) },
-                update: { passwordHash, role, isActive: true, partnerId: partner.id },
+                update: { passwordHash, primaryRoleId: await primaryRoleIdFor(prisma, role), isActive: true, partnerId: partner.id },
                 create: {
                     email: email(local),
                     firstName,
                     lastName,
-                    role,
+                    primaryRoleId: await primaryRoleIdFor(prisma, role),
                     partnerId: partner.id,
                     isPrimaryContact: index === 0,
                     passwordHash

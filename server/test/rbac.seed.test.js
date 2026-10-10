@@ -57,7 +57,7 @@ describe('roles as data', { skip: dbAvailable ? false : 'Postgres is not reachab
 
         assert.deepEqual((await held()).map((row) => row.roleId), [roles.TOUR_OPERATOR.id]);
 
-        await prisma.user.update({ where: { id: user.id }, data: { role: 'ACCOUNTANT' } });
+        await prisma.user.update({ where: { id: user.id }, data: { primaryRoleId: roles.ACCOUNTANT.id } });
         assert.deepEqual((await held()).map((row) => row.roleId), [roles.ACCOUNTANT.id]);
     });
 

@@ -44,8 +44,6 @@ export function UserRolesPanel({
     ...fixed.map((role) => ({ key: role.key, name: role.name, description: null, isSystem: role.isSystem, fixed: true })),
   ];
 
-  const systemKeys = new Set(rows.filter((row) => row.isSystem).map((row) => row.key));
-  const hasBuiltIn = selected.some((key) => systemKeys.has(key));
   const dirty = [...selected].sort().join() !== [...held].sort().join();
 
   const toggle = (key: string, on: boolean) => {
@@ -116,19 +114,20 @@ export function UserRolesPanel({
       </div>
 
       <p className="mt-4 text-[0.8125rem] leading-relaxed text-muted">
-        Every account needs at least one built-in role as its primary role. Custom roles add to it.
-        You can only hand out roles made of things you hold yourself. Open sessions end when the
-        roles change, so the new access applies at the next sign-in.
+        An account holds one or more roles; the first built-in one is the label the lists show, or
+        the custom role when there is no built-in one. You can only hand out roles made of things
+        you hold yourself. Open sessions end when the roles change, so the new access applies at
+        the next sign-in.
       </p>
 
-      {!hasBuiltIn && (
-        <p className="mt-3 text-[0.8125rem] text-warning-text">Choose at least one built-in role.</p>
+      {selected.length === 0 && (
+        <p className="mt-3 text-[0.8125rem] text-warning-text">Choose at least one role.</p>
       )}
 
       <FormError message={error} />
 
       <div className="mt-5">
-        <SubmitButton busy={busy} saved={saved && !dirty} disabled={!dirty || !hasBuiltIn} onClick={save}>
+        <SubmitButton busy={busy} saved={saved && !dirty} disabled={!dirty || selected.length === 0} onClick={save}>
           {saved && !dirty ? "Saved" : "Save roles"}
         </SubmitButton>
       </div>

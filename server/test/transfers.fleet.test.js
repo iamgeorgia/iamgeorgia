@@ -441,7 +441,7 @@ describe('the fleet and its drivers', { skip: dbAvailable ? false : 'Postgres is
             assert.equal(created.status, 201);
             const user = await prisma.user.findUnique({ where: { email } });
             tracker.user(user);
-            const { passwordHash } = await prisma.user.findFirst({ where: { role: 'ADMIN', passwordHash: { not: null } } });
+            const { passwordHash } = await prisma.user.findFirst({ where: { primaryRole: { key: 'ADMIN' }, passwordHash: { not: null } } });
             await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
             const driverCookie = (await signIn(app, email)).cookie;
             assert.equal((await request(app).get('/api/auth/me').set('Cookie', driverCookie)).status, 200);

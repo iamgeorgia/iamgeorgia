@@ -1,6 +1,7 @@
 import { Prisma } from '../../generated/prisma/client.ts';
 import { prisma } from '../../db/index.js';
-import { WITHHELD_FROM_SUPER_ADMIN, isPartnerCapability, resolveCapabilities } from '../../lib/permissions.js';
+import { BadRequestError } from '../../lib/errors.js';
+import { WITHHELD_FROM_SUPER_ADMIN, isPartnerCapability, resolveCapabilities, roleOf } from '../../lib/permissions.js';
 
 /**
  * What an account may do, loaded with the account.
@@ -12,8 +13,27 @@ import { WITHHELD_FROM_SUPER_ADMIN, isPartnerCapability, resolveCapabilities } f
  * every instance, with nothing to invalidate.
  */
 
+/**
+ * The id of the role to write as an account's primary, by key. A scalar
+ * rather than a nested `connect`, because the creates that need it also
+ * set `partnerId` as a scalar, and Prisma takes one style or the other.
+ */
+export const primaryRoleIdFor = async (client, key) => {
+    const role = await client.accessRole.findUnique({ where: { key }, select: { id: true } });
+
+    if (!role) {
+        throw new BadRequestError('No such role', { reason: 'ROLE_UNKNOWN', role: key });
+    }
+
+    return role.id;
+};
+
+/** The join that gives a loaded user its `role` label (see `roleOf`). */
+export const primaryRoleInclude = Object.freeze({ primaryRole: { select: { key: true, name: true } } });
+
 /** The include that fetches what `withAccess` needs. Spread beside `partner: true`. */
 export const accessInclude = Object.freeze({
+    ...primaryRoleInclude,
     roles: { include: { role: { include: { capabilities: true } } }, orderBy: { role: { sortOrder: 'asc' } } },
     capabilityOverrides: true
 });
@@ -30,6 +50,7 @@ export const withAccess = (user, now = new Date()) => {
 
     return {
         ...rest,
+        role: roleOf(user),
         capabilities: resolveCapabilities({ roles, overrides: capabilityOverrides }, now),
         roleKeys: roles.map((held) => held.role.key),
         access: {

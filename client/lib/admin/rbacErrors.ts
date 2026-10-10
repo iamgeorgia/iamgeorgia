@@ -20,10 +20,6 @@ export function describeRbacError(error: unknown): string {
       : error.message;
   }
 
-  if (code === "PRIMARY_ROLE_REQUIRED") {
-    return "Every account needs at least one built-in role as its primary role.";
-  }
-
   if (code === "SYSTEM_ROLE") return "A built-in role cannot be deleted.";
 
   if (code === "ROLE_IN_USE") {

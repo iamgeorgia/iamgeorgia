@@ -197,6 +197,14 @@ export const deleteRole = async (key, actor, req) =>
             throw new ConflictError('Take the role off its members first', { reason: 'ROLE_IN_USE', members: role._count.members });
         }
 
+        // The members count is the user_roles rows; the primary label points
+        // at the role too, and the foreign key would refuse the delete anyway.
+        const labelled = await tx.user.count({ where: { primaryRoleId: role.id } });
+
+        if (labelled > 0) {
+            throw new ConflictError('Take the role off its members first', { reason: 'ROLE_IN_USE', members: labelled });
+        }
+
         await recordAudit(tx, {
             action: 'ROLE_DELETED',
             actor,

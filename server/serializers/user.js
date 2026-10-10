@@ -1,4 +1,4 @@
-import { capabilitiesOf, resolveCapabilities } from '../lib/permissions.js';
+import { capabilitiesOf, resolveCapabilities, roleOf } from '../lib/permissions.js';
 import { toOverride } from './role.js';
 
 /**
@@ -11,7 +11,7 @@ import { toOverride } from './role.js';
 export const toUser = (user) => ({
     id: user.id,
     email: user.email,
-    role: user.role,
+    role: roleOf(user),
     firstName: user.firstName,
     lastName: user.lastName,
     fullName: [user.firstName, user.lastName].filter(Boolean).join(' '),
@@ -33,7 +33,7 @@ export const toUser = (user) => ({
  */
 export const toSessionUser = (user) => ({
     ...toUser(user),
-    roles: user.access?.roles ?? [{ key: user.role, name: user.role, isSystem: true }],
+    roles: user.access?.roles ?? [{ key: roleOf(user), name: user.primaryRole?.name ?? roleOf(user), isSystem: true }],
     capabilities: capabilitiesOf(user)
 });
 
@@ -74,7 +74,7 @@ export const toContact = (user) =>
               position: user.position ?? null,
               phone: user.phone ?? null,
               email: user.email,
-              role: user.role,
+              role: roleOf(user),
               isPrimaryContact: user.isPrimaryContact,
               isActive: user.isActive,
               /** True until they have set a password through their link. */

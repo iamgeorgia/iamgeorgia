@@ -55,9 +55,9 @@ describe('partner registration', { skip: dbAvailable ? false : 'Postgres is not 
         assert.ok(partner.submittedAt instanceof Date);
         assert.equal(partner.legalName, payload.company.legalName);
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma.user.findUnique({ where: { email }, include: { primaryRole: true } });
 
-        assert.equal(user.role, 'PARTNER_OWNER');
+        assert.equal(user.primaryRole.key, 'PARTNER_OWNER');
         assert.equal(user.isPrimaryContact, true);
         assert.equal(user.partnerId, partner.id);
         assert.ok(await verifyPassword(TEST_PASSWORD, user.passwordHash));

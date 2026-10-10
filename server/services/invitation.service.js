@@ -4,6 +4,7 @@ import { createToken, hashToken, expiresIn } from '../lib/tokens.js';
 import { hashPassword } from '../lib/password.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { nextPartnerReference } from '../lib/reference.js';
+import { primaryRoleIdFor } from './rbac/access.js';
 import { NotFoundError, ConflictError, GoneError, ForbiddenError, BadRequestError } from '../lib/errors.js';
 
 /**
@@ -200,7 +201,7 @@ export const acceptInvitation = async (token, payload, req) => {
             data: {
                 email: contact.email,
                 passwordHash,
-                role: 'PARTNER_OWNER',
+                primaryRoleId: await primaryRoleIdFor(tx, 'PARTNER_OWNER'),
                 firstName: contact.firstName,
                 lastName: contact.lastName,
                 position: contact.position ?? null,

@@ -8,13 +8,17 @@ import { dateOnlyToUtc } from '../lib/time.js';
 import { canViewFinancial } from '../serializers/partner.js';
 import { companyFullSchema } from '../validation/partner.js';
 import { issueAuthToken, revokePartnerSessions, revokeUserSessions } from './auth.service.js';
+import { primaryRoleIdFor, primaryRoleInclude } from './rbac/access.js';
 import { issueInvitation, revokeOpenInvitations } from './invitation.service.js';
 import { issueSignedUrl, uploadFile } from './media/upload.service.js';
 
 const CONTACT_ORDER = [{ isPrimaryContact: 'desc' }, { createdAt: 'asc' }];
 
+/** The company's people, primary contact first, each with its role label. */
+const USERS = { orderBy: CONTACT_ORDER, include: primaryRoleInclude };
+
 const detailInclude = (withFinancial) => ({
-    users: { orderBy: CONTACT_ORDER },
+    users: USERS,
     approvedByUser: true,
     rejectedByUser: true,
     suspendedByUser: true,
@@ -184,7 +188,7 @@ export const listPartners = async ({ status, kind, country, q, page, pageSize })
         prisma.partner.count({ where }),
         prisma.partner.findMany({
             where,
-            include: { users: { orderBy: CONTACT_ORDER } },
+            include: { users: USERS },
             orderBy: [{ createdAt: 'desc' }],
             skip: (page - 1) * pageSize,
             take: pageSize
@@ -301,7 +305,7 @@ export const adminCreatePartner = async (payload, admin, req) => {
         const user = await tx.user.create({
             data: {
                 email: contact.email,
-                role: 'PARTNER_OWNER',
+                primaryRoleId: await primaryRoleIdFor(tx, 'PARTNER_OWNER'),
                 firstName: contact.firstName,
                 lastName: contact.lastName,
                 position: contact.position ?? null,
@@ -398,7 +402,7 @@ export const transitionPartner = async (id, action, input, admin, req) => {
     const rule = TRANSITIONS[action];
     const partner = await prisma.partner.findUnique({
         where: { id },
-        include: { users: { orderBy: CONTACT_ORDER } }
+        include: { users: USERS }
     });
 
     if (!partner) {
@@ -578,7 +582,7 @@ export const transitionPartner = async (id, action, input, admin, req) => {
 export const deletePartner = async (id, { confirm }, admin, req) => {
     const partner = await prisma.partner.findUnique({
         where: { id },
-        include: { users: { orderBy: CONTACT_ORDER } }
+        include: { users: USERS }
     });
 
     if (!partner) {
@@ -697,7 +701,7 @@ export const updateFinancial = async (id, data, admin, req) => {
 export const reissueInvitation = async (id, admin, req) => {
     const partner = await prisma.partner.findUnique({
         where: { id },
-        include: { users: { orderBy: CONTACT_ORDER }, invitations: { orderBy: { createdAt: 'desc' }, take: 1 } }
+        include: { users: USERS, invitations: { orderBy: { createdAt: 'desc' }, take: 1 } }
     });
 
     if (!partner) {

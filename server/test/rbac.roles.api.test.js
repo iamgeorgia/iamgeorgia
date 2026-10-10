@@ -136,9 +136,11 @@ describe('roles, several per account, and overrides', { skip: dbAvailable ? fals
 
         const user = await makeAdmin(tracker, { role: 'TOUR_OPERATOR' });
 
+        // A panel-made role alone can be the primary: the label is just a label.
         const onlyCustom = await asSuper('put', `/api/admin/users/${user.id}/roles`, { roles: [key] });
-        assert.equal(onlyCustom.status, 409);
-        assert.equal(onlyCustom.body.error.details.reason, 'PRIMARY_ROLE_REQUIRED');
+        assert.equal(onlyCustom.status, 200, JSON.stringify(onlyCustom.body));
+        assert.equal(onlyCustom.body.role, key);
+        assert.deepEqual(onlyCustom.body.roles.map((role) => role.key), [key]);
 
         const set = await asSuper('put', `/api/admin/users/${user.id}/roles`, { roles: ['TOUR_OPERATOR', key] });
         assert.equal(set.status, 200, JSON.stringify(set.body));

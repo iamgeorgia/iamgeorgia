@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { validate } from '../middleware/validate.js';
 import { authenticate, requireCapability } from '../middleware/auth.js';
 import { inviteLimiter } from '../middleware/rateLimit.js';
-import { CAPABILITIES } from '../lib/permissions.js';
+import { CAPABILITIES, roleOf } from '../lib/permissions.js';
 import {
     inviteStaffSchema,
     changeStaffRoleSchema,
@@ -57,7 +57,7 @@ const ROLE_LABELS = {
 const activation = (issued) =>
     deliverActivation(issued, {
         template: 'staffAccountActivation',
-        data: { roleLabel: ROLE_LABELS[issued.user.role] ?? issued.user.role }
+        data: { roleLabel: ROLE_LABELS[roleOf(issued.user)] ?? issued.user.primaryRole?.name ?? roleOf(issued.user) }
     });
 
 adminUserRoutes.get('/', validate({ query: staffQuerySchema }), async (req, res) => {

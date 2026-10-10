@@ -6,7 +6,7 @@ import type { HelpArticle } from "../../types";
  * `/admin/users/[id]` (`UserAccess`). Encodes: the `roles.manage` capability
  * (super admins); the server's refusals in `server/services/rbac/` — a built-in
  * role cannot be deleted, SUPER_ADMIN and DRIVER capabilities are fixed, a role
- * in use cannot be deleted, an account needs one built-in role, and nobody
+ * in use cannot be deleted, an account needs at least one role, and nobody
  * hands out a capability they do not hold themselves (ROLE_ABOVE_CEILING).
  */
 export const article = {
@@ -71,7 +71,7 @@ export const article = {
     },
     {
       type: "paragraph",
-      text: "Every account needs **at least one built-in role** as its primary role. Custom roles add to it. The page below the roles shows **What this account can do**, the full list that results.",
+      text: "An account holds **one or more roles**; the first built-in one is the label the lists show, or the custom role when it holds no built-in one. The page below the roles shows **What this account can do**, the full list that results.",
     },
     { type: "heading", id: "overrides", text: "Overrides" },
     {

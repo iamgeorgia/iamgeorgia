@@ -175,10 +175,10 @@ describe('partner self-service settings', { skip: dbAvailable ? false : 'Postgre
 
         assert.equal(res.status, 200);
 
-        const stored = await prisma.user.findUnique({ where: { id: user.id } });
+        const stored = await prisma.user.findUnique({ where: { id: user.id }, include: { primaryRole: true } });
 
         assert.equal(stored.firstName, 'Nino', 'the permitted field did change');
-        assert.equal(stored.role, 'PARTNER_OWNER');
+        assert.equal(stored.primaryRole.key, 'PARTNER_OWNER');
         assert.equal(stored.email, user.email);
         assert.equal(stored.partnerId, partner.id);
         assert.equal(stored.isPrimaryContact, true);

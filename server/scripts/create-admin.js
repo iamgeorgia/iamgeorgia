@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import { prisma, disconnect } from '../db/index.js';
 import { hashPassword } from '../lib/password.js';
+import { primaryRoleIdFor } from '../services/rbac/access.js';
 import { emailField } from '../validation/normalize.js';
 
 /**
@@ -44,15 +45,15 @@ const run = async () => {
     }
 
     const email = parsed.data;
-    const existing = await prisma.user.findUnique({ where: { email } });
+    const existing = await prisma.user.findUnique({ where: { email }, include: { primaryRole: { select: { key: true } } } });
 
     if (existing) {
         if (ifMissing) {
-            console.log(`An account already exists for ${email} (role ${existing.role}) — left as is.`);
+            console.log(`An account already exists for ${email} (role ${existing.primaryRole.key}) — left as is.`);
             return;
         }
 
-        console.error(`An account already exists for ${email} (role ${existing.role}).`);
+        console.error(`An account already exists for ${email} (role ${existing.primaryRole.key}).`);
         process.exitCode = 1;
         return;
     }
@@ -66,9 +67,9 @@ const run = async () => {
             email,
             firstName,
             lastName,
-            role: 'SUPER_ADMIN',
+            primaryRoleId: await primaryRoleIdFor(prisma, 'SUPER_ADMIN'),
             passwordHash: await hashPassword(password),
-            // Admins carry no partnerId; the CHECK constraint on users enforces it.
+            // Admins carry no partnerId; the side trigger on users enforces it.
             partnerId: null
         }
     });

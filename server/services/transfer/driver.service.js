@@ -4,6 +4,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { ACTIVE_ASSIGNMENT_STATUSES, LIVE_LEG_STATUSES } from '../../lib/transfer/machines.js';
 import { issueAuthToken, revokeUserSessions } from '../auth.service.js';
+import { primaryRoleIdFor, primaryRoleInclude } from '../rbac/access.js';
 import { createDocumentLibrary, documentInclude } from '../media/documentLibrary.js';
 import { findOrphanedAssets, removeOrphanedObjects } from '../media/orphans.js';
 
@@ -24,7 +25,7 @@ export const driverInclude = {
     provider: { select: { id: true, slug: true, name: true } },
     photo: imageWithVariants,
     homeBasePoint: { select: { id: true, slug: true, name: true } },
-    user: true,
+    user: { include: primaryRoleInclude },
     verifiedByUser: true,
     vehicles: {
         orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
@@ -373,7 +374,7 @@ export const createDriverAccount = (id, { email }, actor, req) =>
         const user = await tx.user.create({
             data: {
                 email,
-                role: 'DRIVER',
+                primaryRoleId: await primaryRoleIdFor(tx, 'DRIVER'),
                 firstName: driver.firstName,
                 lastName: driver.lastName,
                 phone: driver.phone,

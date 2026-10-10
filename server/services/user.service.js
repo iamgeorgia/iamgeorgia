@@ -4,10 +4,9 @@ import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { sendMailQuietly, activationUrl } from '../lib/mailer/index.js';
 import { lockKey } from '../lib/locks.js';
-import { CAPABILITIES, isPartnerCapability } from '../lib/permissions.js';
-import { STAFF_ROLES } from '../validation/user.js';
+import { CAPABILITIES, isPartnerCapability, roleOf } from '../lib/permissions.js';
 import { issueAuthToken, revokeUserSessions } from './auth.service.js';
-import { accessInclude } from './rbac/access.js';
+import { accessInclude, primaryRoleIdFor, primaryRoleInclude } from './rbac/access.js';
 import { assertDominates, assertMayManage, assertMayManageCapabilities, grantableFor, isProtected } from './rbac/grant.service.js';
 import { capabilitiesOfRoles } from './rbac/role.service.js';
 
@@ -61,8 +60,10 @@ const assertNotSelf = (user, actor) => {
 /** INVITED until a password is set; DEACTIVATED wins over that if both apply. */
 export const statusOf = (user) => (!user.isActive ? 'DEACTIVATED' : !user.passwordHash ? 'INVITED' : 'ACTIVE');
 
+// The platform scope is every platform account but the drivers, who are
+// managed with their profiles under the fleet — a panel-made role included.
 const scopeWhere = (scope) =>
-    scope.partnerId ? { partnerId: scope.partnerId } : { partnerId: null, role: { in: STAFF_ROLES } };
+    scope.partnerId ? { partnerId: scope.partnerId } : { partnerId: null, primaryRole: { key: { not: 'DRIVER' } } };
 
 const actorRef = { select: { id: true, email: true, firstName: true, lastName: true } };
 
@@ -93,7 +94,9 @@ export const findUserOr404 = (id, scope) => findInTx(prisma, id, scope);
  * the net under the ceilings, for the day one of them is loosened.
  */
 const assertNotLast = async (tx, user) => {
-    if (user.role !== 'SUPER_ADMIN' && user.role !== 'PARTNER_OWNER') {
+    const role = roleOf(user);
+
+    if (role !== 'SUPER_ADMIN' && role !== 'PARTNER_OWNER') {
         return;
     }
 
@@ -102,10 +105,11 @@ const assertNotLast = async (tx, user) => {
     // leave none.
     await lockKey(tx, `rbac:last:${user.partnerId ?? 'platform'}`);
 
+    // Cover is anyone who holds the role, by any of their roles.
     const others = await tx.user.count({
         where: {
             id: { not: user.id },
-            role: user.role,
+            roles: { some: { role: { key: role } } },
             partnerId: user.partnerId,
             isActive: true,
             passwordHash: { not: null }
@@ -114,10 +118,10 @@ const assertNotLast = async (tx, user) => {
 
     if (others === 0) {
         throw new ConflictError(
-            user.role === 'SUPER_ADMIN'
+            role === 'SUPER_ADMIN'
                 ? 'This is the last super admin who can sign in'
                 : "This is the partner's last owner who can sign in",
-            { reason: user.role === 'SUPER_ADMIN' ? 'LAST_SUPER_ADMIN' : 'LAST_PARTNER_OWNER' }
+            { reason: role === 'SUPER_ADMIN' ? 'LAST_SUPER_ADMIN' : 'LAST_PARTNER_OWNER' }
         );
     }
 };
@@ -132,7 +136,7 @@ const statusWhere = (status) => {
 export const listUsers = async (scope, { role, status, q, page, pageSize }) => {
     const where = {
         ...scopeWhere(scope),
-        ...(role ? { role: { in: role } } : {}),
+        ...(role ? { primaryRole: { key: { in: role } } } : {}),
         ...statusWhere(status),
         ...(q
             ? {
@@ -194,7 +198,7 @@ export const inviteUser = (scope, { email, firstName, lastName, role, position, 
                 lastName,
                 position: position ?? null,
                 phone: phone ?? null,
-                role,
+                primaryRoleId: await primaryRoleIdFor(tx, role),
                 partnerId: scope.partnerId ?? null,
                 isActive: true,
                 invitedByUserId: actor.id,
@@ -275,11 +279,9 @@ export const setUserRoles = (scope, id, { roles: roleKeys }, actor, req) =>
         await assertMayManage(tx, actor, user.id);
 
         const roles = await assertMayAssign(tx, actor, roleKeys, sideOfScope(scope));
-        const primary = roles.filter((role) => role.isSystem).sort((a, b) => a.sortOrder - b.sortOrder)[0];
-
-        if (!primary) {
-            throw new ConflictError('An account needs one of the built-in roles', { reason: 'PRIMARY_ROLE_REQUIRED' });
-        }
+        // The primary is a built-in role when the set has one, the first by
+        // order; a set of panel-made roles alone makes its first the primary.
+        const primary = [...roles].sort((a, b) => Number(b.isSystem) - Number(a.isSystem) || a.sortOrder - b.sortOrder)[0];
 
         const current = user.roles.map((held) => held.role.key).sort();
         const next = [...roleKeys].sort();
@@ -288,13 +290,15 @@ export const setUserRoles = (scope, id, { roles: roleKeys }, actor, req) =>
             return user;
         }
 
-        if (['SUPER_ADMIN', 'PARTNER_OWNER'].includes(user.role) && !next.includes(user.role)) {
+        const held = roleOf(user);
+
+        if (['SUPER_ADMIN', 'PARTNER_OWNER'].includes(held) && !next.includes(held)) {
             await assertNotLast(tx, user);
         }
 
         // The primary first: the trigger swaps its row. Then the rest.
-        if (user.role !== primary.key) {
-            await tx.user.update({ where: { id }, data: { role: primary.key } });
+        if (held !== primary.key) {
+            await tx.user.update({ where: { id }, data: { primaryRoleId: primary.id } });
         }
 
         await tx.userRole.deleteMany({ where: { userId: id, role: { key: { notIn: next } } } });
@@ -528,8 +532,8 @@ export const deleteUser = (scope, id, { confirm }, actor, req) =>
             actor,
             entityType: AUDIT_ENTITY.user,
             entityId: id,
-            summary: `Deleted ${user.email} (${user.role})`,
-            metadata: { email: user.email, role: user.role, partnerId: user.partnerId, status: statusOf(user) },
+            summary: `Deleted ${user.email} (${roleOf(user)})`,
+            metadata: { email: user.email, role: roleOf(user), partnerId: user.partnerId, status: statusOf(user) },
             req
         });
 
@@ -560,7 +564,7 @@ export const setPrimaryContact = (scope, id, actor, req) =>
 
         const previous = await tx.user.findFirst({
             where: { partnerId: scope.partnerId, isPrimaryContact: true },
-            select: { id: true, email: true, role: true }
+            select: { id: true, email: true, ...primaryRoleInclude }
         });
 
         if (previous) {

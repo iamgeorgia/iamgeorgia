@@ -160,3 +160,20 @@ A (4–5, now) → [Phase 3 commit] → B (1.5) → C (5–6) → D (7–8) → 
 2. Who should hold `*.execute` to bypass approvals? (default nobody; grant by override with reason)
 3. Contract = uploaded signed PDF (default) vs e-signature.
 4. Grandfather existing APPROVED partners (default yes).
+
+## Status — 2026-10-11
+
+| Phase | Server | Client | Commits |
+|---|---|---|---|
+| A security fixes | done | done | `8514047` |
+| B finance integrity | done | — | `f6fe8b4` |
+| C roles as data | done | — | `66b7df5` |
+| D rename, split, role editor | done | done | `19a16d0`, `0604a37`, `c2a3102` |
+| E approval requests | done | done | `ce8d03e`, `dcab2ab` |
+| F commission, penalties, credit | done | done | `b7bb47d`, `2bbecc2` |
+| G contract, terms, statuses, product access | done | done | `e1516a8`, `13ae557` |
+| H drop `users.role` | done (primary role is a reference into `roles`; any role may be primary) | labels only | — |
+
+Deviations from the plan, all deliberate: a REJECTED partner may still sign in (the portal explains the decision; BLOCKED and TERMINATED are refused at sign-in); the terms gate is enforced at portal use rather than at approval, so an admin-created company is approved on its contract and accepts the terms on its first visit; approval requests for penalties use the kind `PENALTY_OVERRIDE` (no separate `WRITE_OFF` kind — waivers are `PAYABLE_WAIVE` / `RECEIVABLE_WAIVE`); product access gates a package as a package, not its components.
+
+Left: Postman folders for the new routes (the collection is being edited by the notifications work); the finance help articles for approvals and credit are written but registered in a file that work also edits; the admin shell's role labels still come from a client table rather than `roles.name`.

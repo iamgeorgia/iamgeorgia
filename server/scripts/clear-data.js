@@ -159,7 +159,7 @@ const defineScopes = (keys, running) => ({
             { table: 'transfer_assignments', where: `t.driver_id IN (${DEMO_DRIVERS}) OR t.fleet_vehicle_id IN (${DEMO_CARS})` },
             { table: 'transfer_drivers', where: `t.id IN (${DEMO_DRIVERS})` },
             { table: 'transfer_fleet_vehicles', where: `t.id IN (${DEMO_CARS})` },
-            { table: 'users', where: `t.role::text = 'DRIVER' AND t.email LIKE ${lit(`%${DEMO_EMAIL_DOMAIN}`)}` },
+            { table: 'users', where: `t.primary_role_id = (SELECT id FROM roles WHERE key = 'DRIVER') AND t.email LIKE ${lit(`%${DEMO_EMAIL_DOMAIN}`)}` },
             {
                 // The house provider goes only once nothing real is left under it.
                 table: 'transfer_providers',

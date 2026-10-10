@@ -30,6 +30,7 @@ import sharp from 'sharp';
 
 import { fleetGallery, normalisePlate } from '../services/transfer/fleet.service.js';
 import { uploadFile } from '../services/media/upload.service.js';
+import { primaryRoleIdFor } from '../services/rbac/access.js';
 import { assignDriver } from '../services/transfer/dispatch.service.js';
 
 const DEMO_EMAIL_DOMAIN = '@demo.iamgeorgia.test';
@@ -240,7 +241,7 @@ const seed = async () => {
             where: { email },
             create: {
                 email,
-                role: 'DRIVER',
+                primaryRoleId: await primaryRoleIdFor(prisma, 'DRIVER'),
                 firstName: driver.firstName,
                 lastName: driver.lastName,
                 phone: profileData.phone,
@@ -379,7 +380,7 @@ const clear = async () => {
     await prisma.transferDriver.deleteMany({ where: { id: { in: driverIds } } });
     await prisma.transferFleetVehicle.deleteMany({ where: { id: { in: carIds } } });
     await prisma.notification.deleteMany({ where: { recipientUser: { email: { endsWith: DEMO_EMAIL_DOMAIN } } } });
-    const users = await prisma.user.deleteMany({ where: { email: { endsWith: DEMO_EMAIL_DOMAIN }, role: 'DRIVER' } });
+    const users = await prisma.user.deleteMany({ where: { email: { endsWith: DEMO_EMAIL_DOMAIN }, primaryRole: { key: 'DRIVER' } } });
 
     // The bytes stay in storage, as every soft delete leaves them; the rows
     // stop being listed. Nothing references them any more: the gallery rows

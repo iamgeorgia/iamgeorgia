@@ -3129,33 +3129,6 @@ model AmenityTranslation {
 // a database dump cannot be replayed as a live link.
 // ---------------------------------------------------------------------------
 
-enum Role {
-  SUPER_ADMIN
-  ADMIN
-  /// Platform staff who read everything, including margins, and write nothing.
-  MANAGEMENT
-  /// Platform staff who run the operation: bookings, tours, the fleet; never
-  /// a hotel price, never a margin.
-  TOUR_OPERATOR
-  /// Platform staff who keep the books: payments, refunds, terms, reports.
-  ACCOUNTANT
-  /// Platform staff who confirm the day's payments and watch the debts;
-  /// narrower than the accountant.
-  FINANCE_OPERATOR
-  /// Transfer operations staff: dispatches drivers and cars, never touches
-  /// fares, partners or margins. Platform-side (no partnerId), not an admin.
-  DISPATCHER
-  PARTNER_OWNER
-  PARTNER_ADMIN
-  PARTNER_AGENT
-  PARTNER_FINANCE
-  /// A transfer driver. Platform-side (no partnerId): affiliation to a supplier
-  /// lives on the TransferDriver profile, so partner scoping fails closed.
-  DRIVER
-
-  @@map("role")
-}
-
 enum PartnerStatus {
   INVITED
   REGISTRATION_IN_PROGRESS
@@ -3412,7 +3385,11 @@ model User {
   email        String  @unique
   /// Null until the invitee or invited admin sets one through an activation link.
   passwordHash String? @map("password_hash")
-  role         Role
+  /// The role the panels label the account with; one of the roles it holds
+  /// (a trigger keeps the `user_roles` row in step). Never read for
+  /// authorization: that is the resolved capability set.
+  primaryRoleId String     @map("primary_role_id")
+  primaryRole   AccessRole @relation("UserPrimaryRole", fields: [primaryRoleId], references: [id], onDelete: Restrict)
 
   firstName String  @map("first_name")
   lastName  String  @map("last_name")
@@ -3495,7 +3472,7 @@ model User {
   approvalsDecided    ApprovalRequest[]        @relation("ApprovalDecidedBy")
 
   @@index([partnerId])
-  @@index([role])
+  @@index([primaryRoleId])
   @@map("users")
 }
 
@@ -5344,6 +5321,7 @@ model AccessRole {
 
   capabilities RoleCapability[]
   members      UserRole[]
+  primaryOf    User[]           @relation("UserPrimaryRole")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

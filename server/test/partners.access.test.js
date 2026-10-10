@@ -241,7 +241,7 @@ describe('privilege boundaries', { skip: dbAvailable ? false : 'Postgres is not 
         const res = await request(app).patch('/api/partner/profile').set('Cookie', cookie).send({ role: 'ADMIN' });
 
         assert.equal(res.status, 200);
-        assert.equal((await prisma.user.findUnique({ where: { id: owner.id } })).role, 'PARTNER_OWNER');
+        assert.equal((await prisma.user.findUnique({ where: { id: owner.id }, include: { primaryRole: true } })).primaryRole.key, 'PARTNER_OWNER');
     });
 });
 

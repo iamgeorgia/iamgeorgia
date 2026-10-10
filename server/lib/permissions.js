@@ -256,6 +256,14 @@ export const ROLE_CAPABILITIES = Object.freeze(
 /** Every system role, in the order the enum declares them. */
 export const ROLES = Object.freeze(Object.keys(DEFAULT_ROLE_LISTS));
 
+/**
+ * An account's primary role key: the label the panels show and the one the
+ * older single-role screens edit. Resolved on a session (`withAccess`),
+ * joined as `primaryRole` on a loaded row, or given outright on a viewer
+ * built by hand.
+ */
+export const roleOf = (user) => user?.role ?? user?.primaryRole?.key ?? null;
+
 /** Platform-side roles: no partnerId, by the database CHECK. */
 export const PLATFORM_ROLES = Object.freeze(ROLES.filter((role) => !role.startsWith('PARTNER_')));
 

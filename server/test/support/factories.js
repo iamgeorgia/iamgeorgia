@@ -5,6 +5,7 @@ import request from 'supertest';
 import { config } from '../../config.js';
 import { prisma } from '../../db/index.js';
 import { hashPassword } from '../../lib/password.js';
+import { primaryRoleIdFor } from '../../services/rbac/access.js';
 import { createToken, hashToken, expiresIn } from '../../lib/tokens.js';
 import { nextPartnerReference, nextTransferBookingReference } from '../../lib/reference.js';
 
@@ -530,7 +531,7 @@ export const makeAdmin = async (tracker, { role = 'ADMIN', ...overrides } = {}) 
                 email: testEmail('admin'),
                 firstName: 'Ada',
                 lastName: 'Admin',
-                role,
+                primaryRoleId: await primaryRoleIdFor(prisma, role),
                 passwordHash: await testPasswordHash(),
                 ...overrides
             }
@@ -577,7 +578,7 @@ export const makePartnerUser = async (
                 lastName: 'Beridze',
                 position: 'Director',
                 phone: '+995555123456',
-                role,
+                primaryRoleId: await primaryRoleIdFor(prisma, role),
                 isPrimaryContact,
                 partnerId: partner.id,
                 passwordHash: withPassword ? await testPasswordHash() : null,
@@ -965,7 +966,7 @@ export const makeDriverUser = async (tracker, driver, { withPassword = true, ...
                 email: testEmail('driver'),
                 firstName: driver.firstName,
                 lastName: driver.lastName,
-                role: 'DRIVER',
+                primaryRoleId: await primaryRoleIdFor(prisma, 'DRIVER'),
                 passwordHash: withPassword ? await testPasswordHash() : null,
                 ...overrides
             }

@@ -998,8 +998,10 @@ What a role may do is a list of **capabilities**. The names live in code
 (`server/lib/permissions.js`: each is a check somewhere, and a row cannot
 invent a check); which of them a role carries is data (`roles`,
 `role_capabilities`, seeded from the code's defaults), which roles an account
-holds is data (`user_roles`; `users.role` stays as the primary role, kept in
-step by a trigger), and the odd capability granted to or denied an account by
+holds is data (`user_roles`; the one the panels label the account with is
+`users.primary_role_id`, a reference into `roles` that a trigger keeps among
+the `user_roles` rows — the old `role` enum column is gone, and the API's
+`role` field is that primary role's key), and the odd capability granted to or denied an account by
 name, with a reason and optionally a last day, is data too
 (`user_capability_overrides`). Every request resolves the account's
 capabilities from those rows — a super admin holds everything on the platform
@@ -1075,7 +1077,7 @@ as they would a stranger, with a 404. The identity on `/auth/me` and
 | POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `TOUR_OPERATOR` `ACCOUNTANT` `FINANCE_OPERATOR` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
 | GET | `/admin/users/:id` | `status` is derived: no password yet → `INVITED`; switched off → `DEACTIVATED`; else `ACTIVE`. Carries `invitedBy`, `invitedAt`, `deactivatedBy`, `deactivatedAt`, every role held (`roles`), the overrides written for the account (`overrides`) and what it resolves to (`capabilities`) |
 | GET | `/admin/users/:id/grantable` | What the caller may hand out: `{ roles, capabilities }` — the roles it dominates (never `DRIVER`) and the capabilities it holds that may be written by name |
-| PUT | `/admin/users/:id/roles` | `{ roles: [key…] }`, the whole set the account holds afterwards. One must be a built-in role (409 `PRIMARY_ROLE_REQUIRED`): it becomes `role`, the primary. Every role must be on the platform side (400 `ROLE_WRONG_SIDE`) and within the caller's own capabilities (403 `ROLE_ABOVE_CEILING` with `details.missing`). Ends the account's sessions |
+| PUT | `/admin/users/:id/roles` | `{ roles: [key…] }`, the whole set the account holds afterwards. The first by order (a built-in role before a panel-made one) becomes `role`, the primary. Every role must be on the platform side (400 `ROLE_WRONG_SIDE`) and within the caller's own capabilities (403 `ROLE_ABOVE_CEILING` with `details.missing`). Ends the account's sessions |
 | PATCH | `/admin/users/:id/role` | `{ role }`: the single-role form of the above |
 | POST | `/admin/users/:id/overrides` | `{ capability, effect: GRANT \| DENY, reason, expiresAt? }`. A grant needs the caller to hold the capability; a denial needs only that it may manage the account; the capabilities that hand out everything else (`platform.admin`, `users.staff.manage`, `roles.manage`, `settings.write`, `partner.team.manage`) are never written this way (403 `PROTECTED_CAPABILITY`). One row per capability: writing it again replaces the reason and the last day. 201 with the account |
 | DELETE | `/admin/users/:id/overrides/:capability` | Takes the override back |

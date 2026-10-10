@@ -4,6 +4,7 @@ import request from 'supertest';
 
 import { createApp } from '../app.js';
 import { disconnect, prisma } from '../db/index.js';
+import { primaryRoleIdFor } from '../services/rbac/access.js';
 import { errorHandler, sqlStateOf } from '../middleware/errors.js';
 import {
     createTracker,
@@ -45,9 +46,9 @@ describe('the users role constraint', { skip: dbAvailable ? false : 'Postgres is
         await disconnect();
     });
 
-    const attempt = (data) =>
+    const attempt = async ({ role, ...data }) =>
         prisma.user.create({
-            data: { email: testEmail('role'), firstName: 'Role', lastName: 'Check', ...data }
+            data: { email: testEmail('role'), firstName: 'Role', lastName: 'Check', primaryRoleId: await primaryRoleIdFor(prisma, role), ...data }
         });
 
     it('lets a driver and a dispatcher exist only on the platform side', async () => {
@@ -104,7 +105,7 @@ describe('who reaches what', { skip: dbAvailable ? false : 'Postgres is not reac
                     email: testEmail('driver-unlinked'),
                     firstName: 'No',
                     lastName: 'Profile',
-                    role: 'DRIVER',
+                    primaryRoleId: await primaryRoleIdFor(prisma, 'DRIVER'),
                     passwordHash: (await prisma.user.findUnique({ where: { id: driverUser.id } })).passwordHash
                 }
             })
