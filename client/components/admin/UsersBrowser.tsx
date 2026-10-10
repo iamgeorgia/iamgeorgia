@@ -8,7 +8,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Cell, DataTable, EmptyRow, Row, type Column } from "./DataTable";
 import { UserStatusBadge } from "./UserStatusBadge";
 import { formatPartnerDate, formatPartnerDateTime } from "@/lib/admin/partners";
-import { USER_STATUSES, roleLabel, staffRoleLabels, userStatusLabels } from "@/lib/admin/users";
+import { USER_STATUSES, rolesText, staffRoleLabels, userStatusLabels } from "@/lib/admin/users";
 import { useLocalePath } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 import { STAFF_ROLES, type ManagedUser } from "@/types/user";
@@ -197,7 +197,7 @@ export function UsersBrowser({ users, total, page, pageSize, totalPages }: Users
                   </Link>
                   <span className="block text-[0.75rem] text-muted">{user.email}</span>
                 </Cell>
-                <Cell>{roleLabel(user.role)}</Cell>
+                <Cell>{rolesText(user)}</Cell>
                 <Cell>
                   <UserStatusBadge status={user.status} />
                 </Cell>
@@ -246,7 +246,7 @@ export function UsersBrowser({ users, total, page, pageSize, totalPages }: Users
                   <UserStatusBadge status={user.status} />
                 </div>
                 <p className="mt-3 text-[0.8125rem] text-muted">
-                  {roleLabel(user.role)}
+                  {rolesText(user)}
                   {" · "}
                   {user.lastLoginAt
                     ? `last signed in ${formatPartnerDate(user.lastLoginAt)}`

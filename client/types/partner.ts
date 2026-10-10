@@ -18,6 +18,7 @@ export type Role =
   | "MANAGEMENT"
   | "TOUR_OPERATOR"
   | "ACCOUNTANT"
+  | "FINANCE_OPERATOR"
   | "DISPATCHER"
   | "PARTNER_OWNER"
   | "PARTNER_ADMIN"

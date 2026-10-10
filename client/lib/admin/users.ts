@@ -17,6 +17,7 @@ export const staffRoleLabels: Record<StaffRole, string> = {
   MANAGEMENT: "Management",
   TOUR_OPERATOR: "Tour operator",
   ACCOUNTANT: "Accountant",
+  FINANCE_OPERATOR: "Finance operator",
   DISPATCHER: "Dispatcher",
 };
 
@@ -27,12 +28,17 @@ export const staffRoleDescriptions: Record<StaffRole, string> = {
   MANAGEMENT: "Reads everything, margins included, and changes nothing.",
   TOUR_OPERATOR: "Works the bookings — confirm, decline, cancel — without seeing margins.",
   ACCOUNTANT: "Keeps the books: payments, refunds, write-offs and terms; reads bookings, partners, bank details and margins.",
+  FINANCE_OPERATOR: "Confirms the day's payments and watches what is owed; narrower than the accountant.",
   DISPATCHER: "Fleet, drivers and dispatch only.",
 };
 
 /** A role the list may name that is not a staff role still gets a word. */
 export const roleLabel = (role: Role): string =>
   role in staffRoleLabels ? staffRoleLabels[role as StaffRole] : role;
+
+/** Every role an account holds, by name, primary first; falls back to the primary role alone. */
+export const rolesText = (user: { role: Role; roles?: { name: string }[] }): string =>
+  user.roles?.length ? user.roles.map((held) => held.name).join(", ") : roleLabel(user.role);
 
 export const userStatusLabels: Record<UserStatus, string> = {
   INVITED: "Invited",

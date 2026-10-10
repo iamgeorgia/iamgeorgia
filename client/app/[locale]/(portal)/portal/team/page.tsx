@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { Container } from "@/components/ui/Container";
 import { TeamSection } from "@/components/partners/TeamSection";
-import { listUsers } from "@/lib/api/users";
+import { getGrantable, listUsers } from "@/lib/api/users";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
@@ -37,7 +37,10 @@ export default async function PortalTeamPage() {
     redirect(localePath(locale, "/portal/dashboard"));
   }
 
-  const team = await listUsers("team", { pageSize: 100 });
+  const [team, grantable] = await Promise.all([
+    listUsers("team", { pageSize: 100 }),
+    getGrantable("team"),
+  ]);
 
   return (
     <Container className="py-12 sm:py-16">
@@ -48,7 +51,7 @@ export default async function PortalTeamPage() {
           each of them can do, and switch off anyone who has left.
         </p>
 
-        <TeamSection members={team.data} total={team.total} viewer={session.user} />
+        <TeamSection members={team.data} total={team.total} viewer={session.user} grantable={grantable.roles} />
       </div>
     </Container>
   );

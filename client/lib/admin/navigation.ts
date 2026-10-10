@@ -25,6 +25,7 @@ import {
   Route,
   Radio,
   ScrollText,
+  ShieldCheck,
   Star,
   UserRound,
   UsersRound,
@@ -307,6 +308,7 @@ export const adminNavigation: AdminNavGroup[] = [
 ];
 
 /**
+      { label: "Roles", href: "/admin/roles", icon: ShieldCheck, capability: "roles.manage" },
  * Marks a nav item active, including its detail pages, so opening one booking
  * keeps "Hotel bookings" highlighted. `/admin` only matches exactly — otherwise
  * the overview would stay lit on every screen.

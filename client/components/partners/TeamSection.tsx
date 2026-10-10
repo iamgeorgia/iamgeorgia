@@ -34,18 +34,16 @@ import { useLocalePath } from "@/lib/i18n/provider";
 import { dateTimeFormat } from "@/lib/intl";
 import {
   TEAM_MAX,
-  assignableRoles,
-  invitableRoles,
   teamRoleDescriptions,
   teamRoleLabel,
   teamRoleLabels,
   teamStatusLabels,
-  withinTeamCeiling,
   type TeamRole,
 } from "@/lib/partners/team";
 import { cn } from "@/lib/utils";
 import type { SessionUser } from "@/types/auth";
-import type { Role } from "@/types/partner";
+import type { Role as RoleKey } from "@/types/partner";
+import type { Role } from "@/types/rbac";
 import type { IssuedActivation, ManagedUser, UserStatus } from "@/types/user";
 
 /**
@@ -99,10 +97,13 @@ export function TeamSection({
   members,
   total,
   viewer,
+  grantable,
 }: {
   members: ManagedUser[];
   total: number;
   viewer: SessionUser;
+  /** Roles the server will let the viewer hand out. Nothing else is offered. */
+  grantable: Role[];
 }) {
   // Outlives the row it is about: a deleted member's row is gone after the
   // refresh, so the confirmation has to be said from up here.
@@ -110,7 +111,7 @@ export function TeamSection({
 
   return (
     <div className="mt-10 space-y-6">
-      <InviteCard viewer={viewer} total={total} />
+      <InviteCard grantable={grantable} total={total} />
 
       <section className="rounded-sm border border-line bg-surface">
         <div className="p-5 sm:p-6">
@@ -140,6 +141,7 @@ export function TeamSection({
                 key={member.id}
                 member={member}
                 viewer={viewer}
+                grantable={grantable}
                 // The server checks the ceiling on both ends of a move: the
                 // member gaining the primary contact and the one losing it.
                 primaryHolderRole={members.find((other) => other.isPrimaryContact)?.role ?? null}
@@ -161,12 +163,15 @@ type FormStatus = { kind: "idle" } | { kind: "saving" } | { kind: "error"; messa
 
 const EMPTY_INVITE = { email: "", firstName: "", lastName: "" };
 
-function InviteCard({ viewer, total }: { viewer: SessionUser; total: number }) {
+function InviteCard({ grantable, total }: { grantable: Role[]; total: number }) {
   const router = useRouter();
-  const roles = invitableRoles(viewer.role);
+  // A second owner is a role change, never an invitation.
+  const roles = grantable.filter((option) => option.key !== "PARTNER_OWNER");
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState(EMPTY_INVITE);
-  const [role, setRole] = useState<TeamRole>(roles.includes("PARTNER_AGENT") ? "PARTNER_AGENT" : roles[0]);
+  const [role, setRole] = useState<string>(
+    (roles.find((option) => option.key === "PARTNER_AGENT") ?? roles[0])?.key ?? "",
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<FormStatus>({ kind: "idle" });
   const [issued, setIssued] = useState<IssuedActivation | null>(null);
@@ -303,29 +308,29 @@ function InviteCard({ viewer, total }: { viewer: SessionUser; total: number }) {
                 <div className="grid gap-2">
                   {roles.map((option) => (
                     <label
-                      key={option}
+                      key={option.key}
                       className={cn(
                         "flex cursor-pointer items-start gap-3 rounded-sm border p-3 transition-colors",
-                        role === option ? "border-ink bg-surface-soft" : "border-line hover:border-ink/40",
+                        role === option.key ? "border-ink bg-surface-soft" : "border-line hover:border-ink/40",
                       )}
                     >
                       <input
                         type="radio"
                         name="invite-role"
-                        value={option}
-                        checked={role === option}
+                        value={option.key}
+                        checked={role === option.key}
                         onChange={() => {
-                          setRole(option);
+                          setRole(option.key);
                           setStatus({ kind: "idle" });
                         }}
                         className="mt-0.5 accent-brand"
                       />
                       <span className="min-w-0">
                         <span className="block text-[0.875rem] font-medium text-ink">
-                          {teamRoleLabels[option]}
+                          {option.name}
                         </span>
                         <span className="block text-[0.8125rem] leading-relaxed text-muted">
-                          {teamRoleDescriptions[option]}
+                          {roleDescription(option)}
                         </span>
                       </span>
                     </label>
@@ -385,12 +390,14 @@ type Action =
 function MemberRow({
   member,
   viewer,
+  grantable,
   primaryHolderRole,
   onNotice,
 }: {
   member: ManagedUser;
   viewer: SessionUser;
-  primaryHolderRole: Role | null;
+  grantable: Role[];
+  primaryHolderRole: RoleKey | null;
   onNotice: (notice: string | null) => void;
 }) {
   const router = useRouter();
@@ -401,16 +408,20 @@ function MemberRow({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedActivation | null>(null);
-  const [role, setRole] = useState<TeamRole>(member.role as TeamRole);
+  const [role, setRole] = useState<string>(member.role);
   const [deactivating, setDeactivating] = useState(false);
   const [reason, setReason] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [confirmEmail, setConfirmEmail] = useState("");
 
   const self = member.id === viewer.id;
-  const manageable = !self && withinTeamCeiling(viewer.role, member.role);
-  const mayTakePrimary = primaryHolderRole === null || withinTeamCeiling(viewer.role, primaryHolderRole);
-  const roles = assignableRoles(viewer.role);
+  // The server lets you manage an account whose role you could hand out
+  // yourself, so the same list answers both questions.
+  const grantableKeys = new Set(grantable.map((option) => option.key));
+  const manageable = !self && grantableKeys.has(member.role);
+  const mayTakePrimary = primaryHolderRole === null || grantableKeys.has(primaryHolderRole);
+  const roles = grantable;
+  const chosen = grantable.find((option) => option.key === role);
   const busy = pending !== null;
   const { status } = member;
 
@@ -567,12 +578,12 @@ function MemberRow({
                         id={`${panelId}-role`}
                         value={role}
                         disabled={busy}
-                        onChange={(event) => setRole(event.target.value as TeamRole)}
+                        onChange={(event) => setRole(event.target.value)}
                         className={cn(FIELD, "border-line focus:border-ink sm:max-w-56")}
                       >
                         {roles.map((option) => (
-                          <option key={option} value={option}>
-                            {teamRoleLabels[option]}
+                          <option key={option.key} value={option.key}>
+                            {option.name}
                           </option>
                         ))}
                       </select>
@@ -583,7 +594,7 @@ function MemberRow({
                           run(
                             "role",
                             () => changeUserRole("team", member.id, role),
-                            `${member.firstName}'s role is now ${teamRoleLabels[role]}. They have been signed out and will see it when they sign in again.`,
+                            `${member.firstName}'s role is now ${chosen?.name ?? role}. They have been signed out and will see it when they sign in again.`,
                           )
                         }
                         className={cn(SECONDARY, "h-11")}
@@ -593,7 +604,7 @@ function MemberRow({
                       </button>
                     </div>
                     <p className="mt-1.5 text-[0.75rem] leading-relaxed text-muted">
-                      {teamRoleDescriptions[role]} Changing it signs them out everywhere.
+                      {chosen ? roleDescription(chosen) : ""} Changing it signs them out everywhere.
                     </p>
                   </div>
 
@@ -920,6 +931,10 @@ function IssuedLink({
     </div>
   );
 }
+
+/** The server's description of a role, or ours for a built-in one it left blank. */
+const roleDescription = (role: Role): string =>
+  role.description ?? (role.key in teamRoleDescriptions ? teamRoleDescriptions[role.key as TeamRole] : "");
 
 // --- What the roles mean -----------------------------------------------------
 

@@ -1,13 +1,12 @@
 import type { Role } from "@/types/partner";
-import { TEAM_INVITE_ROLES, TEAM_ROLES, type UserStatus } from "@/types/user";
+import { TEAM_ROLES, type UserStatus } from "@/types/user";
 
 /**
  * Wording and rules for a partner's own team screen.
  *
- * The ceilings mirror `withinCeiling` in `server/services/user.service.js`:
- * an owner (the top rank) manages everyone including other owners, a partner
- * admin manages only the ranks below it. That mirroring keeps the screen from
- * offering what would answer 403; the server enforces it regardless.
+ * Which roles the viewer may hand out is not decided here: the page asks the
+ * server (`GET /api/partner/team/grantable`) and offers exactly that list, so
+ * the screen cannot drift from the rule the server enforces.
  */
 
 export type TeamRole = (typeof TEAM_ROLES)[number];
@@ -40,32 +39,3 @@ export const isTeamRole = (role: Role): role is TeamRole =>
   (TEAM_ROLES as readonly string[]).includes(role);
 
 export const teamRoleLabel = (role: Role): string => (isTeamRole(role) ? teamRoleLabels[role] : role);
-
-/**
- * Mirrors the server's rule, which is about capabilities: an account may give
- * a role only if it holds everything that role can do. A partner admin cannot
- * touch bank details, so a finance user sits beside it rather than below it.
- */
-const RANK: Record<TeamRole, number> = {
-  PARTNER_OWNER: 3,
-  PARTNER_ADMIN: 2,
-  PARTNER_FINANCE: 2,
-  PARTNER_AGENT: 1,
-};
-
-const TOP = 3;
-
-/** Whether an account holding `actor` may manage an account holding (or be given) `role`. */
-export const withinTeamCeiling = (actor: Role, role: Role): boolean => {
-  const own = isTeamRole(actor) ? RANK[actor] : 0;
-  const theirs = isTeamRole(role) ? RANK[role] : Infinity;
-  return own === TOP ? theirs <= own : theirs < own;
-};
-
-/** Roles the viewer may invite someone into. A second owner is a role change, never an invitation. */
-export const invitableRoles = (actor: Role): TeamRole[] =>
-  TEAM_INVITE_ROLES.filter((role) => withinTeamCeiling(actor, role));
-
-/** Roles the viewer may move a member into. */
-export const assignableRoles = (actor: Role): TeamRole[] =>
-  TEAM_ROLES.filter((role) => withinTeamCeiling(actor, role));

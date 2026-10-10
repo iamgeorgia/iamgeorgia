@@ -8,18 +8,22 @@ import {
   AdminPageHeader,
   AdminPanel,
 } from "@/components/admin/AdminPage";
+import { CapabilityList } from "@/components/admin/CapabilityChecklist";
 import { UserActions } from "@/components/admin/UserActions";
 import { UserDangerZone } from "@/components/admin/UserDangerZone";
+import { UserOverridesPanel, UserRolesPanel } from "@/components/admin/UserAccess";
 import { UserStatusBadge } from "@/components/admin/UserStatusBadge";
 import { formatPartnerDate, formatPartnerDateTime } from "@/lib/admin/partners";
-import { roleLabel, staffRoleDescriptions, userStatusHints, type StaffRole } from "@/lib/admin/users";
+import { rolesText, userStatusHints } from "@/lib/admin/users";
 import { ApiError } from "@/lib/api/client";
-import { getUser } from "@/lib/api/users";
+import { listCapabilities } from "@/lib/api/roles";
+import { getGrantable, getUser, getUserDetail } from "@/lib/api/users";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
 import { can } from "@/types/auth";
-import type { ManagedUser, UserActorRef } from "@/types/user";
+import type { UserDetail } from "@/types/rbac";
+import type { UserActorRef } from "@/types/user";
 
 export async function generateMetadata({
   params,
@@ -55,16 +59,28 @@ export default async function AdminUserPage({ params }: PageProps<"/[locale]/adm
   const { id } = await params;
   const { path } = await getI18n();
 
-  let user: ManagedUser;
+  let user: UserDetail;
 
   try {
-    user = await getUser("staff", id);
+    user = await getUserDetail(id);
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) notFound();
     throw error;
   }
 
   const isSelf = session?.user.id === user.id;
+
+  // Your own account is read-only here, so there is nothing to offer for it.
+  const [grantable, catalogue] = await Promise.all([
+    isSelf ? Promise.resolve({ roles: [], capabilities: [] }) : getGrantable("staff", id),
+    listCapabilities(),
+  ]);
+  const protectedCapabilities = new Set(catalogue.protected);
+  // A platform account is only ever denied platform capabilities; the partner
+  // ones belong to company teams.
+  const deniable = catalogue.data
+    .flatMap((group) => group.capabilities)
+    .filter((capability) => !capability.startsWith("partner.") && !protectedCapabilities.has(capability));
 
   return (
     <AdminContainer>
@@ -74,7 +90,7 @@ export default async function AdminUserPage({ params }: PageProps<"/[locale]/adm
 
       <AdminPageHeader
         title={user.fullName}
-        description={`${roleLabel(user.role)}${user.position ? ` · ${user.position}` : ""}${isSelf ? " · this is you" : ""}`}
+        description={`${rolesText(user)}${user.position ? ` · ${user.position}` : ""}${isSelf ? " · this is you" : ""}`}
         actions={<UserStatusBadge status={user.status} className="text-[0.8125rem]" />}
       />
 
@@ -92,11 +108,20 @@ export default async function AdminUserPage({ params }: PageProps<"/[locale]/adm
             />
           </AdminPanel>
 
-          <AdminPanel title="Role" description="What this account can see and change in the panel.">
-            <p className="text-[0.9375rem] font-medium text-ink">{roleLabel(user.role)}</p>
-            <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
-              {staffRoleDescriptions[user.role as StaffRole] ?? "Not a staff role."}
-            </p>
+          <UserRolesPanel user={user} assignable={grantable.roles} readOnly={isSelf} />
+
+          <UserOverridesPanel
+            user={user}
+            grantable={grantable.capabilities ?? []}
+            deniable={deniable}
+            readOnly={isSelf}
+          />
+
+          <AdminPanel
+            title="What this account can do"
+            description="Everything its roles give it, plus grants, minus anything withheld."
+          >
+            <CapabilityList capabilities={user.capabilities} />
           </AdminPanel>
         </div>
 

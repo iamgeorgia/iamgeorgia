@@ -32,7 +32,7 @@ export const article = {
     "super admin",
     "permissions",
   ],
-  related: ["pp-audit-log", "gs-roles", "gs-accounts", "rf-dangerous-actions"],
+  related: ["pp-audit-log", "pp-roles", "gs-roles", "gs-accounts", "rf-dangerous-actions"],
   blocks: [
     { type: "where", path: ["Sidebar", "People", "Staff"] },
     {
@@ -53,8 +53,9 @@ export const article = {
         ["Super admin", "Everything, including this screen and the audit log."],
         ["Administrator", "Runs everything except the staff accounts."],
         ["Management", "Reads everything, margins included, and changes nothing."],
-        ["Reservations", "Works the bookings — confirm, decline, cancel — without seeing margins."],
-        ["Finance", "Reads bookings, partners, bank details and margins."],
+        ["Tour operator", "Works the bookings — confirm, decline, cancel — without seeing margins."],
+        ["Accountant", "Keeps the books: payments, refunds, write-offs and terms; reads bookings, partners, bank details and margins."],
+        ["Finance operator", "Confirms the day's payments and watches what is owed; narrower than the accountant."],
         ["Dispatcher", "Fleet, drivers and dispatch only."],
       ],
     },
@@ -86,10 +87,10 @@ export const article = {
         { term: "Deactivated", description: "Switched off. Cannot sign in, and every session has ended. Can be reactivated." },
       ],
     },
-    { type: "heading", id: "changing-role", text: "Changing someone's role" },
+    { type: "heading", id: "changing-role", text: "Changing someone's roles" },
     {
       type: "paragraph",
-      text: "On their page, pick the new role and press **Change role to …**, then **Confirm change**. Every session they have open ends at once, so the new role takes effect the moment they sign in again. Use **Sign out everywhere** on its own when you only need to end their sessions — after a lost laptop, say — without changing anything else.",
+      text: "On their page, tick the roles they should hold in the **Roles** panel and press **Save roles**. Every session they have open ends at once, so the change takes effect the moment they sign in again. One-off exceptions go in the **Overrides** panel; the Roles and permissions article covers both. Use **Sign out everywhere** on its own when you only need to end their sessions — after a lost laptop, say — without changing anything else.",
     },
     { type: "heading", id: "deactivate-or-delete", text: "Deactivate or delete" },
     {

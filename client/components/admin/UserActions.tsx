@@ -2,25 +2,23 @@
 
 import { useRouter } from "next/navigation";
 import { AnimatePresence, m } from "framer-motion";
-import { Info, Loader2, LogOut, MailPlus, PauseCircle, RotateCcw, ShieldCheck } from "lucide-react";
+import { Info, Loader2, LogOut, MailPlus, PauseCircle, RotateCcw } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
 import { useAdminViewer } from "./AdminViewerContext";
 import { ActivationLinkNotice } from "./InviteUserModal";
-import { roleLabel, staffRoleDescriptions, staffRoleLabels, type StaffRole } from "@/lib/admin/users";
 import { describeError } from "@/lib/api/client";
 import {
-  changeUserRole,
   deactivateUser,
   reactivateUser,
   resendUserActivation,
   revokeUserSessions,
 } from "@/lib/api/users";
 import { cn } from "@/lib/utils";
-import { STAFF_ROLES, type IssuedActivation, type ManagedUser } from "@/types/user";
+import type { IssuedActivation, ManagedUser } from "@/types/user";
 
-type Pending = "role" | "deactivate" | "reactivate" | "revoke" | "resend" | null;
+type Pending = "deactivate" | "reactivate" | "revoke" | "resend" | null;
 
 /**
  * What a super admin can do to one staff account.
@@ -39,8 +37,6 @@ export function UserActions({ user }: { user: ManagedUser }) {
   const [message, setMessage] = useState<string | null>(null);
   const [issued, setIssued] = useState<IssuedActivation | null>(null);
 
-  const [role, setRole] = useState<StaffRole>(user.role as StaffRole);
-  const [confirmingRole, setConfirmingRole] = useState(false);
   const [deactivating, setDeactivating] = useState(false);
   const [reason, setReason] = useState("");
 
@@ -73,13 +69,6 @@ export function UserActions({ user }: { user: ManagedUser }) {
       setPending(null);
     }
   };
-
-  const handleRole = () =>
-    run("role", async () => {
-      await changeUserRole("staff", user.id, role);
-      setConfirmingRole(false);
-      return `Now ${staffRoleLabels[role]}. Their open sessions have ended; the new role applies when they sign in again.`;
-    });
 
   const handleDeactivate = () =>
     run("deactivate", async () => {
@@ -135,69 +124,7 @@ export function UserActions({ user }: { user: ManagedUser }) {
   return (
     <AdminPanel title="Actions">
       <div className="space-y-2.5">
-        {/* Role */}
-        <div>
-          <label htmlFor="user-role" className="mb-1.5 block text-[0.75rem] font-medium text-muted">
-            Role
-          </label>
-          <select
-            id="user-role"
-            value={role}
-            disabled={busy}
-            onChange={(event) => {
-              setRole(event.target.value as StaffRole);
-              setConfirmingRole(false);
-            }}
-            className={cn(field, "h-10")}
-          >
-            {STAFF_ROLES.map((value) => (
-              <option key={value} value={value}>
-                {staffRoleLabels[value]}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1.5 text-[0.75rem] leading-relaxed text-subtle">{staffRoleDescriptions[role]}</p>
-        </div>
-
-        {role !== user.role && !confirmingRole && (
-          <button type="button" disabled={busy} onClick={() => setConfirmingRole(true)} className={primary}>
-            <ShieldCheck size={15} aria-hidden />
-            Change role to {staffRoleLabels[role]}
-          </button>
-        )}
-
-        <AnimatePresence initial={false}>
-          {confirmingRole && role !== user.role && (
-            <m.div {...reveal}>
-              <div className="space-y-3 rounded-sm bg-surface-soft p-3">
-                <p className="text-[0.8125rem] leading-relaxed text-body">
-                  From {roleLabel(user.role)} to {staffRoleLabels[role]}. Every session{" "}
-                  {user.fullName} has open ends now, and the new role applies when they sign in
-                  again.
-                </p>
-                <div className="flex gap-2">
-                  <button type="button" disabled={busy} onClick={handleRole} className={primary}>
-                    {spinner("role")}
-                    Confirm change
-                  </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                      setConfirmingRole(false);
-                      setRole(user.role as StaffRole);
-                    }}
-                    className={secondary}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            </m.div>
-          )}
-        </AnimatePresence>
-
-        <div className="space-y-2.5 border-t border-line pt-4">
+        <div className="space-y-2.5">
           {user.status === "INVITED" && (
             <button type="button" disabled={busy} onClick={handleResend} className={secondary}>
               {spinner("resend") ?? <MailPlus size={15} aria-hidden />}
