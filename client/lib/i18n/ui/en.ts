@@ -2320,6 +2320,7 @@ export const en = {
       holdExpired: "Your hold ran out. Pick the room again and we will hold it afresh.",
       priceChanged: "The price for this room has changed. Go back and choose again.",
       notFound: "We could not find that.",
+      creditLimit: "Your company has reached its credit limit ({used} of {limit}). Settle open invoices or contact us.",
     },
     nav: {
       manage: "Your booking",

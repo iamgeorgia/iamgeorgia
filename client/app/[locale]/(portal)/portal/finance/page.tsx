@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import { CommissionTable, CreditCard } from "@/components/partners/FinanceCreditCommission";
 import { FinanceStatement, type StatementFilter } from "@/components/partners/FinanceStatement";
 import { Container } from "@/components/ui/Container";
 import { getPartnerStatement, getSupplierStatement } from "@/lib/api/finance";
+import { getOwnCommission, getOwnCredit } from "@/lib/api/finance-controls";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
 import { can, homePathFor } from "@/types/auth";
 import type { SettlementStatus, SupplierStatementPayable } from "@/types/finance";
+import type { CommissionReport, CreditPosition } from "@/types/finance-controls";
 import type { Paginated } from "@/types/partner";
 
 export const metadata: Metadata = { title: "Finance" };
@@ -63,7 +66,7 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
   const page = pageNumber(first(params.page));
   const supplierPage = pageNumber(first(params.spage));
 
-  const [statement, payables] = await Promise.all([
+  const [statement, payables, credit, commission] = await Promise.all([
     getPartnerStatement({ status: STATUSES[filter], page, pageSize: 25 }),
     // Only a supplier has rows here; for an agency the list is empty and the
     // section is left out. A failure costs the section, not the statement.
@@ -73,6 +76,15 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
         return null;
       },
     ),
+    // Like the supplier section, a failure costs the card, not the statement.
+    getOwnCredit().catch((error: unknown): CreditPosition | null => {
+      console.error("Credit position failed:", error);
+      return null;
+    }),
+    getOwnCommission().catch((error: unknown): CommissionReport | null => {
+      console.error("Commission report failed:", error);
+      return null;
+    }),
   ]);
 
   const current: Record<string, string | null> = {
@@ -103,6 +115,13 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
           What your company owes for its bookings and when each is due, with the payments we have
           received against them. Amounts are kept in the currency each booking was made in.
         </p>
+
+        {(credit || commission) && (
+          <div className="mt-10 space-y-6">
+            {credit && <CreditCard credit={credit} />}
+            {commission && <CommissionTable report={commission} />}
+          </div>
+        )}
 
         <FinanceStatement
           statement={statement}

@@ -3,8 +3,10 @@ import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { ReportAgeing, ReportMargin, ReportSummary } from "@/components/admin/finance/ReportTables";
+import { ReportCommission } from "@/components/admin/finance/CommissionTables";
 import { ReportsView, type ReportKind } from "@/components/admin/finance/ReportsView";
 import { getAgeingReport, getFinanceSummary, getMarginReport, reportCsvUrl } from "@/lib/api/finance";
+import { commissionCsvUrl, getCommissionReport } from "@/lib/api/finance-controls";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
@@ -56,7 +58,7 @@ function reportQueryFromParams(params: Params) {
   if (from && to && from > to) [from, to] = [to, from];
 
   return {
-    report: (report === "margin" || report === "ageing" ? report : "summary") as ReportKind,
+    report: (report === "margin" || report === "ageing" || report === "commission" ? report : "summary") as ReportKind,
     from,
     to,
     groupBy: (groupBy === "supplier" || groupBy === "partner" ? groupBy : "product") as MarginReport["groupBy"],
@@ -85,14 +87,22 @@ export default async function AdminFinanceReportsPage({
   }
 
   const query = reportQueryFromParams(await searchParams);
+  const canReadCommission = can(session, "finance.commission.read");
+  // A hand-typed commission link without the capability shows the summary instead.
+  if (query.report === "commission" && !canReadCommission) query.report = "summary";
+  // Commission is grouped by partner or product only; there is no supplier side to it.
+  const commissionGroup = query.groupBy === "partner" ? "partner" : "product";
   const period = { from: query.from, to: query.to };
 
-  const [summary, margin, ageing] = await Promise.all([
+  const [summary, margin, ageing, commission] = await Promise.all([
     getFinanceSummary(period),
     query.report === "margin"
       ? getMarginReport({ ...period, currency: query.currency, groupBy: query.groupBy })
       : null,
     query.report === "ageing" ? getAgeingReport({ side: query.side, currency: query.currency }) : null,
+    query.report === "commission"
+      ? getCommissionReport({ ...period, currency: query.currency, groupBy: commissionGroup })
+      : null,
   ]);
 
   // The picker offers every currency the platform holds money in, plus any a
@@ -102,12 +112,13 @@ export default async function AdminFinanceReportsPage({
       ...summary.currencies.map((row) => row.currency),
       ...(margin?.rows ?? []).map((row) => row.currency),
       ...(ageing?.rows ?? []).map((row) => row.currency),
+      ...(commission?.rows ?? []).map((row) => row.currency),
       ...(query.currency ? [query.currency] : []),
     ]),
   ].sort();
 
   // The period as the server applied it — the defaults when the address names none.
-  const shownPeriod = margin ?? summary;
+  const shownPeriod = margin ?? commission ?? summary;
   const periodDays = { from: tbilisiDay(shownPeriod.from), to: tbilisiDay(shownPeriod.to) };
 
   const csvQuery: Record<string, string | undefined> =
@@ -116,7 +127,11 @@ export default async function AdminFinanceReportsPage({
       : query.report === "margin"
         ? { ...period, currency: query.currency, groupBy: query.groupBy }
         : { ...period, currency: query.currency };
-  const csvHref = can(session, "finance.export") ? reportCsvUrl(query.report, csvQuery) : null;
+  const csvHref = !can(session, "finance.export")
+    ? null
+    : query.report === "commission"
+      ? commissionCsvUrl({ ...period, currency: query.currency, groupBy: commissionGroup })
+      : reportCsvUrl(query.report, csvQuery);
 
   return (
     <AdminContainer>
@@ -131,11 +146,12 @@ export default async function AdminFinanceReportsPage({
         to={query.to ?? ""}
         periodFrom={periodDays.from}
         periodTo={periodDays.to}
-        groupBy={query.groupBy}
+        groupBy={query.report === "commission" ? commissionGroup : query.groupBy}
         side={query.side}
         currency={query.currency ?? ""}
         currencies={currencies}
         csvHref={csvHref}
+        canReadCommission={canReadCommission}
       />
 
       <div className="mt-6">
@@ -147,6 +163,7 @@ export default async function AdminFinanceReportsPage({
         )}
         {margin && <ReportMargin report={margin} period={periodDays} />}
         {ageing && <ReportAgeing report={ageing} />}
+        {commission && <ReportCommission report={commission} period={periodDays} />}
       </div>
     </AdminContainer>
   );

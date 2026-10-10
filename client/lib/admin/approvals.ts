@@ -6,6 +6,7 @@ export const approvalKindLabels: Record<ApprovalKind, string> = {
   PAYABLE_WAIVE: "Supplier write-off",
   RECEIVABLE_DUE_DATE: "Due date change",
   RECEIVABLE_WAIVE: "Write-off",
+  PENALTY_OVERRIDE: "Cancellation charge change",
 };
 
 export const approvalKinds = Object.keys(approvalKindLabels) as ApprovalKind[];

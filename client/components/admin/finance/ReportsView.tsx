@@ -7,12 +7,13 @@ import { useTransition } from "react";
 import { cn } from "@/lib/utils";
 import type { AgeingReport, MarginReport } from "@/types/finance";
 
-export type ReportKind = "summary" | "margin" | "ageing";
+export type ReportKind = "summary" | "margin" | "ageing" | "commission";
 
 const REPORTS: { value: ReportKind; label: string }[] = [
   { value: "summary", label: "Summary" },
   { value: "margin", label: "Margin" },
   { value: "ageing", label: "Ageing" },
+  { value: "commission", label: "Commission" },
 ];
 
 const GROUPS: { value: MarginReport["groupBy"]; label: string }[] = [
@@ -46,6 +47,8 @@ interface ReportsViewProps {
   currencies: string[];
   /** Null when the viewer may not export. */
   csvHref: string | null;
+  /** Whether the viewer may read the commission report; its tab is left out otherwise. */
+  canReadCommission?: boolean;
 }
 
 /**
@@ -68,6 +71,7 @@ export function ReportsView({
   currency,
   currencies,
   csvHref,
+  canReadCommission = false,
 }: ReportsViewProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -96,7 +100,7 @@ export function ReportsView({
   return (
     <section className="mt-8 rounded-sm border border-line bg-surface p-4 sm:p-5" aria-busy={pending}>
       <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Report">
-        {REPORTS.map((option) => (
+        {REPORTS.filter((option) => option.value !== "commission" || canReadCommission).map((option) => (
           <button
             key={option.value}
             type="button"
@@ -168,7 +172,7 @@ export function ReportsView({
           </fieldset>
         )}
 
-        {report === "margin" && (
+        {(report === "margin" || report === "commission") && (
           <label className="flex min-w-0 flex-col gap-1.5">
             <span className={legendClass}>Group by</span>
             <select
@@ -176,7 +180,7 @@ export function ReportsView({
               onChange={(event) => apply({ groupBy: event.target.value === "product" ? null : event.target.value })}
               className={cn(field, "w-full min-w-0")}
             >
-              {GROUPS.map((option) => (
+              {GROUPS.filter((option) => report === "margin" || option.value !== "supplier").map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>

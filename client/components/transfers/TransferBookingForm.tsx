@@ -9,6 +9,7 @@ import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
 import { PlaceSearch, type PlaceSelection } from "@/components/geo/PlaceSearch";
 import { DriverChoice } from "@/components/transfers/DriverChoice";
 import { Button } from "@/components/ui/Button";
+import { creditLimitFigures } from "@/lib/booking/errors";
 import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { ApiError } from "@/lib/api/client";
@@ -197,6 +198,13 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
 
         if (error.status === 409 && reason === "PRICE_CHANGED") {
           setSubmitError(t.transfers.booking.priceChanged);
+          return;
+        }
+
+        const credit = creditLimitFigures(error);
+
+        if (credit) {
+          setSubmitError(fill(t.booking.errors.creditLimit, credit));
           return;
         }
 

@@ -14,6 +14,7 @@ import {
   Compass,
   ConciergeBell,
   ClipboardCheck,
+  Gavel,
   Globe2,
   ChartColumn,
   Handshake,
@@ -308,6 +309,8 @@ export const adminNavigation: AdminNavGroup[] = [
         badgeKey: "pendingApprovals",
         capability: ["finance.refunds.request", "finance.adjustments.request", "finance.refunds.approve", "finance.adjustments.approve"],
       },
+      // Cancellation charges as the policy set them and as finance changed them.
+      { label: "Penalties", href: "/admin/finance/penalties", icon: Gavel, capability: "finance.receivables.read" },
       { label: "Reports", href: "/admin/finance/reports", icon: ChartColumn, capability: "finance.reports.read" },
     ],
   },

@@ -1,4 +1,6 @@
 import { ApiError } from "@/lib/api/client";
+import { formatMoney } from "@/lib/money";
+import type { CreditLimitDetails } from "@/types/finance-controls";
 
 /**
  * What went wrong, in terms a traveller can act on.
@@ -19,6 +21,7 @@ export type BookingErrorKey =
   | "soldOut"
   | "holdExpired"
   | "priceChanged"
+  | "creditLimit"
   | "notFound";
 
 const reasonOf = (error: ApiError): string | null => {
@@ -33,6 +36,8 @@ export function bookingErrorKey(error: unknown): BookingErrorKey {
   if (!(error instanceof ApiError)) return "generic";
 
   switch (reasonOf(error)) {
+    case "CREDIT_LIMIT_EXCEEDED":
+      return "creditLimit";
     case "HOLD_EXPIRED":
       return "holdExpired";
     case "PRICE_CHANGED":
@@ -60,6 +65,22 @@ export function bookingErrorKey(error: unknown): BookingErrorKey {
   if (error.status === 404) return "notFound";
 
   return "generic";
+}
+
+/**
+ * The figures in the credit-limit refusal, ready to drop into the
+ * `booking.errors.creditLimit` sentence: what the company already owes and
+ * what its limit is. Null when the error is not that refusal.
+ */
+export function creditLimitFigures(error: unknown): { used: string; limit: string } | null {
+  if (!(error instanceof ApiError) || reasonOf(error) !== "CREDIT_LIMIT_EXCEEDED") return null;
+
+  const details = error.details as Partial<CreditLimitDetails>;
+  const currency = typeof details.currency === "string" ? details.currency : null;
+  const show = (cents: unknown) =>
+    currency && typeof cents === "number" ? formatMoney(cents, currency) : "—";
+
+  return { used: show(details.outstandingCents), limit: show(details.limitCents) };
 }
 
 /** True when re-choosing a room is the only way forward. */

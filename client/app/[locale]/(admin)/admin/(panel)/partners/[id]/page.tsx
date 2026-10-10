@@ -10,11 +10,13 @@ import {
   AdminPanel,
 } from "@/components/admin/AdminPage";
 import { PartnerActions } from "@/components/admin/PartnerActions";
+import { PartnerCreditPanel } from "@/components/admin/finance/PartnerCreditPanel";
 import { PartnerTermsPanel } from "@/components/admin/finance/PartnerTermsPanel";
 import { PartnerDangerZone } from "@/components/admin/PartnerDangerZone";
 import { InvitationStatusBadge, PartnerStatusBadge } from "@/components/admin/StatusBadge";
 import { ApiError } from "@/lib/api/client";
 import { getPartnerTerms } from "@/lib/api/finance";
+import { getPartnerCredit } from "@/lib/api/finance-controls";
 import { getPartner, getPartnerAudit, getPartnerInvitations } from "@/lib/api/partners";
 import { getSession } from "@/lib/auth/session";
 import {
@@ -29,6 +31,7 @@ import { getI18n } from "@/lib/i18n/server";
 import type { AuditEntry, Invitation, Partner } from "@/types";
 import { can } from "@/types/auth";
 import type { PartnerTerms } from "@/types/finance";
+import type { CreditPosition } from "@/types/finance-controls";
 
 export async function generateMetadata({
   params,
@@ -62,6 +65,11 @@ export default async function AdminPartnerPage({
     ? getPartnerTerms(id).catch(() => null)
     : Promise.resolve(null);
 
+  // The credit limit is read the same way: no right to read, or a failure, leaves the panel out.
+  const creditRequest: Promise<CreditPosition | null> = can(session, "finance.receivables.read", "partners.write")
+    ? getPartnerCredit(id).catch(() => null)
+    : Promise.resolve(null);
+
   let partner: Partner;
   let audit: AuditEntry[] = [];
   let invitations: Invitation[] = [];
@@ -78,7 +86,7 @@ export default async function AdminPartnerPage({
   }
 
   const { review } = partner;
-  const terms = await termsRequest;
+  const [terms, credit] = await Promise.all([termsRequest, creditRequest]);
 
   return (
     <AdminContainer>
@@ -228,6 +236,8 @@ export default async function AdminPartnerPage({
           </AdminPanel>
 
           {terms && <PartnerTermsPanel terms={terms} canEdit={can(session, "finance.terms.write")} />}
+
+          {credit && <PartnerCreditPanel partnerId={id} credit={credit} canEdit={can(session, "partners.credit.write")} />}
 
           {partner.notes && (
             <AdminPanel title="Internal note" description="Never shown to the partner.">

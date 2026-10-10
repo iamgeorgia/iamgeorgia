@@ -21,7 +21,7 @@ import { Container } from "@/components/ui/Container";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { confirmBooking, releaseHold } from "@/lib/api/bookings";
 import { ApiError } from "@/lib/api/client";
-import { bookingErrorKey, needsNewOffer } from "@/lib/booking/errors";
+import { bookingErrorKey, creditLimitFigures, needsNewOffer } from "@/lib/booking/errors";
 import {
   checkoutDraftServerSnapshot,
   checkoutDraftSnapshot,
@@ -100,6 +100,8 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [errorKey, setErrorKey] = useState<keyof typeof t.booking.errors | null>(null);
+  // The company's figures when the refusal is its credit limit.
+  const [creditFigures, setCreditFigures] = useState<{ used: string; limit: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   /** Minted here when the draft is gone, so a retry is still idempotent. */
   const [fallbackKey] = useState(newIdempotencyKey);
@@ -151,6 +153,7 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
 
     setSubmitting(true);
     setErrorKey(null);
+    setCreditFigures(null);
 
     const leadEmail = email.trim();
 
@@ -196,6 +199,7 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
       }
 
       setErrorKey(bookingErrorKey(error));
+      setCreditFigures(creditLimitFigures(error));
       setSubmitting(false);
     }
   };
@@ -502,7 +506,9 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
                 >
                   <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
                   <span>
-                    {t.booking.errors[errorKey]}
+                    {errorKey === "creditLimit" && creditFigures
+                      ? fill(t.booking.errors.creditLimit, creditFigures)
+                      : t.booking.errors[errorKey]}
                     {needsNewOffer(errorKey) && (
                       <>
                         {" "}

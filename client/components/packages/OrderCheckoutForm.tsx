@@ -21,6 +21,7 @@ import {
   orderCheckoutDraftSnapshot,
   subscribeOrderCheckoutDraft,
 } from "@/lib/booking/checkoutSession";
+import { creditLimitFigures } from "@/lib/booking/errors";
 import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { hasOnRequestSlot, resolvedService, resolvedTour } from "@/lib/packages/query";
@@ -76,6 +77,8 @@ export function OrderCheckoutForm() {
 
   const [submitting, setSubmitting] = useState(false);
   const [errorKey, setErrorKey] = useState<keyof typeof t.orders.errors | null>(null);
+  // Set instead of an error key when the company is over its credit limit.
+  const [creditMessage, setCreditMessage] = useState<string | null>(null);
   const [priceChanged, setPriceChanged] = useState<OrderPriceChangedDetails | null>(null);
   const [unavailable, setUnavailable] = useState<OrderUnavailableDetails | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -121,6 +124,7 @@ export function OrderCheckoutForm() {
 
     setSubmitting(true);
     setErrorKey(null);
+    setCreditMessage(null);
     setPriceChanged(null);
     setUnavailable(null);
 
@@ -185,6 +189,14 @@ export function OrderCheckoutForm() {
     if (error.status === 400) {
       setFieldErrors(error.fieldErrors());
       setErrorKey("generic");
+
+      return;
+    }
+
+    const credit = creditLimitFigures(error);
+
+    if (credit) {
+      setCreditMessage(fill(t.booking.errors.creditLimit, credit));
 
       return;
     }
@@ -396,6 +408,12 @@ export function OrderCheckoutForm() {
                 {t.orders.errors.requeryTrip}
               </Button>
             </div>
+          )}
+
+          {creditMessage && (
+            <p role="alert" className="type-body-sm mt-4 rounded-sm bg-surface-soft p-3.5 text-brand-text">
+              {creditMessage}
+            </p>
           )}
 
           {errorKey && (

@@ -9,7 +9,8 @@ export type ApprovalKind =
   | "PAYABLE_OVERRIDE"
   | "PAYABLE_WAIVE"
   | "RECEIVABLE_DUE_DATE"
-  | "RECEIVABLE_WAIVE";
+  | "RECEIVABLE_WAIVE"
+  | "PENALTY_OVERRIDE";
 
 export type ApprovalStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
 

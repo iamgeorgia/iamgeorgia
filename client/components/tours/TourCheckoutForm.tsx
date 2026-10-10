@@ -12,7 +12,7 @@ import { Container } from "@/components/ui/Container";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { confirmTourBooking, releaseTourHold } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
-import { bookingErrorKey, needsNewOffer } from "@/lib/booking/errors";
+import { bookingErrorKey, creditLimitFigures, needsNewOffer } from "@/lib/booking/errors";
 import {
   clearTourCheckoutDraft,
   newIdempotencyKey,
@@ -76,6 +76,8 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
 
   const [submitting, setSubmitting] = useState(false);
   const [errorKey, setErrorKey] = useState<keyof typeof t.booking.errors | null>(null);
+  // The company's figures when the refusal is its credit limit.
+  const [creditFigures, setCreditFigures] = useState<{ used: string; limit: string } | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   /** Minted here when the draft is gone, so a retry is still idempotent. */
   const [fallbackKey] = useState(newIdempotencyKey);
@@ -119,6 +121,7 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
 
     setSubmitting(true);
     setErrorKey(null);
+    setCreditFigures(null);
 
     const leadEmail = email.trim();
 
@@ -161,6 +164,7 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
       }
 
       setErrorKey(bookingErrorKey(error));
+      setCreditFigures(creditLimitFigures(error));
       setSubmitting(false);
     }
   };
@@ -481,7 +485,9 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
                 >
                   <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
                   <span>
-                    {t.booking.errors[errorKey]}
+                    {errorKey === "creditLimit" && creditFigures
+                      ? fill(t.booking.errors.creditLimit, creditFigures)
+                      : t.booking.errors[errorKey]}
                     {needsNewOffer(errorKey) && (
                       <>
                         {" "}
