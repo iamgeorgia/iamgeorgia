@@ -305,6 +305,9 @@ export const deactivateDriver = (id, { reason, force }, actor, req) =>
         if (existing.userId) {
             await tx.user.update({ where: { id: existing.userId }, data: { isActive: false } });
             await revokeUserSessions(tx, existing.userId);
+            // An unused activation or reset link would set the account active
+            // again when redeemed; spent, it cannot.
+            await tx.authToken.updateMany({ where: { userId: existing.userId, usedAt: null }, data: { usedAt: now } });
         }
 
         await recordAudit(tx, {

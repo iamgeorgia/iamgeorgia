@@ -8,6 +8,10 @@ import assert from 'node:assert/strict';
 process.env.AUTH_LOGIN_LIMIT = '3';
 process.env.AUTH_TOKEN_LOOKUP_LIMIT = '4';
 process.env.AUTH_PASSWORD_CHANGE_LIMIT = '3';
+// Every sign-in in this file comes from one address, so the per-address
+// bucket must stay out of the way of the tests above it and is tripped on
+// purpose by the last one.
+process.env.AUTH_LOGIN_IP_LIMIT = '60';
 
 const request = (await import('supertest')).default;
 const { createApp } = await import('../app.js');
@@ -141,5 +145,27 @@ describe('rate limiting', { skip: dbAvailable ? false : 'Postgres is not reachab
         assert.equal(blocked.status, 429);
         assert.equal(typeof blocked.body.error.message, 'string');
         assert.deepEqual(Object.keys(blocked.body), ['error']);
+    });
+
+    /**
+     * Last, because it spends the address's whole budget: an attacker who
+     * names a different account on every attempt gets a fresh pair bucket
+     * each time, and the per-address bucket is what stops that.
+     */
+    it('stops one address spraying guesses across many accounts', async () => {
+        let blocked = null;
+
+        for (let attempt = 0; attempt < 60 && !blocked; attempt += 1) {
+            const res = await signIn(app, testEmail('spray'), 'wrong-password-here');
+
+            if (res.status === 429) {
+                blocked = res;
+            } else {
+                assert.equal(res.status, 401, `attempt ${attempt + 1}`);
+            }
+        }
+
+        assert.ok(blocked, 'the address runs out of attempts before it runs out of accounts');
+        assert.match(blocked.body.error.message, /too many sign-in attempts/i);
     });
 });

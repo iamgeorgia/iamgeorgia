@@ -347,6 +347,55 @@ describe('inventory and rates', { skip: dbAvailable ? false : 'Postgres is not r
         });
 
         // A stay spanning two currencies would produce a total that means
+        it('refuses a fixed sell price below net, from either side', async () => {
+            const room = await freshRoom();
+            const plan = await prisma.ratePlan.create({
+                data: {
+                    roomTypeId: room.id,
+                    code: 'floor',
+                    name: 'Floor',
+                    mealPlanId: (await prisma.mealPlan.findUnique({ where: { code: 'RO' } })).id,
+                    cancellationPolicyId: (await prisma.cancellationPolicy.findFirst({ where: { hotelId: null } })).id,
+                    paymentPolicyId: (await prisma.paymentPolicy.findFirst({ where: { hotelId: null } })).id,
+                    currency: 'GEL'
+                }
+            });
+            const path = `/api/admin/hotels/${hotel.id}/room-types/${room.id}/rate-plans/${plan.id}/rates`;
+            const range = { from: '2027-04-01', to: '2027-04-07' };
+
+            // Both figures in one call: the schema catches it.
+            const together = await asAdmin('put', path).send({ ...range, netCents: 10_000, sellCents: 9_000 });
+            assert.equal(together.status, 400);
+
+            assert.equal((await asAdmin('put', path).send({ ...range, netCents: 10_000, sellCents: 10_000 })).status, 200);
+
+            // A sell under a net already on the calendar.
+            const under = await asAdmin('put', path).send({ ...range, sellCents: 9_999 });
+            assert.equal(under.status, 422);
+            assert.equal(under.body.error.details.reason, 'SELL_BELOW_NET');
+            assert.equal(under.body.error.details.netCents, 10_000);
+
+            // A net over a sell already fixed.
+            const over = await asAdmin('put', path).send({ ...range, netCents: 10_001 });
+            assert.equal(over.status, 422);
+            assert.equal(over.body.error.details.sellCents, 10_000);
+
+            // Clearing the fixed price frees the net again, and the audit row says what was fixed.
+            assert.equal((await asAdmin('put', path).send({ ...range, sellCents: null })).status, 200);
+            assert.equal((await asAdmin('put', path).send({ ...range, netCents: 12_000 })).status, 200);
+
+            const audit = await prisma.auditLog.findFirst({
+                where: { action: 'RATE_UPDATED', entityId: plan.id, metadata: { path: ['sellCents'], equals: 10_000 } }
+            });
+            assert.ok(audit, 'the fixed sell price is in the audit trail');
+
+            // And the database refuses it even when the service is bypassed.
+            await assert.rejects(
+                prisma.$executeRaw`UPDATE rates SET sell_cents = net_cents - 1 WHERE rate_plan_id = ${plan.id}`,
+                /rates_sell_gte_net/
+            );
+        });
+
         // nothing, so the plan's currency is the only one its rates may use.
         it('refuses a rate in a different currency from its plan', async () => {
             const response = await asAdmin('put', ratesPath()).send({

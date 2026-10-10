@@ -171,18 +171,21 @@ describe('who reaches what', { skip: dbAvailable ? false : 'Postgres is not reac
             .send({ reason: 'test' });
         assert.equal(cancel.status, 403);
 
-        // The public door answers a dispatcher as it would a stranger.
+        // The public door refuses a staff session with no booking capability
+        // before any service runs; the service beneath answers it as a
+        // stranger (404) should anything ever reach it.
         const publicCancel = await request(app)
             .post(`/api/transfers/bookings/${platformBooking.reference}/cancel`)
             .set('Cookie', dispatcherCookie)
             .send({ reason: 'test' });
-        assert.equal(publicCancel.status, 404);
+        assert.equal(publicCancel.status, 403);
+        assert.equal(publicCancel.body.error.details.reason, 'INSUFFICIENT_CAPABILITY');
 
         const amend = await request(app)
             .patch(`/api/transfers/bookings/${platformBooking.reference}`)
             .set('Cookie', dispatcherCookie)
             .send({ specialRequests: 'changed by a dispatcher' });
-        assert.equal(amend.status, 404);
+        assert.equal(amend.status, 403);
 
         const after = await prisma.transferBooking.findUnique({ where: { id: platformBooking.id } });
         assert.equal(after.status, platformBooking.status);

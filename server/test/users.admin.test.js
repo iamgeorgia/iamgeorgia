@@ -201,6 +201,30 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
         assert.equal((await signIn(app, user.email)).status, 200);
     });
 
+    it('never lets the last two owners remove each other at the same moment', async () => {
+        // A company of exactly two owners, so each is the other's only cover.
+        // (Two super admins would be covered by the one `before` created.)
+        const partner = await makePartner(tracker);
+        const first = await makePartnerUser(tracker, partner);
+        const second = await makePartnerUser(tracker, partner, { isPrimaryContact: false });
+        const [firstCookie, secondCookie] = await Promise.all([signIn(app, first.email), signIn(app, second.email)]).then(
+            (sessions) => sessions.map((session) => session.cookie)
+        );
+
+        // Each sees the other as cover when it looks; serialised, the second
+        // to land must find none left and be told.
+        const results = await Promise.all([
+            request(app).post(`/api/partner/team/${second.id}/deactivate`).set('Cookie', firstCookie).send({}),
+            request(app).post(`/api/partner/team/${first.id}/deactivate`).set('Cookie', secondCookie).send({})
+        ]);
+
+        assert.deepEqual(results.map((res) => res.status).sort(), [200, 409]);
+        assert.equal(results.find((res) => res.status === 409).body.error.details.reason, 'LAST_PARTNER_OWNER');
+
+        const active = await prisma.user.count({ where: { partnerId: partner.id, isActive: true } });
+        assert.equal(active, 1);
+    });
+
     it('spends a pending reset link when it deactivates, so the link cannot switch the account back on', async () => {
         const user = await makeAdmin(tracker, { role: 'FINANCE' });
         const { token } = await makeAuthToken({ userId: user.id, purpose: 'PASSWORD_RESET' });

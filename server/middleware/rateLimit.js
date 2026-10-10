@@ -213,6 +213,51 @@ export const authLimiter = rateLimit({
 });
 
 /**
+ * Read here rather than in config.js only for now: that file is mid-change
+ * on another branch of work, and these two keys move there with the next
+ * finance commit. Same shape as config's `numberEnv`: the suite gets a
+ * ceiling it will not hit unless a test lowers it on purpose.
+ */
+const envLimit = (key, fallback) => {
+    const raw = process.env[key];
+
+    if (raw !== undefined && raw !== '') {
+        return Number(raw);
+    }
+
+    return process.env.NODE_ENV === 'test' ? 10_000 : fallback;
+};
+
+/**
+ * The two halves the pair-keyed limiter above leaves open.
+ *
+ * Keyed on the pair, one address gets a fresh budget for every account it
+ * names, and one account gets a fresh budget from every address that tries
+ * it. A per-address bucket bounds the spray; a per-account bucket bounds the
+ * distributed guess. Both are wider than the pair's so an office behind one
+ * address, or a user with a forgotten password, is not shut out by them
+ * first — the account bucket in particular is the one an attacker could use
+ * to lock someone out, which is why it is the widest.
+ */
+export const authIpLimiter = rateLimit({
+    ...base,
+    store: store('login-ip'),
+    limit: envLimit('AUTH_LOGIN_IP_LIMIT', 30),
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
+    skipSuccessfulRequests: true,
+    handler: handler('Too many sign-in attempts. Try again later.')
+});
+
+export const authAccountLimiter = rateLimit({
+    ...base,
+    store: store('login-account'),
+    limit: envLimit('AUTH_LOGIN_ACCOUNT_LIMIT', 50),
+    keyGenerator: (req) => String(req.body?.email ?? '').trim().toLowerCase() || ipKeyGenerator(req.ip),
+    skipSuccessfulRequests: true,
+    handler: handler('Too many sign-in attempts. Try again later.')
+});
+
+/**
  * Wrong current-password attempts on `/auth/password/change`.
  *
  * Its own limiter because its own key: there is no email in the body of a

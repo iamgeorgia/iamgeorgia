@@ -32,7 +32,8 @@ const ownPartnerId = (req) => {
  * not readable in those states.
  */
 partnerRoutes.get('/me', async (req, res) => {
-    const partner = await findPartnerOr404(ownPartnerId(req), req.user);
+    // Bank details have their own endpoint below, with their own capability.
+    const partner = await findPartnerOr404(ownPartnerId(req), req.user, { financial: false });
 
     res.json(toPartnerDetail(partner, req.user));
 });

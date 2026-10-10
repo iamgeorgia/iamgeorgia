@@ -73,6 +73,13 @@ export const rateRangeSchema = rangeOrdered(
                 ),
             { message: 'Provide at least one value to set' }
         )
+        // A fixed sell price replaces the markup entirely, so one below net
+        // is a loss on every night it covers. The service checks the same
+        // thing against nights already on the calendar.
+        .refine(
+            (value) => value.sellCents == null || value.netCents === undefined || value.sellCents >= value.netCents,
+            { message: 'The sell price cannot be below the net price', path: ['sellCents'] }
+        )
 );
 
 export const calendarQuerySchema = rangeOrdered(

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { prisma } from '../../db/index.js';
 import { config } from '../../config.js';
-import { ConflictError, ForbiddenError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
+import { ConflictError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
@@ -10,6 +10,7 @@ import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextServiceBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, todayInTimezone, zonedTimeToInstant } from '../../lib/time.js';
 import { isTrade, readsAllBookings } from '../../middleware/auth.js';
+import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
 import { resolveMarkup } from '../hotel/pricingRule.service.js';
 import { quoteService } from './pricing.service.js';
@@ -320,7 +321,27 @@ const assertMayRead = (booking, viewer, { email } = {}) => {
         return;
     }
 
-    throw new ForbiddenError('That booking is not yours to see');
+    // A 404, not a 403, like every other booking module: the references come
+    // from a sequence, and a different answer for "exists but not yours"
+    // would let anyone enumerate them.
+    throw new NotFoundError('Booking not found');
+};
+
+/**
+ * Who may change a booking. Narrower than reading: of the platform side only
+ * holders of the capability pass; staff who read but may not change get the
+ * stranger's 404.
+ */
+const assertMayMutate = (booking, viewer, { capability, ...options }) => {
+    if (can(viewer, capability)) {
+        return;
+    }
+
+    if (readsAllBookings(viewer)) {
+        throw new NotFoundError('Booking not found');
+    }
+
+    assertMayRead(booking, viewer, options);
 };
 
 export const findServiceBookingOr404 = async (reference, viewer, options = {}) => {
@@ -449,7 +470,13 @@ export const cancelServiceBookingInTx = async (tx, booking, { reason, waiveCharg
 
 export const cancelServiceBooking = async (reference, { reason, email } = {}, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const booking = await findServiceBookingOr404(reference, actor, { email });
+        const booking = await prisma.serviceBooking.findUnique({ where: { reference }, include: serviceBookingInclude });
+
+        if (!booking) {
+            throw new NotFoundError('Booking not found');
+        }
+
+        assertMayMutate(booking, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
 
         await assertNotInOrder(tx, 'serviceBookingId', booking.id);
 

@@ -3,6 +3,7 @@ import { prisma } from '../db/index.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { sendMailQuietly, activationUrl } from '../lib/mailer/index.js';
+import { ROLE_CAPABILITIES } from '../lib/permissions.js';
 import { STAFF_ROLES } from '../validation/user.js';
 import { issueAuthToken, revokeUserSessions } from './auth.service.js';
 
@@ -21,27 +22,35 @@ import { issueAuthToken, revokeUserSessions } from './auth.service.js';
  * after the commit.
  */
 
-/** Who may act on whom. Top rank manages its equals; the rest manage only below. */
-const RANK = {
-    SUPER_ADMIN: 3,
-    ADMIN: 2,
-    MANAGEMENT: 1,
-    RESERVATIONS: 1,
-    FINANCE: 1,
-    DISPATCHER: 1,
-    PARTNER_OWNER: 3,
-    PARTNER_ADMIN: 2,
-    PARTNER_AGENT: 1,
-    PARTNER_FINANCE: 1
-};
+/** The top of each side: the roles that may manage their own equals. */
+const TOP_ROLES = new Set(['SUPER_ADMIN', 'PARTNER_OWNER']);
 
-const TOP = 3;
-
+/**
+ * Who may act on whom.
+ *
+ * An actor may give someone a role, or touch an account that holds one, only
+ * if it holds every capability that role does. Anything looser is a way up:
+ * a partner admin cannot change bank details, so it must not be able to
+ * invite a finance user, open the returned activation link, and change them
+ * as that user. Holding every capability of a *peer* is not the same as
+ * outranking it, so only the top of each side manages its equals — an owner
+ * another owner, a super admin another super admin.
+ */
 const withinCeiling = (actor, role) => {
-    const own = RANK[actor.role] ?? 0;
-    const theirs = RANK[role] ?? Infinity;
+    const own = ROLE_CAPABILITIES[actor.role];
+    const theirs = ROLE_CAPABILITIES[role];
 
-    return own === TOP ? theirs <= own : theirs < own;
+    if (!own || !theirs) {
+        return false;
+    }
+
+    for (const capability of theirs) {
+        if (!own.has(capability)) {
+            return false;
+        }
+    }
+
+    return theirs.size < own.size || TOP_ROLES.has(actor.role);
 };
 
 const assertWithinCeiling = (actor, role) => {
@@ -97,6 +106,13 @@ const assertNotLast = async (tx, user) => {
     if (user.role !== 'SUPER_ADMIN' && user.role !== 'PARTNER_OWNER') {
         return;
     }
+
+    // Serialised per company, or per platform: two owners removing each other
+    // at the same moment would otherwise each count the other as cover and
+    // leave none. The lock is released with the transaction.
+    // `$executeRaw`, not `$queryRaw`: the lock function returns void, which
+    // the query path cannot deserialise.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rbac:last:${user.partnerId ?? 'platform'}`}::text))`;
 
     const others = await tx.user.count({
         where: {

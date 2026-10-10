@@ -131,6 +131,45 @@ describe('financial data exposure', { skip: dbAvailable ? false : 'Postgres is n
         assert.equal((await request(app).get('/api/partner/financial')).status, 401);
     });
 
+    /** Reading a partner is not reading its bank account: the desks see the company, finance sees the IBAN. */
+    it('keeps the bank route from staff who read partners but hold no financial capability', async () => {
+        const partner = await scenario();
+
+        for (const role of ['MANAGEMENT', 'RESERVATIONS']) {
+            const cookie = await cookieFor(await makeAdmin(tracker, { role }));
+
+            const detail = await request(app).get(`/api/admin/partners/${partner.id}`).set('Cookie', cookie);
+            assert.equal(detail.status, 200, role);
+            assert.equal(leaksBankDetails(detail.body), false, role);
+
+            const bank = await request(app).get(`/api/admin/partners/${partner.id}/financial`).set('Cookie', cookie);
+            assert.equal(bank.status, 403, role);
+            assert.equal(bank.body.error.details.reason, 'INSUFFICIENT_CAPABILITY', role);
+            assert.equal(leaksBankDetails(bank.body), false, role);
+        }
+
+        const finance = await request(app)
+            .get(`/api/admin/partners/${partner.id}/financial`)
+            .set('Cookie', await cookieFor(await makeAdmin(tracker, { role: 'FINANCE' })));
+        assert.equal(finance.status, 200);
+        assert.equal(finance.body.iban, IBAN);
+    });
+
+    it('keeps the IBAN out of the session an owner bootstraps from', async () => {
+        const partner = await scenario();
+        const cookie = await cookieFor(await makePartnerUser(tracker, partner));
+
+        for (const path of ['/api/auth/me', '/api/partner/me']) {
+            const res = await request(app).get(path).set('Cookie', cookie);
+
+            assert.equal(res.status, 200, path);
+            assert.equal(leaksBankDetails(res.body), false, path);
+        }
+
+        // The screen that needs it still gets it, through its own request.
+        assert.equal((await request(app).get('/api/partner/financial').set('Cookie', cookie)).body.iban, IBAN);
+    });
+
     it('records who looked', async () => {
         const partner = await scenario();
         const admin = await makeAdmin(tracker);

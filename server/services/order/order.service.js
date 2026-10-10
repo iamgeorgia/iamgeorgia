@@ -681,6 +681,32 @@ export const findOrderOr404 = async (reference, viewer, options = {}) => {
     return order;
 };
 
+/**
+ * The order a viewer may *change*. Narrower than reading: management and
+ * finance read every order, but a cancellation fixes money, so of the
+ * platform side only holders of the capability pass; staff who read but may
+ * not change get the stranger's 404, the same as any other booking module.
+ */
+const findOrderForChange = async (reference, viewer, { capability, ...options }) => {
+    const order = await prisma.order.findUnique({ where: { reference }, include: orderInclude });
+
+    if (!order) {
+        throw new NotFoundError('Order not found');
+    }
+
+    if (can(viewer, capability)) {
+        return order;
+    }
+
+    if (readsAllBookings(viewer)) {
+        throw new NotFoundError('Order not found');
+    }
+
+    assertMayRead(order, viewer, options);
+
+    return order;
+};
+
 export const listOrders = async (query, viewer) => {
     const { page, pageSize, status, packageId, partnerId, from, to, search } = query;
 
@@ -815,7 +841,7 @@ const assertLive = (item) => {
 
 export const cancelOrderItem = async (reference, slotIndex, { reason, email } = {}, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderOr404(reference, actor, { email });
+        const order = await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
         const item = order.items.find((candidate) => candidate.slotIndex === slotIndex);
 
         if (!item) {
@@ -885,7 +911,16 @@ export const cancelOrderInTx = async (tx, order, { reason, waiveCharges = false 
 };
 
 export const cancelOrder = (reference, { reason, email } = {}, actor, req) =>
-    prisma.$transaction(async (tx) => cancelOrderInTx(tx, await findOrderOr404(reference, actor, { email }), { reason }, actor, req), {
+    prisma.$transaction(
+        async (tx) =>
+            cancelOrderInTx(
+                tx,
+                await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email }),
+                { reason },
+                actor,
+                req
+            ),
+        {
         timeout: config.order.txTimeoutMs
     });
 
@@ -1008,7 +1043,7 @@ export const declineOrderItem = (reference, slotIndex, { reason }, actor, req) =
 
 export const amendOrder = (reference, input, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderOr404(reference, actor, { email: input.email });
+        const order = await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_WRITE, email: input.email });
 
         if (orderMachine.isTerminal(order.status)) {
             throw new ConflictError('That order can no longer be amended', { status: order.status });

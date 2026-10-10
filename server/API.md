@@ -400,7 +400,7 @@ All under `/admin/transfers/*`, guarded by `authenticate + requireAdmin`.
 | GET/POST/PUT/DELETE | `/admin/transfers/extras[/:code]` |
 | GET/POST/DELETE | `/admin/transfers/blackouts[/:id]` |
 | GET | `/admin/transfers/bookings` · `/:reference` · POST `/:reference/cancel` |
-| GET | `/admin/transfers/bookings/summary` — `{ total, confirmed, confirmedValue: { byCurrency: [{ currency, amountCents, count }] } }`, aggregated in the database; operations roles |
+| GET | `/admin/transfers/bookings/summary` — `{ total, confirmed, confirmedValue: { byCurrency: [{ currency, amountCents, count }] } }`, aggregated in the database; sums revenue, so `finance.margin.read` (a dispatcher reads the list without the tiles) |
 
 ### Seeding the transfer catalogue
 
@@ -521,7 +521,11 @@ audit row.
 `/api/admin/media` is likewise open to dispatchers for the four fleet and
 driver categories (`FLEET_IMAGE`, `DRIVER_PHOTO`, `DRIVER_DOCUMENT`,
 `VEHICLE_DOCUMENT`) and nothing else: an upload in another category is 403,
-a read of another category's file is 404, and delete stays admin-only.
+a read of another category's file is 404, and delete stays admin-only. Every
+other staff role reaches a private file by its category in the same way
+(contracts and rate sheets with `partners.financial.read`, payment slips and
+invoices with `finance.payments.read`, certificates with `catalogue.read`);
+only an admin, or whoever writes the catalogue, reaches them all.
 
 ### Dispatch (operations)
 
@@ -964,6 +968,11 @@ Detaching is a 409 while a verified certificate points at it.
 | GET/PATCH/DELETE | `/admin/destinations/:id` — `latitude`/`longitude` as a pair or neither; on PATCH an explicit `null` pair takes the pin off the map and clears `place`. `place?` is what Google Places said when the pin was set: `{ placeId, name, formattedAddress, city, region, countryCode, types }`, every field but `placeId` nullable, accepted only alongside a pair, and answered as `place` (null for pins placed by hand) on destinations, hotels and pick-up points alike |
 | PUT | `/admin/destinations/:id/translations/:locale` |
 | GET/POST | `/admin/amenities`, `GET/PATCH /admin/amenities/:id` |
+A fixed `sellCents` replaces the markup entirely, so it may never sit below
+`netCents`: 400 when one request carries both, 422 `SELL_BELOW_NET` (with the
+`netCents` or `sellCents` already on those nights) when a half-update would get
+a night there, and the table's `rates_sell_gte_net` CHECK beneath both. The
+same rule applies to a service's `netCents`/`sellCents`.
 | GET/POST | `/admin/media` (multipart: `file`, `category`, `altText?`) |
 | GET/DELETE | `/admin/media/:id`, `GET /admin/media/:id/url` (signed, private only) |
 | GET | `/admin/bookings`, `/admin/bookings/:reference` |
@@ -999,7 +1008,7 @@ What the platform roles reach in the admin panel:
 | Area | Read | Change |
 | --- | --- | --- |
 | Catalogue — destinations, amenities, hotels, tours, services, packages, transfer points/vehicles/routes | every staff role | `SUPER_ADMIN`, `ADMIN` |
-| A hotel's contracts and documents | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
+| A hotel's contracts and documents | the list: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE`; opening a file goes by its category — a contract or rate sheet needs `partners.financial.read`, a payment slip or invoice `finance.payments.read`, a driver's papers `dispatch.read`, a certificate `catalogue.read` | `SUPER_ADMIN`, `ADMIN` |
 | Bookings and orders, every company | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` (transfers: also `DISPATCHER`) | confirm/decline and cancel: `SUPER_ADMIN`, `ADMIN`, `RESERVATIONS` |
 | Fleet, drivers, dispatch | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `DISPATCHER` | `SUPER_ADMIN`, `ADMIN`, `DISPATCHER` (deleting a car or a driver: admins) |
 | Partners | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
@@ -1028,6 +1037,16 @@ Drivers are not here; they are managed with their profiles under
 
 | Method | Path | Notes |
 | --- | --- | --- |
+| A partner's history (`/admin/partners/:id/audit`) | `audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | — |
+
+Reading every booking is not changing one. On the public booking routes
+(`/bookings`, `/tours/bookings`, `/transfers/bookings`, `/orders`) a staff
+session is refused at the router unless it holds `bookings.write` or
+`bookings.cancel` (403 `INSUFFICIENT_CAPABILITY`), and beneath that the
+services answer a desk that reads but may not change — management, finance —
+as they would a stranger, with a 404. The identity on `/auth/me` and
+`/partner/me` never carries bank details; `GET /partner/financial` and
+`GET /admin/partners/:id/financial` (`partners.financial.read`) do.
 | GET | `/admin/users?role&status&q&page&pageSize` | `status` ∈ `INVITED` `ACTIVE` `DEACTIVATED`; `role` repeatable; envelope `{ data, total, page, pageSize, totalPages }` |
 | POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `RESERVATIONS` `FINANCE` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
 | GET | `/admin/users/:id` | `status` is derived: no password yet → `INVITED`; switched off → `DEACTIVATED`; else `ACTIVE`. Carries `invitedBy`, `invitedAt`, `deactivatedBy`, `deactivatedAt` |

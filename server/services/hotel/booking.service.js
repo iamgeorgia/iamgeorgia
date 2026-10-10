@@ -15,6 +15,7 @@ import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextHotelBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, toDateOnly } from '../../lib/time.js';
 import { readsAllBookings } from '../../middleware/auth.js';
+import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { readOfferToken } from '../../lib/hotel/offerToken.js';
 import { revalidateOffer } from './search.service.js';
 import { buildCancellationSchedule, calculateRefund } from './policy.service.js';
@@ -565,6 +566,28 @@ const assertMayRead = (booking, viewer, { email } = {}) => {
     }
 };
 
+/**
+ * Who may change a booking: cancel it or amend its paperwork.
+ *
+ * Narrower than reading. Management and finance read every booking, but a
+ * cancellation is money — it fixes the charge and the refund — so of the
+ * platform side only the roles holding the capability pass (`bookings.cancel`
+ * to cancel, `bookings.write` to amend). Everyone else needs the same proof a
+ * read does: their own partner's booking, or the lead guest's email. Staff who
+ * may read but not change are answered as a stranger would be, with a 404.
+ */
+const assertMayMutate = (booking, viewer, { capability, ...options }) => {
+    if (can(viewer, capability)) {
+        return;
+    }
+
+    if (readsAllBookings(viewer)) {
+        throw new NotFoundError('Booking not found');
+    }
+
+    assertMayRead(booking, viewer, options);
+};
+
 export const findBookingOr404 = async (reference, viewer, options = {}) => {
     const booking = await prisma.hotelBooking.findFirst({
         where: { OR: [{ id: reference }, { reference }] },
@@ -771,9 +794,11 @@ export const cancelBooking = async (reference, { reason, email } = {}, actor, re
             throw new NotFoundError('Booking not found');
         }
 
-        await assertNotInOrder(tx, 'hotelBookingId', booking.id);
+        // Who may cancel is settled before anything about the booking is
+        // revealed, including whether it sits inside an order.
+        assertMayMutate(booking, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
 
-        assertMayRead(booking, actor, { email });
+        await assertNotInOrder(tx, 'hotelBookingId', booking.id);
 
         const result = await cancelHotelBookingInTx(tx, booking, { reason }, actor, req);
 
@@ -819,9 +844,10 @@ export const amendBooking = async (reference, input, actor, req) =>
             throw new NotFoundError('Booking not found');
         }
 
-        // Whoever may read a booking may correct its paperwork: an admin, the
-        // partner that made it, or the guest who can quote the lead email.
-        assertMayRead(booking, actor, { email: input.email });
+        // The booking desk, the partner that made it, or the guest who can
+        // quote the lead email. Reading alone is not enough: a corrected lead
+        // email is the guest's credential for everything else.
+        assertMayMutate(booking, actor, { capability: CAPABILITIES.BOOKINGS_WRITE, email: input.email });
 
         if (!AMENDABLE_STATUSES.includes(booking.status)) {
             throw new ConflictError('This booking can no longer be amended', {

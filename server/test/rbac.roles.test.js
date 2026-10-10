@@ -124,6 +124,49 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
         assert.equal((await request(app).get('/api/admin/transfers/dispatch/legs').set('Cookie', cookies.FINANCE)).status, 403);
     });
 
+    it('keeps the revenue tiles from a dispatcher who reads the same list', async () => {
+        const list = (role) => request(app).get('/api/admin/transfers/bookings').set('Cookie', cookies[role]);
+        const summary = (role) => request(app).get('/api/admin/transfers/bookings/summary').set('Cookie', cookies[role]);
+
+        assert.equal((await list('DISPATCHER')).status, 200);
+        assert.equal((await summary('DISPATCHER')).status, 403);
+        assert.equal((await summary('RESERVATIONS')).status, 403);
+        assert.equal((await summary('MANAGEMENT')).status, 200);
+    });
+
+    it('answers a desk that reads every booking but may not change one as it would a stranger', async () => {
+        const booking = await agencyBooking();
+        const paths = [
+            ['post', `/api/transfers/bookings/${booking.reference}/cancel`, { reason: 'Guest asked' }],
+            ['patch', `/api/transfers/bookings/${booking.reference}`, { flightNumber: 'TK 379' }],
+            ['post', '/api/bookings', {}],
+            ['post', '/api/tours/bookings', {}],
+            ['post', '/api/orders', {}],
+            ['post', '/api/transfers/bookings', {}]
+        ];
+
+        for (const role of ['MANAGEMENT', 'FINANCE', 'DISPATCHER']) {
+            for (const [method, path, body] of paths) {
+                const res = await request(app)[method](path).set('Cookie', cookies[role]).send(body);
+
+                assert.equal(res.status, 403, `${role} ${method.toUpperCase()} ${path}`);
+                assert.equal(res.body.error.details.reason, 'INSUFFICIENT_CAPABILITY', `${role} ${path}`);
+            }
+
+            // Reading stays open to the desks that read everything.
+            const read = await request(app).get(`/api/transfers/bookings/${booking.reference}`).set('Cookie', cookies[role]);
+            assert.equal(read.status, 200, role);
+        }
+
+        // The booking desk makes and changes bookings; what it sends is then judged on its merits.
+        assert.equal((await request(app).post('/api/bookings').set('Cookie', cookies.RESERVATIONS).send({})).status, 400);
+        const amend = await request(app)
+            .patch(`/api/transfers/bookings/${booking.reference}`)
+            .set('Cookie', cookies.RESERVATIONS)
+            .send({ flightNumber: 'TK 379' });
+        assert.equal(amend.status, 200);
+    });
+
     it('sizes the badges to the role: each queue for the people who work it', async () => {
         const finance = await request(app).get('/api/admin/badges').set('Cookie', cookies.FINANCE);
 

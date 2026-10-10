@@ -41,11 +41,16 @@ export const isTeamRole = (role: Role): role is TeamRole =>
 
 export const teamRoleLabel = (role: Role): string => (isTeamRole(role) ? teamRoleLabels[role] : role);
 
+/**
+ * Mirrors the server's rule, which is about capabilities: an account may give
+ * a role only if it holds everything that role can do. A partner admin cannot
+ * touch bank details, so a finance user sits beside it rather than below it.
+ */
 const RANK: Record<TeamRole, number> = {
   PARTNER_OWNER: 3,
   PARTNER_ADMIN: 2,
+  PARTNER_FINANCE: 2,
   PARTNER_AGENT: 1,
-  PARTNER_FINANCE: 1,
 };
 
 const TOP = 3;

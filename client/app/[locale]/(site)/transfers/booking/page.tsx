@@ -12,7 +12,7 @@ import { ApiError } from "@/lib/api/client";
 import { quoteTransfers } from "@/lib/api/transfers";
 import { getSession } from "@/lib/auth/session";
 import { getI18n } from "@/lib/i18n/server";
-import { isAdmin } from "@/types/auth";
+import { can } from "@/types/auth";
 import {
   paramsFromSearchParams,
   parseTransferQuery,
@@ -47,10 +47,10 @@ export default async function TransferBookingPage(
     getSession(),
   ]);
 
-  // Only a partner (or an admin booking for one) may ask for a particular
-  // driver; the server enforces the same rule, this just decides whether to
-  // show the section.
-  const canChooseDriver = isAdmin(session) || session?.partner?.status === "APPROVED";
+  // Only an approved partner, or staff who book or dispatch, may ask for a
+  // particular driver; the server enforces the same rule (`mayChooseDriver`),
+  // this just decides whether to show the section.
+  const canChooseDriver = can(session, "bookings.write", "dispatch.write") || session?.partner?.status === "APPROVED";
 
   const params = paramsFromSearchParams(searchParams);
   const query = parseTransferQuery(params);

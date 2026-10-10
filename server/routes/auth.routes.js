@@ -5,6 +5,8 @@ import { prisma } from '../db/index.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate, optionalAuthenticate, noStoreResponses } from '../middleware/auth.js';
 import {
+    authAccountLimiter,
+    authIpLimiter,
     authLimiter,
     forgotPasswordLimiter,
     passwordChangeLimiter,
@@ -46,13 +48,15 @@ authRoutes.use(noStoreResponses);
 /** The one place the client learns who it is signed in as. */
 const identity = async (user) => ({
     user: toSessionUser(user),
-    partner: user.partnerId ? toPartnerDetail(await findPartnerOr404(user.partnerId, user), user) : null,
+    // Without the bank details: the session is read on every page, and an
+    // IBAN belongs on the one screen that asks for it, not in every bootstrap.
+    partner: user.partnerId ? toPartnerDetail(await findPartnerOr404(user.partnerId, user, { financial: false }), user) : null,
     // Null for everyone but a driver, and null for a driver whose account has
     // not been linked to a profile yet — the panel shows that as its own state.
     driver: user.role === 'DRIVER' ? toDriverSelf(await findDriverByUserId(user.id)) : null
 });
 
-authRoutes.post('/login', authLimiter, validate({ body: loginSchema }), async (req, res) => {
+authRoutes.post('/login', authIpLimiter, authAccountLimiter, authLimiter, validate({ body: loginSchema }), async (req, res) => {
     const { user, token } = await login(req.valid.body, req);
 
     setSessionCookie(res, token);

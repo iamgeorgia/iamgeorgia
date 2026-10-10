@@ -23,6 +23,7 @@ import { ScoreBadge, Stars } from "@/components/ui/Rating";
 import { ShareSave } from "@/components/ui/ShareSave";
 import { ApiError } from "@/lib/api/client";
 import { getHotelAvailability, getPublicHotel } from "@/lib/api/search";
+import { can } from "@/types/auth";
 import {
   formatStayDate,
   nightsBetween,
@@ -152,7 +153,9 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
   // with a permanent redirect to the one public address.
   redirectToCanonicalSlug(slug, api.slug, path(`/hotels/${api.slug}`), searchParams);
 
-  const isTrade = Boolean(session?.partner) || Boolean(session?.user?.role);
+  // The server's rule (`isTrade`): the booking desks, or an approved partner.
+  // A driver, a dispatcher or a partner still under review is not trade.
+  const isTrade = can(session, "bookings.read") || session?.partner?.status === "APPROVED";
 
   /**
    * What an agency may ask this property for at checkout.

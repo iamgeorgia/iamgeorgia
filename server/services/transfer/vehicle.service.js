@@ -2,7 +2,7 @@ import { prisma } from '../../db/index.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { localise } from '../../serializers/localise.js';
-import { isStaff } from '../../middleware/auth.js';
+import { isStaff, isTrade } from '../../middleware/auth.js';
 
 /**
  * Vehicle classes — the sellable products.
@@ -48,7 +48,9 @@ export const visibilityScope = (viewer) => {
         return {};
     }
 
-    return viewer?.partnerId ? { status: 'ACTIVE' } : { status: 'ACTIVE', b2cEnabled: true };
+    // Trade, not merely signed in: a partner still waiting for approval, or
+    // suspended, sees what the public sees, as it does for hotels.
+    return isTrade(viewer) ? { status: 'ACTIVE' } : { status: 'ACTIVE', b2cEnabled: true };
 };
 
 /**

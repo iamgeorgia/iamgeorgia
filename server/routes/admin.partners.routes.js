@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
-import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { authenticate, requireCapability, requireCapabilityByMethod } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import { NotFoundError } from '../lib/errors.js';
 import { toPartnerSummary, toPartnerDetail, toAuditEntry, toInvitation } from '../serializers/partner.js';
@@ -151,7 +151,11 @@ adminPartnerRoutes.post('/:id/reactivate', ...reviewAction('reactivate', approve
 
 // --- Financial --------------------------------------------------------------
 
-adminPartnerRoutes.get('/:id/financial', validate({ params: idParamSchema }), async (req, res) => {
+// Bank details are their own capability, not part of reading a partner: the
+// reservations and management desks read every partner and never an IBAN.
+const financialGuard = requireCapability(CAPABILITIES.PARTNERS_FINANCIAL_READ);
+
+adminPartnerRoutes.get('/:id/financial', financialGuard, validate({ params: idParamSchema }), async (req, res) => {
     const financial = await readFinancial(req.valid.params.id, req.user, req);
 
     if (!financial) {
@@ -169,6 +173,7 @@ adminPartnerRoutes.get('/:id/financial', validate({ params: idParamSchema }), as
 
 adminPartnerRoutes.put(
     '/:id/financial',
+    financialGuard,
     validate({ params: idParamSchema, body: financialUpdateSchema }),
     async (req, res) => {
         const financial = await updateFinancial(req.valid.params.id, req.valid.body, req.user, req);
@@ -228,7 +233,9 @@ adminPartnerRoutes.post('/:id/invitations', validate({ params: idParamSchema }),
     res.status(201).json({ link: { kind: 'invitation', url, expiresAt }, email, emailSent });
 });
 
-adminPartnerRoutes.get('/:id/audit', validate({ params: idParamSchema }), async (req, res) => {
+// A partner's history carries commission changes and internal review notes,
+// so it is read with the audit log's capability rather than the partner's.
+adminPartnerRoutes.get('/:id/audit', requireCapability(CAPABILITIES.AUDIT_READ), validate({ params: idParamSchema }), async (req, res) => {
     const entries = await listAudit(req.valid.params.id);
 
     res.json({ data: entries.map(toAuditEntry) });

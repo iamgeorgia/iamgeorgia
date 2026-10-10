@@ -118,7 +118,14 @@ describe('a partner managing its team', { skip: dbAvailable ? false : 'Postgres 
         assert.equal(aboveCeiling.status, 403);
         assert.equal(aboveCeiling.body.error.details.reason, 'ROLE_ABOVE_CEILING');
 
-        assert.equal((await invite(adminCookie, { role: 'PARTNER_FINANCE' })).status, 201);
+        // A finance user can change the bank details and an admin cannot, so
+        // an admin inviting one (and opening the returned link) would be a
+        // way up. Agents, who can do nothing an admin cannot, are fine.
+        const sideways = await invite(adminCookie, { role: 'PARTNER_FINANCE' });
+        assert.equal(sideways.status, 403);
+        assert.equal(sideways.body.error.details.reason, 'ROLE_ABOVE_CEILING');
+        assert.equal((await invite(adminCookie, { role: 'PARTNER_AGENT' })).status, 201);
+        assert.equal((await invite(ownerCookie, { role: 'PARTNER_FINANCE' })).status, 201);
         assert.equal((await invite(ownerCookie, { role: 'PARTNER_OWNER' })).status, 400);
         assert.equal((await invite(ownerCookie, { role: 'ADMIN' })).status, 400);
     });

@@ -10,6 +10,7 @@ import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextTourBookingReference } from '../../lib/reference.js';
 import { dateOnlyToUtc, toDateOnly } from '../../lib/time.js';
 import { readsAllBookings } from '../../middleware/auth.js';
+import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { readTourOfferToken } from '../../lib/tour/offerToken.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
 import { revalidateTourOffer } from './search.service.js';
@@ -431,6 +432,23 @@ const assertMayRead = (booking, viewer, { email } = {}) => {
     }
 };
 
+/**
+ * Who may change a booking. Narrower than reading: of the platform side only
+ * the holders of the capability pass (`bookings.cancel`, `bookings.write`);
+ * staff who read but may not change are answered with the stranger's 404.
+ */
+const assertMayMutate = (booking, viewer, { capability, ...options }) => {
+    if (can(viewer, capability)) {
+        return;
+    }
+
+    if (readsAllBookings(viewer)) {
+        throw new NotFoundError('Booking not found');
+    }
+
+    assertMayRead(booking, viewer, options);
+};
+
 export const findTourBookingOr404 = async (reference, viewer, options = {}) => {
     const booking = await prisma.tourBooking.findFirst({
         where: { OR: [{ id: reference }, { reference }] },
@@ -588,9 +606,9 @@ export const cancelTourBooking = async (reference, { reason, email } = {}, actor
             throw new NotFoundError('Booking not found');
         }
 
-        await assertNotInOrder(tx, 'tourBookingId', booking.id);
+        assertMayMutate(booking, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
 
-        assertMayRead(booking, actor, { email });
+        await assertNotInOrder(tx, 'tourBookingId', booking.id);
 
         const result = await cancelTourBookingInTx(tx, booking, { reason }, actor, req);
 
@@ -724,7 +742,7 @@ export const amendTourBooking = async (reference, input, actor, req) =>
             throw new NotFoundError('Booking not found');
         }
 
-        assertMayRead(booking, actor, { email: input.email });
+        assertMayMutate(booking, actor, { capability: CAPABILITIES.BOOKINGS_WRITE, email: input.email });
 
         if (!AMENDABLE_STATUSES.includes(booking.status)) {
             throw new ConflictError('This booking can no longer be amended', { status: booking.status });

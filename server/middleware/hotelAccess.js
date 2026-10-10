@@ -52,6 +52,16 @@ export const requireHotelAccess = ({ manage = false } = {}) =>
                     required: [CAPABILITIES.PARTNER_INVENTORY_WRITE]
                 });
             }
+        } else if (manage && !can(req.user, CAPABILITIES.CATALOGUE_WRITE)) {
+            // Staff pass the ownership check for any property, but the
+            // extranet's rate and inventory writes are the same writes the
+            // admin catalogue gates on `catalogue.write`; a desk that reads
+            // the catalogue does not get to change prices through this door.
+            throw new ForbiddenError('Your role cannot change this property', {
+                role: req.user.role,
+                reason: 'INSUFFICIENT_CAPABILITY',
+                required: [CAPABILITIES.CATALOGUE_WRITE]
+            });
         }
 
         req.hotel = hotel;

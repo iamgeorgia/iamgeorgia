@@ -110,12 +110,13 @@ describe('admin summaries', { skip: dbAvailable ? false : 'Postgres is not reach
         }
     });
 
-    it('keeps the hotel booking summary from a dispatcher, but not the badges or the transfer summary', async () => {
+    it('keeps both booking summaries from a dispatcher, but not the badges', async () => {
         assert.equal((await request(app).get('/api/admin/bookings/summary').set('Cookie', dispatcherCookie)).status, 403);
         assert.equal((await request(app).get('/api/admin/badges').set('Cookie', dispatcherCookie)).status, 200);
+        // The transfer tiles sum revenue: a dispatcher reads the list, not the money.
         assert.equal(
             (await request(app).get('/api/admin/transfers/bookings/summary').set('Cookie', dispatcherCookie)).status,
-            200
+            403
         );
     });
 

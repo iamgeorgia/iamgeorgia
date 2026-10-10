@@ -436,25 +436,41 @@ export const requireApprovedPartner = (req, res, next) => {
 };
 
 const PARTNER_BOOKING_CHANGES = [CAPABILITIES.PARTNER_BOOKINGS_WRITE, CAPABILITIES.PARTNER_BOOKINGS_CANCEL];
+const STAFF_BOOKING_CHANGES = [CAPABILITIES.BOOKINGS_WRITE, CAPABILITIES.BOOKINGS_CANCEL];
 
 /**
- * Gates the public booking routers for partner sessions.
+ * Gates the public booking routers for signed-in sessions.
  *
  * Those routers serve guests as well, so they cannot require a session; but a
  * request that *does* carry a partner session books in that partner's name and
  * at its negotiated terms. Signing in is allowed in every partner status (the
  * portal explains each one), so without this a suspended, rejected or
  * still-pending partner could keep creating, amending and cancelling bookings
- * here long after `requireApprovedPartner` had shut the portal. Guests, staff
- * and drivers pass straight through.
+ * here long after `requireApprovedPartner` had shut the portal. Guests pass
+ * straight through.
  *
- * It is also where a partner's role is asked whether it books at all: any
- * change here — booking, holding, amending, cancelling — needs a booking
- * capability, so a PARTNER_FINANCE user reads the company's bookings and
- * changes none of them.
+ * It is also where a role is asked whether it books at all: any change here —
+ * booking, holding, amending, cancelling — needs a booking capability. A
+ * PARTNER_FINANCE user reads the company's bookings and changes none of them;
+ * and on the platform side the same question is put to staff, because these
+ * routers see the whole catalogue at trade and a management or finance desk
+ * that reads every booking must not be able to make one. Which exact
+ * capability a change needs (`bookings.write` to amend, `bookings.cancel` to
+ * cancel) is settled in the service against the booking itself.
  */
 export const rejectUnapprovedPartner = (req, res, next) => {
-    if (!req.user?.partnerId) {
+    if (!req.user) {
+        return next();
+    }
+
+    if (!req.user.partnerId) {
+        if (!READ_METHODS.has(req.method) && !can(req.user, ...STAFF_BOOKING_CHANGES)) {
+            throw new ForbiddenError('Your role cannot make or change bookings', {
+                reason: 'INSUFFICIENT_CAPABILITY',
+                required: STAFF_BOOKING_CHANGES
+            });
+        }
+
         return next();
     }
 

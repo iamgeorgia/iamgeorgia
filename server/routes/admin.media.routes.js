@@ -11,7 +11,9 @@ import {
     findFileOr404,
     isOpsCategory,
     issueSignedUrl,
+    reachableCategories,
     reachesAllFiles,
+    reachesCategory,
     softDeleteFile,
     uploadFile
 } from '../services/media/upload.service.js';
@@ -53,12 +55,11 @@ adminMediaRoutes.get('/', validate({ query: mediaQuerySchema }), async (req, res
     let categories = requested;
 
     if (!reachesAllFiles(req.user)) {
-        categories = (requested ?? [...['FLEET_IMAGE', 'DRIVER_PHOTO', 'DRIVER_DOCUMENT', 'VEHICLE_DOCUMENT']]).filter(
-            isOpsCategory
-        );
+        const reachable = reachableCategories(req.user);
+        categories = (requested ?? reachable).filter((category) => reachable.includes(category));
 
         if (categories.length === 0) {
-            throw new ForbiddenError('Operations staff may browse fleet and driver files only');
+            throw new ForbiddenError('Your role may not browse those files', { reachable });
         }
     }
 
@@ -116,7 +117,7 @@ adminMediaRoutes.get('/:id', validate({ params: idParamSchema }), async (req, re
 
     // A 404 rather than a 403: a dispatcher probing ids must not learn which
     // of a partner's contracts exist.
-    if (!reachesAllFiles(req.user) && !isOpsCategory(asset.category)) {
+    if (!reachesCategory(req.user, asset.category)) {
         throw new NotFoundError('File not found');
     }
 

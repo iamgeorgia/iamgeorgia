@@ -7,7 +7,6 @@ import { config } from '../../config.js';
 import { BadRequestError, ForbiddenError, NotFoundError } from '../../lib/errors.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { logger } from '../../lib/logger.js';
-import { isTransferOps } from '../../middleware/auth.js';
 import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { newAssetFolder, objectKeyFor, extensionForMime } from '../../lib/media/keys.js';
 import { processImage } from './image.service.js';
@@ -275,18 +274,44 @@ const OPS_CATEGORIES = new Set(['FLEET_IMAGE', 'DRIVER_PHOTO', 'DRIVER_DOCUMENT'
 export const isOpsCategory = (category) => OPS_CATEGORIES.has(category);
 
 /**
- * Whether a viewer reaches every file, contracts included: the back-office
- * desks. A dispatcher reaches the operations categories only.
+ * Which capability opens each category to platform staff.
+ *
+ * A file is reached by the desk that works with it: a contract or a rate
+ * sheet by whoever may read a partner's commercial terms, a payment slip or
+ * an invoice by finance, a driver's licence by dispatch, a certificate by
+ * anyone who reads the catalogue. Reading the partner list is not on this
+ * table: the reservations desk reads every partner and none of its papers.
  */
-export const reachesAllFiles = (viewer) => can(viewer, CAPABILITIES.PARTNERS_READ);
+const REACH_FOR_CATEGORY = {
+    CONTRACT: [CAPABILITIES.PARTNERS_FINANCIAL_READ],
+    RATE_SHEET: [CAPABILITIES.PARTNERS_FINANCIAL_READ],
+    INVOICE: [CAPABILITIES.FINANCE_PAYMENTS_READ],
+    PAYMENT_ATTACHMENT: [CAPABILITIES.FINANCE_PAYMENTS_READ],
+    VOUCHER: [CAPABILITIES.FINANCE_PAYMENTS_READ, CAPABILITIES.BOOKINGS_READ],
+    KOSHER_CERTIFICATE: [CAPABILITIES.CATALOGUE_READ],
+    HOTEL_IMAGE: [CAPABILITIES.CATALOGUE_READ],
+    ROOM_IMAGE: [CAPABILITIES.CATALOGUE_READ],
+    AMENITY_ICON: [CAPABILITIES.CATALOGUE_READ],
+    FLEET_IMAGE: [CAPABILITIES.DISPATCH_READ, CAPABILITIES.CATALOGUE_READ],
+    DRIVER_PHOTO: [CAPABILITIES.DISPATCH_READ, CAPABILITIES.CATALOGUE_READ],
+    DRIVER_DOCUMENT: [CAPABILITIES.DISPATCH_READ],
+    VEHICLE_DOCUMENT: [CAPABILITIES.DISPATCH_READ]
+};
 
-/** Ownership, for supplier users. The desks reach everything; operations staff reach their own categories. */
+/** Whether a viewer reaches every file: an admin, or whoever may write the catalogue the files hang off. */
+export const reachesAllFiles = (viewer) => can(viewer, CAPABILITIES.PLATFORM_ADMIN, CAPABILITIES.CATALOGUE_WRITE);
+
+/** Whether platform staff reach a category. Unlisted categories (imports, "other") are an admin's. */
+export const reachesCategory = (viewer, category) =>
+    reachesAllFiles(viewer) || can(viewer, ...(REACH_FOR_CATEGORY[category] ?? []));
+
+/** The categories a viewer may browse, for the listing. */
+export const reachableCategories = (viewer) =>
+    Object.keys(VISIBILITY_FOR_CATEGORY).filter((category) => reachesCategory(viewer, category));
+
+/** Platform staff reach by category; a supplier reaches its own files only. */
 const assertMayReach = (asset, viewer) => {
-    if (reachesAllFiles(viewer)) {
-        return;
-    }
-
-    if (isTransferOps(viewer) && isOpsCategory(asset.category)) {
+    if (reachesCategory(viewer, asset.category)) {
         return;
     }
 

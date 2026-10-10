@@ -1,6 +1,7 @@
+import { Prisma } from '../../generated/prisma/client.ts';
 import { prisma } from '../../db/index.js';
 import { config } from '../../config.js';
-import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.js';
+import { BadRequestError, ConflictError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { dateOnlyToUtc, nightsBetween, toDateOnly } from '../../lib/time.js';
 
@@ -200,6 +201,41 @@ export const setRateRange = async (hotelId, roomTypeId, ratePlanId, input, actor
             });
         }
 
+        // A fixed sell price below net is a loss on every night it covers,
+        // and a night can get there from either side: a new sell under a net
+        // already on the calendar, or a new net over a sell already fixed.
+        // The schema catches a request that carries both; these catch the
+        // half-updates. The CHECK on the table is the backstop.
+        const weekdays = weekdayArray(input.weekdays);
+        const nightsIn = Prisma.sql`
+            rate_plan_id = ${ratePlanId}
+            AND date BETWEEN ${dateOnlyToUtc(input.from)}::date AND ${dateOnlyToUtc(input.to)}::date
+            AND (${weekdays}::int[] IS NULL OR EXTRACT(ISODOW FROM date)::int = ANY(${weekdays}::int[]))`;
+
+        if (input.sellCents != null && input.netCents === undefined) {
+            const [{ net }] = await tx.$queryRaw`SELECT MAX(net_cents)::int AS net FROM rates WHERE ${nightsIn}`;
+
+            if (net !== null && input.sellCents < net) {
+                throw new UnprocessableEntityError('The sell price cannot be below the net price already set on these nights', {
+                    reason: 'SELL_BELOW_NET',
+                    field: 'sellCents',
+                    netCents: net
+                });
+            }
+        }
+
+        if (input.netCents !== undefined && input.sellCents === undefined) {
+            const [{ sell }] = await tx.$queryRaw`SELECT MIN(sell_cents)::int AS sell FROM rates WHERE ${nightsIn} AND sell_cents IS NOT NULL`;
+
+            if (sell !== null && input.netCents > sell) {
+                throw new UnprocessableEntityError('The net price cannot go above a sell price already fixed on these nights', {
+                    reason: 'SELL_BELOW_NET',
+                    field: 'netCents',
+                    sellCents: sell
+                });
+            }
+        }
+
         const written = await tx.$executeRaw`
             INSERT INTO rates (
                 rate_plan_id, date, currency, net_cents, sell_cents,
@@ -254,7 +290,8 @@ export const setRateRange = async (hotelId, roomTypeId, ratePlanId, input, actor
                 weekdays: input.weekdays ?? null,
                 nights: written,
                 currency,
-                ...(input.netCents === undefined ? {} : { netCents: input.netCents })
+                ...(input.netCents === undefined ? {} : { netCents: input.netCents }),
+                ...(input.sellCents === undefined ? {} : { sellCents: input.sellCents })
             },
             req
         });

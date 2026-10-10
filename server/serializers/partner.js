@@ -79,7 +79,9 @@ export const toPartnerDetail = (partner, viewer) => {
         }
     };
 
-    if (canViewFinancial(viewer, partner)) {
+    // Present only when the bank details were joined for an entitled viewer:
+    // `null` then means "none on file", and an absent key means "not shown".
+    if (partner.financial !== undefined && canViewFinancial(viewer, partner)) {
         detail.financial = toFinancial(partner.financial);
     }
 

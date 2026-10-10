@@ -224,8 +224,12 @@ adminTransferBookingRoutes.get(
     }
 );
 
-/** The screen's tiles, aggregated. Before `/:reference`, so the word is a route. */
-adminTransferBookingRoutes.get('/summary', async (req, res) => {
+/**
+ * The screen's tiles, aggregated. Before `/:reference`, so the word is a route.
+ * The tiles sum revenue, so they are a finance read: a dispatcher sees the
+ * list without them.
+ */
+adminTransferBookingRoutes.get('/summary', requireCapability(CAPABILITIES.FINANCE_MARGIN_READ), async (req, res) => {
     res.json(await summarizeTransferBookings());
 });
 

@@ -92,6 +92,26 @@ describe('approval workflow', { skip: dbAvailable ? false : 'Postgres is not rea
         assert.equal(outbox.at(-1).template, 'partnerApproved');
     });
 
+    it('lets exactly one of two simultaneous reviews win', async () => {
+        const { partner, cookie } = await scenario();
+
+        const results = await Promise.all([
+            request(app).post(`/api/admin/partners/${partner.id}/approve`).set('Cookie', cookie).send({}),
+            request(app).post(`/api/admin/partners/${partner.id}/reject`).set('Cookie', cookie).send({ reason: 'No' })
+        ]);
+
+        assert.deepEqual(results.map((res) => res.status).sort(), [200, 409]);
+
+        const stored = await prisma.partner.findUnique({ where: { id: partner.id } });
+        const winner = results.find((res) => res.status === 200);
+        assert.equal(stored.status, winner.body.status);
+
+        const rows = await prisma.auditLog.count({
+            where: { entityId: partner.id, action: { in: ['PARTNER_APPROVED', 'PARTNER_REJECTED'] } }
+        });
+        assert.equal(rows, 1);
+    });
+
     it('writes exactly one audit row naming the admin', async () => {
         const { admin, partner, cookie } = await scenario();
 

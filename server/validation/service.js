@@ -61,10 +61,16 @@ const quantityCoherent = (value) =>
     value.maxQuantity === null ||
     value.maxQuantity >= value.minQuantity;
 
+/** A fixed sell price replaces the markup, so one below net is a loss on every sale. */
+const sellCoversNet = (value) => value.sellCents == null || value.netCents === undefined || value.sellCents >= value.netCents;
+
+const SELL_BELOW_NET = { message: 'The sell price cannot be below the net price', path: ['sellCents'] };
+
 export const createServiceSchema = z
     .object(serviceFields)
     .strict()
-    .refine(quantityCoherent, { message: 'The largest quantity must be at least the smallest', path: ['maxQuantity'] });
+    .refine(quantityCoherent, { message: 'The largest quantity must be at least the smallest', path: ['maxQuantity'] })
+    .refine(sellCoversNet, SELL_BELOW_NET);
 
 export const updateServiceSchema = z
     .object({
@@ -80,7 +86,8 @@ export const updateServiceSchema = z
     })
     .strict()
     .refine((value) => Object.keys(value).length > 0, { message: 'Provide at least one field to update' })
-    .refine(quantityCoherent, { message: 'The largest quantity must be at least the smallest', path: ['maxQuantity'] });
+    .refine(quantityCoherent, { message: 'The largest quantity must be at least the smallest', path: ['maxQuantity'] })
+    .refine(sellCoversNet, SELL_BELOW_NET);
 
 export const archiveServiceSchema = z.object({ reason: textField(500).optional() }).strict().optional().default({});
 
