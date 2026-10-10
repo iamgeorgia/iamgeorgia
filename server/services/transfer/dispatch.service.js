@@ -77,7 +77,7 @@ export const activeAssignmentOf = (leg) => leg.assignments?.[0] ?? null;
 export const actorKindFor = (viewer) => {
     if (!viewer) return ACTOR.GUEST;
     if (can(viewer, CAPABILITIES.DISPATCH_WRITE)) return ACTOR.OPS;
-    if (viewer.role === 'DRIVER') return ACTOR.DRIVER;
+    if (can(viewer, CAPABILITIES.DRIVER_PANEL)) return ACTOR.DRIVER;
     if (viewer.partnerId) return ACTOR.PARTNER;
     return ACTOR.GUEST;
 };
@@ -796,7 +796,7 @@ export const transitionLeg = (legId, { to, expectedFrom, note }, { actorKind, dr
             assignmentId: current?.id ?? null,
             skipped,
             note: note ?? null,
-            onBehalf: actorKind !== ACTOR.DRIVER && actor?.role !== undefined
+            onBehalf: actorKind !== ACTOR.DRIVER && Boolean(actor)
         });
 
         await enqueueEvent(tx, {

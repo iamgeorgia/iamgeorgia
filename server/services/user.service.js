@@ -38,7 +38,10 @@ const TOP_ROLES = new Set(['SUPER_ADMIN', 'PARTNER_OWNER']);
  * another owner, a super admin another super admin.
  */
 const withinCeiling = (actor, role) => {
-    const own = ROLE_CAPABILITIES[actor.role];
+    // What the actor holds now, overrides included; what the role is seeded
+    // with. (A role edited in the panel is compared as seeded until the
+    // granting service reads roles from the table.)
+    const own = actor.capabilities instanceof Set ? actor.capabilities : ROLE_CAPABILITIES[actor.role];
     const theirs = ROLE_CAPABILITIES[role];
 
     if (!own || !theirs) {

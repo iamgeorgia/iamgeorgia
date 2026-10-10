@@ -1,8 +1,8 @@
 import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
-import { authenticate, requireCapability, requireRole } from '../middleware/auth.js';
-import { CAPABILITIES, STAFF_ROLES } from '../lib/permissions.js';
+import { authenticate, requireCapability } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import {
     countUnreadNotifications,
     listNotifications,
@@ -22,7 +22,9 @@ import { notificationParamSchema, notificationQuerySchema } from '../validation/
  */
 export const adminNotificationRoutes = Router();
 
-adminNotificationRoutes.use(authenticate, requireRole(...STAFF_ROLES), requireCapability(CAPABILITIES.NOTIFICATIONS_READ));
+// Staff, which is to say whoever reads the catalogue: every panel role and no
+// partner or driver, who have their own bells.
+adminNotificationRoutes.use(authenticate, requireCapability(CAPABILITIES.CATALOGUE_READ), requireCapability(CAPABILITIES.NOTIFICATIONS_READ));
 
 adminNotificationRoutes.get('/', validate({ query: notificationQuerySchema }), async (req, res) => {
     const { notifications, ...page } = await listNotifications(req.user.id, req.valid.query);

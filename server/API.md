@@ -994,10 +994,20 @@ Eleven roles. Platform side, never attached to a partner: `SUPER_ADMIN`,
 Partner side, always attached to one: `PARTNER_OWNER`, `PARTNER_ADMIN`,
 `PARTNER_AGENT`, `PARTNER_FINANCE`. The database CHECK enforces the split.
 
-What a role may do is a list of **capabilities** (`server/lib/permissions.js`),
-and the signed-in user's list travels on `user.capabilities` in the sign-in
-response and on `GET /api/auth/me`, sorted, so a client decides what to show
-from that rather than from a copy of the role table. Names are `area.verb`:
+What a role may do is a list of **capabilities**. The names live in code
+(`server/lib/permissions.js`: each is a check somewhere, and a row cannot
+invent a check); which of them a role carries is data (`roles`,
+`role_capabilities`, seeded from the code's defaults), which roles an account
+holds is data (`user_roles`; `users.role` stays as the primary role, kept in
+step by a trigger), and the odd capability granted to or denied an account by
+name, with a reason and optionally a last day, is data too
+(`user_capability_overrides`). Every request resolves the account's
+capabilities from those rows — a super admin holds everything on the platform
+side, computed — so an edit applies on the next request with no sign-out.
+The signed-in user's resolved list travels on `user.capabilities` in the
+sign-in response and on `GET /api/auth/me`, sorted, beside `user.roles`
+(`[{ key, name, isSystem }]`), so a client decides what to show from that
+rather than from a copy of the role table. Names are `area.verb`:
 `catalogue.write`, `bookings.cancel`, `finance.margin.read`,
 `users.staff.manage`, `partner.team.manage`, `partner.bookings.write`, and so
 on. A 403 from a capability guard says what was missing:

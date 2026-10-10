@@ -19,10 +19,10 @@ import {
 import { TOPICS } from '../../lib/outbox.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
-import { CAPABILITIES, ROLE_CAPABILITIES, ROLES } from '../../lib/permissions.js';
+import { CAPABILITIES } from '../../lib/permissions.js';
 import { daysBetween, todayInTimezone } from '../../lib/time.js';
 import { issueRatingToken } from '../../lib/transfer/ratingToken.js';
-import { TRANSFER_OPS_ROLES } from '../../middleware/auth.js';
+import { usersWithCapability } from '../rbac/access.js';
 import { contactRevealed } from '../../serializers/dispatch.js';
 import { sqlStateOf } from '../../middleware/errors.js';
 
@@ -91,38 +91,19 @@ const driverWithUser = (driverId) =>
         include: { user: { select: { id: true, email: true, isActive: true } } }
     });
 
-const opsUserIds = async () =>
-    (
-        await prisma.user.findMany({
-            where: { role: { in: TRANSFER_OPS_ROLES }, isActive: true },
-            select: { id: true }
-        })
-    ).map((row) => row.id);
-
-/** The roles whose capability table includes one capability. */
-const rolesWith = (capability) => ROLES.filter((role) => ROLE_CAPABILITIES[role].has(capability));
+/** Who runs the fleet: everyone on the platform side who dispatches. */
+const opsUserIds = () => usersWithCapability(CAPABILITIES.DISPATCH_WRITE, { partnerId: null });
 
 /**
- * Who hears about money owed to suppliers: every active member of staff
- * whose role reads payables — the finance desk, management and the admins —
- * and by construction never a dispatcher or the reservations desk.
+ * Who hears about money owed to suppliers: every active member of staff who
+ * reads payables — the finance desk, management and the admins — and by
+ * construction never a dispatcher or the reservations desk. Asked of the
+ * roles as they are now, overrides included, not of a table in code.
  */
-const financeUserIds = async () =>
-    (
-        await prisma.user.findMany({
-            where: { role: { in: rolesWith(CAPABILITIES.FINANCE_PAYABLES_READ) }, isActive: true },
-            select: { id: true }
-        })
-    ).map((row) => row.id);
+const financeUserIds = () => usersWithCapability(CAPABILITIES.FINANCE_PAYABLES_READ, { partnerId: null });
 
 /** A partner company's people who read its statement: the owner, its admins and its finance role. */
-const partnerFinanceUserIds = async (partnerId) =>
-    (
-        await prisma.user.findMany({
-            where: { partnerId, role: { in: rolesWith(CAPABILITIES.PARTNER_STATEMENT_READ) }, isActive: true },
-            select: { id: true }
-        })
-    ).map((row) => row.id);
+const partnerFinanceUserIds = (partnerId) => usersWithCapability(CAPABILITIES.PARTNER_STATEMENT_READ, { partnerId });
 
 /** The partner-side person to tell: whoever booked, else the company's primary contact. */
 const partnerRecipient = async (booking) => {

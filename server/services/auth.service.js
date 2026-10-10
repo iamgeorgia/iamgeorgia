@@ -5,6 +5,7 @@ import { createToken, hashToken, expiresIn } from '../lib/tokens.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { containsPersonal, PERSONAL_PASSWORD_MESSAGE } from '../validation/normalize.js';
 import { UnauthorizedError, BadRequestError, NotFoundError, ConflictError, GoneError } from '../lib/errors.js';
+import { accessInclude, withAccess } from './rbac/access.js';
 
 // One message for every way a sign-in can fail. Distinguishing "no such
 // account" from "wrong password" from "not activated yet" would turn the login
@@ -112,10 +113,12 @@ export const revokePartnerSessions = (client, partnerId) =>
  * guards it independently of this.
  */
 export const login = async ({ email, password }, req) => {
-    const user = await prisma.user.findUnique({
-        where: { email },
-        include: { partner: true }
-    });
+    const user = withAccess(
+        await prisma.user.findUnique({
+            where: { email },
+            include: { partner: true, ...accessInclude }
+        })
+    );
 
     // The comparison runs even when there is no account, against a hash of a
     // random value, so both paths cost the same wall-clock time.
@@ -298,11 +301,13 @@ export const consumeAuthToken = async (token, purpose, password, req) => {
             throw new ConflictError('This link has already been used');
         }
 
-        const user = await tx.user.update({
-            where: { id: row.userId },
-            data: { passwordHash, isActive: true },
-            include: { partner: true }
-        });
+        const user = withAccess(
+            await tx.user.update({
+                where: { id: row.userId },
+                data: { passwordHash, isActive: true },
+                include: { partner: true, ...accessInclude }
+            })
+        );
 
         // A new password ends every session that was opened with the old one.
         await revokeUserSessions(tx, user.id);

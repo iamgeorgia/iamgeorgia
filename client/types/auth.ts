@@ -16,12 +16,15 @@ export interface SessionUser {
   partnerId: string | null;
   lastLoginAt: string | null;
   createdAt: string;
+  /** Every role the account holds; the first is its primary role, which `role` names. */
+  roles: { key: string; name: string; isSystem: boolean }[];
   /**
-   * What this account's role may do, as the server's capability names
-   * (`catalogue.write`, `bookings.cancel`, `partner.team.manage`, …). The
-   * client reads this rather than keeping its own copy of the role table, so
-   * a capability granted or withdrawn on the server reaches the menus at the
-   * next sign-in. Sorted. See `server/lib/permissions.js`.
+   * What this account may do, as the server's capability names
+   * (`catalogue.write`, `bookings.cancel`, `partner.team.manage`, …): its
+   * roles' capabilities plus or minus any granted or denied to it by name.
+   * The client reads this rather than keeping its own copy of the role
+   * table, so a capability granted or withdrawn on the server reaches the
+   * menus on the next request. Sorted. See `server/lib/permissions.js`.
    */
   capabilities: string[];
 }

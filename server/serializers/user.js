@@ -1,4 +1,4 @@
-import { capabilitiesFor } from '../lib/permissions.js';
+import { capabilitiesOf } from '../lib/permissions.js';
 
 /**
  * Shapes a user for an API response.
@@ -24,15 +24,16 @@ export const toUser = (user) => ({
 });
 
 /**
- * The signed-in user as `/me` and sign-in describe them: the user, plus what
- * their role lets them do. The client builds its navigation and hides its
- * buttons from this list rather than from a copy of the role table, so a
- * capability granted or withdrawn on the server takes effect at next sign-in
- * with no client release.
+ * The signed-in user as `/me` and sign-in describe them: the user, the roles
+ * they hold, and what those let them do. The client builds its navigation
+ * and hides its buttons from this list rather than from a copy of the role
+ * table, so a capability granted or withdrawn on the server takes effect on
+ * the next request with no client release.
  */
 export const toSessionUser = (user) => ({
     ...toUser(user),
-    capabilities: capabilitiesFor(user.role)
+    roles: user.access?.roles ?? [{ key: user.role, name: user.role, isSystem: true }],
+    capabilities: capabilitiesOf(user)
 });
 
 const actorRef = (user) =>

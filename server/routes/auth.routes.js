@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { prisma } from '../db/index.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate, optionalAuthenticate, noStoreResponses } from '../middleware/auth.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 import {
     authAccountLimiter,
     authIpLimiter,
@@ -53,7 +54,7 @@ const identity = async (user) => ({
     partner: user.partnerId ? toPartnerDetail(await findPartnerOr404(user.partnerId, user, { financial: false }), user) : null,
     // Null for everyone but a driver, and null for a driver whose account has
     // not been linked to a profile yet — the panel shows that as its own state.
-    driver: user.role === 'DRIVER' ? toDriverSelf(await findDriverByUserId(user.id)) : null
+    driver: can(user, CAPABILITIES.DRIVER_PANEL) ? toDriverSelf(await findDriverByUserId(user.id)) : null
 });
 
 authRoutes.post('/login', authIpLimiter, authAccountLimiter, authLimiter, validate({ body: loginSchema }), async (req, res) => {

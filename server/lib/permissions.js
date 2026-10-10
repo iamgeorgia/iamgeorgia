@@ -48,6 +48,8 @@ export const CAPABILITIES = Object.freeze({
     INVOICES_WRITE: 'invoices.write',
 
     NOTIFICATIONS_READ: 'notifications.read',
+    /** The driver panel: a linked driver's own jobs. Held by the DRIVER role alone. */
+    DRIVER_PANEL: 'driver.panel',
 
     PARTNER_PROFILE_WRITE: 'partner.profile.write',
     PARTNER_FINANCIAL_READ: 'partner.financial.read',
@@ -109,11 +111,17 @@ const ADMIN = [
 const PARTNER_MEMBER = [C.NOTIFICATIONS_READ, C.PARTNER_BOOKINGS_READ];
 
 /**
- * Role → capabilities. Listed per role rather than inherited, so that what a
- * role can do is read off one line and a capability never leaks in through a
- * base it was not meant to be in.
+ * Role → capabilities, as seeded.
+ *
+ * Listed per role rather than inherited, so that what a role can do is read
+ * off one line and a capability never leaks in through a base it was not
+ * meant to be in. This is the *default* table: the `roles` and
+ * `role_capabilities` tables are seeded from it by migration and are what a
+ * request is actually resolved against (see `resolveCapabilities`), so a role
+ * edited in the panel differs from this list on purpose. It still serves the
+ * seed, the tests, and any viewer built from a bare `{ role }`.
  */
-const ROLE_LISTS = {
+export const DEFAULT_ROLE_LISTS = {
     SUPER_ADMIN: [...ADMIN, ...FINANCE_WRITE, C.USERS_STAFF_MANAGE, C.SETTINGS_WRITE],
     ADMIN,
     /** Reads everything, margins included; writes nothing. */
@@ -132,7 +140,7 @@ const ROLE_LISTS = {
     ],
     /** Assigns drivers and cars; reads the catalogue to do it; no money, no partners. */
     DISPATCHER: [C.CATALOGUE_READ, C.DISPATCH_READ, C.DISPATCH_WRITE, C.NOTIFICATIONS_READ],
-    DRIVER: [C.NOTIFICATIONS_READ],
+    DRIVER: [C.NOTIFICATIONS_READ, C.DRIVER_PANEL],
 
     PARTNER_OWNER: [
         ...PARTNER_MEMBER,
@@ -176,13 +184,13 @@ const readOnlySet = (list) => {
     return Object.freeze(Object.assign(set, { add: refuse, delete: refuse, clear: refuse }));
 };
 
-/** Role → read-only Set of capability strings. */
+/** Role → read-only Set of capability strings, as seeded. */
 export const ROLE_CAPABILITIES = Object.freeze(
-    Object.fromEntries(Object.entries(ROLE_LISTS).map(([role, list]) => [role, readOnlySet(list)]))
+    Object.fromEntries(Object.entries(DEFAULT_ROLE_LISTS).map(([role, list]) => [role, readOnlySet(list)]))
 );
 
-/** Every role the platform knows, in the order the enum declares them. */
-export const ROLES = Object.freeze(Object.keys(ROLE_LISTS));
+/** Every system role, in the order the enum declares them. */
+export const ROLES = Object.freeze(Object.keys(DEFAULT_ROLE_LISTS));
 
 /** Platform-side roles: no partnerId, by the database CHECK. */
 export const PLATFORM_ROLES = Object.freeze(ROLES.filter((role) => !role.startsWith('PARTNER_')));
@@ -190,15 +198,89 @@ export const PLATFORM_ROLES = Object.freeze(ROLES.filter((role) => !role.startsW
 /** Roles that sit in the admin panel. Drivers have their own panel. */
 export const STAFF_ROLES = Object.freeze(PLATFORM_ROLES.filter((role) => role !== 'DRIVER'));
 
+/** Which side a system role is on, for the seed. */
+export const sideOf = (role) => (role.startsWith('PARTNER_') ? 'PARTNER' : 'PLATFORM');
+
+/** Every capability there is. */
+export const ALL_CAPABILITIES = readOnlySet(Object.values(C));
+
 /**
- * Whether a viewer holds any of the given capabilities.
- *
- * Takes a viewer that may be undefined (an anonymous caller holds none) and a
- * role it has never heard of (holds none either), so a guard built on this
- * fails closed in both directions.
+ * The `partner.*` capabilities are a company's, always scoped by the viewer's
+ * partnerId in the service that honours them; a platform account has no
+ * company, so it holds none of them, super admin included — "everything" is
+ * everything on its own side.
  */
+export const isPartnerCapability = (capability) => capability.startsWith('partner.');
+
+/**
+ * Capabilities a super admin does not get by merely being one.
+ *
+ * A super admin holds everything *computed*, so a capability added in code
+ * is theirs with no data change — except these, which are the ones a role
+ * must be given on purpose. Empty today; the approval phase lists the
+ * "execute without approval" capabilities here.
+ */
+export const WITHHELD_FROM_SUPER_ADMIN = Object.freeze([]);
+
+/**
+ * What an account may do, from what was loaded for it.
+ *
+ * The union of its roles' capabilities, with a super admin holding all of
+ * them computed; then the overrides written for it by name — a GRANT adds,
+ * a DENY wins over anything a role gave — each counted only while it is
+ * live. A string no capability in code answers to is dropped: a capability
+ * renamed in code is a capability nobody holds until a role is re-saved,
+ * which is the safe way round.
+ */
+export const resolveCapabilities = ({ roles = [], overrides = [] }, now = new Date()) => {
+    const held = new Set();
+
+    for (const { role } of roles) {
+        if (role.key === 'SUPER_ADMIN') {
+            for (const capability of ALL_CAPABILITIES) {
+                if (!isPartnerCapability(capability)) held.add(capability);
+            }
+            for (const capability of WITHHELD_FROM_SUPER_ADMIN) held.delete(capability);
+            continue;
+        }
+
+        for (const { capability } of role.capabilities ?? []) held.add(capability);
+    }
+
+    const live = overrides.filter((override) => !override.expiresAt || override.expiresAt > now);
+
+    for (const { capability, effect } of live) {
+        if (effect === 'GRANT') held.add(capability);
+    }
+
+    for (const { capability, effect } of live) {
+        if (effect === 'DENY') held.delete(capability);
+    }
+
+    for (const capability of held) {
+        if (!ALL_CAPABILITIES.has(capability)) held.delete(capability);
+    }
+
+    return held;
+};
+
+/**
+ * What a viewer holds.
+ *
+ * A session's user carries its resolved `capabilities`; a viewer built from a
+ * bare `{ role }` — a system caller, a unit test — is answered from the seed
+ * table. An anonymous caller, and a role nobody has heard of, hold nothing,
+ * so a guard built on this fails closed in both directions.
+ */
+const heldBy = (viewer) => {
+    if (viewer?.capabilities instanceof Set) return viewer.capabilities;
+    if (Array.isArray(viewer?.capabilities)) return new Set(viewer.capabilities);
+    return viewer?.role ? ROLE_CAPABILITIES[viewer.role] : undefined;
+};
+
+/** Whether a viewer holds any of the given capabilities. */
 export const can = (viewer, ...anyOf) => {
-    const held = viewer?.role ? ROLE_CAPABILITIES[viewer.role] : undefined;
+    const held = heldBy(viewer);
 
     if (!held) {
         return false;
@@ -207,8 +289,11 @@ export const can = (viewer, ...anyOf) => {
     return anyOf.some((capability) => held.has(capability));
 };
 
-/** The capabilities of a role, sorted, for the `/me` payload. Empty for an unknown role. */
+/** The capabilities of a system role as seeded, sorted. Empty for an unknown role. */
 export const capabilitiesFor = (role) => [...(ROLE_CAPABILITIES[role] ?? [])].sort();
+
+/** What a loaded user holds, sorted, for the `/me` payload. */
+export const capabilitiesOf = (user) => [...(heldBy(user) ?? [])].sort();
 
 /** `can`, or a 403 that names what was missing. */
 export const assertCan = (viewer, ...anyOf) => {

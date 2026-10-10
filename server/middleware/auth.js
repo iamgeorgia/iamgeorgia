@@ -3,17 +3,7 @@ import { prisma } from '../db/index.js';
 import { hashToken } from '../lib/tokens.js';
 import { UnauthorizedError, ForbiddenError } from '../lib/errors.js';
 import { CAPABILITIES, can } from '../lib/permissions.js';
-
-export const ADMIN_ROLES = ['SUPER_ADMIN', 'ADMIN'];
-export const PARTNER_ROLES = ['PARTNER_OWNER', 'PARTNER_ADMIN', 'PARTNER_AGENT', 'PARTNER_FINANCE'];
-
-/**
- * Who runs transfer operations: admins, and dispatchers — who assign drivers
- * and cars all day and must not, for that, be able to change a fare, approve
- * a partner or read a margin. DISPATCHER is therefore deliberately *not* in
- * ADMIN_ROLES: everything gated on `isAdmin` stays closed to it.
- */
-export const TRANSFER_OPS_ROLES = [...ADMIN_ROLES, 'DISPATCHER'];
+import { accessInclude, withAccess } from '../services/rbac/access.js';
 
 /**
  * Whether a viewer is platform staff.
@@ -174,7 +164,7 @@ const resolveSession = async (req) => {
 const resolveToken = async (token) => {
     const session = await prisma.session.findUnique({
         where: { tokenHash: hashToken(token) },
-        include: { user: { include: { partner: true } } }
+        include: { user: { include: { partner: true, ...accessInclude } } }
     });
 
     if (!session || session.revokedAt || session.expiresAt <= new Date()) {
@@ -195,7 +185,10 @@ const resolveToken = async (token) => {
         return null;
     }
 
-    return session;
+    // What the account may do is settled here, once, from its roles and
+    // overrides as they are now: a role edited or a capability taken away
+    // applies on the next request, with no session to revoke.
+    return { ...session, user: withAccess(session.user) };
 };
 
 /**
@@ -281,20 +274,6 @@ export const optionalAuthenticate = async (req, res, next) => {
     next();
 };
 
-export const requireRole =
-    (...roles) =>
-    (req, res, next) => {
-        if (!req.user) {
-            throw new UnauthorizedError('Authentication required');
-        }
-
-        if (!roles.includes(req.user.role)) {
-            throw new ForbiddenError('Insufficient permissions');
-        }
-
-        next();
-    };
-
 /**
  * Gates a route on a capability rather than a role name.
  *
@@ -351,7 +330,19 @@ export const requireCapabilityByMethod = ({ read, write }) => {
  * `partnerId ?? '__none__'` fails closed for them, a router that names its
  * audience is one that stays closed when the next role arrives.
  */
-export const requirePartner = requireRole(...ADMIN_ROLES, ...PARTNER_ROLES);
+export const requirePartner = (req, res, next) => {
+    if (!req.user) {
+        throw new UnauthorizedError('Authentication required');
+    }
+
+    // A company's person, or an admin acting for the platform. A driver, a
+    // dispatcher or a desk is neither, whatever else it may do.
+    if (!req.user.partnerId && !isAdmin(req.user)) {
+        throw new ForbiddenError('Insufficient permissions');
+    }
+
+    next();
+};
 
 /**
  * Gates the driver panel.
@@ -368,7 +359,7 @@ export const requireDriver = async (req, res, next) => {
         throw new UnauthorizedError('Authentication required');
     }
 
-    if (req.user.role !== 'DRIVER') {
+    if (!can(req.user, CAPABILITIES.DRIVER_PANEL)) {
         throw new ForbiddenError('Driver account required');
     }
 
@@ -422,7 +413,7 @@ export const requireApprovedPartner = (req, res, next) => {
         throw new UnauthorizedError('Authentication required');
     }
 
-    if (ADMIN_ROLES.includes(req.user.role)) {
+    if (isAdmin(req.user)) {
         return next();
     }
 

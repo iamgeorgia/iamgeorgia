@@ -3171,6 +3171,13 @@ enum TokenPurpose {
 }
 
 enum AuditAction {
+  ROLE_CREATED
+  ROLE_UPDATED
+  ROLE_DELETED
+  USER_ROLES_CHANGED
+  USER_OVERRIDE_GRANTED
+  USER_OVERRIDE_REVOKED
+
   PARTNER_INVITED
   PARTNER_CREATED
   PARTNER_UPDATED
@@ -3439,6 +3446,13 @@ model User {
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
   paymentsRecorded    PaymentRecord[]  @relation("PaymentRecordedBy")
+
+  /// What the account may do comes from here, never from `role` alone: every
+  /// role it holds, plus or minus the overrides written for it by name.
+  /// `role` stays as the primary role, kept in step by a trigger, until the
+  /// column goes.
+  roles               UserRole[]               @relation("UserRoles")
+  capabilityOverrides UserCapabilityOverride[] @relation("UserOverrides")
 
   @@index([partnerId])
   @@index([role])
@@ -5201,4 +5215,95 @@ model PaymentAllocation {
   @@index([payableInstalmentId])
   @@index([paymentRecordId])
   @@map("payment_allocations")
+}
+
+// ---------------------------------------------------------------------------
+// Roles and capabilities
+//
+// A capability is a string named in code (`lib/permissions.js`), because each
+// one is a check somewhere in the code and a row cannot invent a check. Which
+// capabilities a role carries, which roles a user holds, and the odd one
+// granted or taken from a user by name, are data.
+// ---------------------------------------------------------------------------
+
+/// Which side of the platform a role belongs to. A platform role is held by
+/// staff and drivers, who carry no partnerId; a partner role by a company's
+/// people, who always do. A trigger keeps every user's roles on one side.
+enum RoleSide {
+  PLATFORM
+  PARTNER
+
+  @@map("role_side")
+}
+
+enum OverrideEffect {
+  GRANT
+  DENY
+
+  @@map("override_effect")
+}
+
+/// A named set of capabilities. The system roles are seeded by migration and
+/// keep their key and side for good; what each may do is data. (`AccessRole`
+/// because `Role` is the enum on `users.role`, which stays until the column goes.)
+model AccessRole {
+  id          String   @id @default(cuid())
+  /// The stable name code, seeds and tests use: `SUPER_ADMIN`, `PARTNER_AGENT`.
+  key         String   @unique
+  name        String
+  description String?
+  side        RoleSide
+  /// Seeded: cannot be deleted, and keeps its key and side.
+  isSystem    Boolean  @default(false) @map("is_system")
+  /// Lower first; the lowest of a user's roles is its primary role.
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  capabilities RoleCapability[]
+  members      UserRole[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model RoleCapability {
+  roleId     String     @map("role_id")
+  role       AccessRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  capability String
+
+  @@id([roleId, capability])
+  @@index([capability])
+  @@map("role_capabilities")
+}
+
+model UserRole {
+  userId          String   @map("user_id")
+  user            User     @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  roleId          String     @map("role_id")
+  role            AccessRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  grantedByUserId String?    @map("granted_by_user_id")
+  grantedAt       DateTime   @default(now()) @map("granted_at")
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_roles")
+}
+
+/// One capability granted to, or taken from, one user by name, with a reason
+/// and optionally a last day. Applied after the roles: a GRANT adds, a DENY
+/// wins over anything a role gave.
+model UserCapabilityOverride {
+  id              String         @id @default(cuid())
+  userId          String         @map("user_id")
+  user            User           @relation("UserOverrides", fields: [userId], references: [id], onDelete: Cascade)
+  capability      String
+  effect          OverrideEffect
+  reason          String
+  expiresAt       DateTime?      @map("expires_at")
+  grantedByUserId String?        @map("granted_by_user_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
+
+  @@unique([userId, capability])
+  @@map("user_capability_overrides")
 }
