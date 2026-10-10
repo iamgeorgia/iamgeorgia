@@ -43,6 +43,8 @@ export const searchCandidates = async ({
     destinationPath = null,
     destinationSlug = null,
     hotelIds = null,
+    // Properties this buyer may not see at all (a partner's deny list).
+    excludeHotelIds = null,
     countryCode = null,
     propertyTypes = null,
     minStars = null,
@@ -128,6 +130,7 @@ export const searchCandidates = async ({
            AND (${destinationSlug}::text IS NULL OR d.slug = ${destinationSlug}::text)
            AND (${countryCode}::char(2) IS NULL OR h.country_code = ${countryCode}::char(2))
            AND (${hotelIds}::text[] IS NULL OR h.id = ANY(${hotelIds}::text[]))
+           AND (${excludeHotelIds}::text[] IS NULL OR NOT (h.id = ANY(${excludeHotelIds}::text[])))
            AND (${minStars}::int IS NULL OR h.star_rating >= ${minStars}::int)
            AND (${propertyTypes}::text[] IS NULL OR h.property_type::text = ANY(${propertyTypes}::text[]))
            AND (${mealPlanCodes}::text[] IS NULL

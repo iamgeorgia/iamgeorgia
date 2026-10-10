@@ -44,8 +44,9 @@ export const detailInclude = (locale) => ({
     components: { orderBy: { slotIndex: 'asc' }, include: componentInclude }
 });
 
-const buildWhere = ({ search, status, b2cOnly, destinationId, destinationSlug, destinationPath, kosher, minNights, maxNights, featured }) => ({
+const buildWhere = ({ search, status, b2cOnly, destinationId, destinationSlug, destinationPath, kosher, minNights, maxNights, featured, access }) => ({
     ...(b2cOnly ? { b2cEnabled: true } : {}),
+    ...(access ?? {}),
     ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
     ...(destinationId ? { destinationId } : {}),
     ...(destinationSlug ? { destination: { slug: destinationSlug } } : {}),
@@ -83,12 +84,13 @@ export const listPackages = async (query) => {
     return { packages, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 };
 
-export const findPackageOr404 = async (idOrSlug, { locale, statuses, b2cOnly } = {}) => {
+export const findPackageOr404 = async (idOrSlug, { locale, statuses, b2cOnly, access } = {}) => {
     const pkg = await prisma.package.findFirst({
         where: {
             OR: [{ id: idOrSlug }, { slug: idOrSlug }],
             ...(statuses ? { status: { in: statuses } } : {}),
-            ...(b2cOnly ? { b2cEnabled: true } : {})
+            ...(b2cOnly ? { b2cEnabled: true } : {}),
+            ...(access ?? {})
         },
         include: detailInclude(locale)
     });

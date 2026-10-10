@@ -110,14 +110,15 @@ export const buildTourPublishChecklist = (tour, { today, hasFutureDeparture } = 
     return missing;
 };
 
-export const findTourOr404 = async (idOrSlug, { locale, statuses, b2cOnly, includePartnerOnly = true } = {}) => {
+export const findTourOr404 = async (idOrSlug, { locale, statuses, b2cOnly, includePartnerOnly = true, access } = {}) => {
     const tour = await prisma.tour.findFirst({
         where: {
             OR: [{ id: idOrSlug }, { slug: idOrSlug }],
             ...(statuses ? { status: { in: statuses } } : {}),
             // 404, not 403: a B2B-only tour simply does not exist on the
-            // public channel.
-            ...(b2cOnly ? { b2cEnabled: true } : {})
+            // public channel, nor does one a partner may not sell.
+            ...(b2cOnly ? { b2cEnabled: true } : {}),
+            ...(access ?? {})
         },
         include: detailInclude(locale, { includePartnerOnly })
     });
@@ -141,9 +142,11 @@ const buildWhere = ({
     difficulty,
     minDays,
     maxDays,
-    featured
+    featured,
+    access
 }) => ({
     ...(b2cOnly ? { b2cEnabled: true } : {}),
+    ...(access ?? {}),
     ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
     ...(destinationId ? { destinationId } : {}),
     ...(destinationSlug ? { destination: { slug: destinationSlug } } : {}),

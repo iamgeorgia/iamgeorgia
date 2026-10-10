@@ -252,7 +252,12 @@ export const config = {
         // Members a partner may have, invited ones included. A ceiling rather
         // than a plan limit: the number is there to stop a runaway script, not
         // to sell seats.
-        teamMax: numberEnv('PARTNER_TEAM_MAX', 25)
+        teamMax: numberEnv('PARTNER_TEAM_MAX', 25),
+        // The platform terms a company must accept: registration refuses any
+        // other version, and the portal shuts for a company that accepted an
+        // older one until its owner accepts this one.
+        termsVersion: process.env.PARTNER_TERMS_VERSION || '2026-10',
+        termsUrl: process.env.PARTNER_TERMS_URL || null
     },
 
     mail: {

@@ -11,6 +11,7 @@ import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextServiceBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, todayInTimezone, zonedTimeToInstant } from '../../lib/time.js';
 import { isTrade, readsAllBookings } from '../../middleware/auth.js';
+import { assertAllowed } from '../partner/access.service.js';
 import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
 import { resolveMarkup } from '../hotel/pricingRule.service.js';
@@ -85,6 +86,8 @@ export const prepareServiceBooking = async (input, actor, { strict = true, now =
     if (!trade && !service.b2cEnabled) {
         throw new NotFoundError('That service is no longer available');
     }
+
+    assertAllowed(actor, 'SERVICE', service.id, 'That service is no longer available');
 
     const days = input.days ?? 1;
     const quantity = input.quantity ?? 1;

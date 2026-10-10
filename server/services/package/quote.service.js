@@ -15,6 +15,7 @@ import { serviceInclude } from '../service/service.service.js';
 import { findPackageOr404 } from './package.service.js';
 import { kosherHotelInclude, validateKosherQuote } from './kosherEligibility.service.js';
 import { isTrade } from '../../middleware/auth.js';
+import { accessWhere } from '../partner/access.service.js';
 
 /**
  * Quoting a package: every slot resolved through the product's own engine.
@@ -469,7 +470,8 @@ export const quotePackage = async (criteria, viewer, { anyStatus = false, mode =
     const pkg = await findPackageOr404(slugOrId, {
         locale,
         statuses: anyStatus ? null : ['ACTIVE'],
-        b2cOnly: !anyStatus && !isTrade(viewer)
+        b2cOnly: !anyStatus && !isTrade(viewer),
+        access: anyStatus ? undefined : accessWhere(viewer, 'PACKAGE')
     });
 
     const today = todayInTimezone(pkg.timezone, now);

@@ -24,8 +24,24 @@ export const PARTNER_STATUSES = [
     'PENDING_APPROVAL',
     'APPROVED',
     'REJECTED',
-    'SUSPENDED'
+    'SUSPENDED',
+    'BLOCKED',
+    'TERMINATED'
 ];
+
+export const PRODUCT_TYPES = ['HOTEL', 'TRANSFER', 'TOUR', 'SERVICE', 'PACKAGE'];
+
+const idField = z.string().min(1).max(64);
+const dateOnlyField = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
+const versionField = z.string().trim().min(1).max(40);
+
+/** The platform terms, accepted as a whole, by version. */
+export const termsAcceptanceSchema = z
+    .object({
+        accepted: z.literal(true),
+        version: versionField
+    })
+    .strict();
 
 // No `.default([])` here. A default survives `.partial()` — the key would be
 // filled in when it was absent — so a PATCH that did not mention socialLinks
@@ -89,7 +105,8 @@ export const registrationSchema = z
         company: companyFullSchema,
         contact: contactSchema,
         financial: financialSchema,
-        password: passwordField
+        password: passwordField,
+        terms: termsAcceptanceSchema
     })
     .refine(
         (value) =>
@@ -121,11 +138,25 @@ export const adminCreatePartnerSchema = z
         financial: financialSchema.optional(),
         commissionRateBps: commissionField.optional(),
         notes: textField(2000).optional(),
-        documents: documentsField.default([])
+        documents: documentsField.default([]),
+        /**
+         * The signed contract, already uploaded as a CONTRACT file. Required
+         * to approve on creation unless the admin says the company trades
+         * without one (`contractRequired: false`, which is audited).
+         */
+        contract: z
+            .object({ assetId: idField, signedAt: dateOnlyField, version: versionField.optional() })
+            .strict()
+            .optional(),
+        contractRequired: z.boolean().default(true)
     })
     .refine((value) => value.mode === 'invite' || companyFullSchema.safeParse(value.company).success, {
         message: 'Complete company details are required to create an active partner',
         path: ['company']
+    })
+    .refine((value) => value.mode !== 'approve' || !value.contractRequired || Boolean(value.contract), {
+        message: 'A signed contract is required to approve a partner on creation',
+        path: ['contract']
     });
 
 /**
@@ -209,6 +240,49 @@ export const rejectSchema = z.object({
 export const suspendSchema = z.object({
     reason: textField(1000)
 });
+
+export const blockSchema = suspendSchema;
+
+/**
+ * Terminating is final, so like deletion it names the Partner ID being ended
+ * and the service checks it against the record.
+ */
+export const terminateSchema = z.object({
+    reason: textField(1000),
+    confirm: z.string().trim().min(1)
+});
+
+/** The non-file half of a contract upload. The file arrives as the `file` part. */
+export const contractUploadSchema = z.object({
+    signedAt: dateOnlyField,
+    version: versionField.optional()
+});
+
+/** Whether a company must have a signed contract on file before approval. */
+export const contractRequirementSchema = z.object({
+    contractRequired: z.boolean(),
+    reason: textField(500)
+});
+
+export const acceptTermsSchema = z.object({ version: versionField }).strict();
+
+const productAccessEntrySchema = z
+    .object({
+        productType: z.enum(PRODUCT_TYPES),
+        productId: idField,
+        mode: z.enum(['ALLOW', 'DENY']),
+        note: textField(300).optional()
+    })
+    .strict();
+
+/** The whole list, replaced as one: what is absent is removed. */
+export const productAccessSchema = z
+    .object({ entries: z.array(productAccessEntrySchema).max(500) })
+    .strict()
+    .refine(
+        (value) => new Set(value.entries.map((entry) => `${entry.productType}:${entry.productId}`)).size === value.entries.length,
+        { message: 'A product is listed once', path: ['entries'] }
+    );
 
 /**
  * Deleting a partner. The body carries the Partner ID being deleted, which the

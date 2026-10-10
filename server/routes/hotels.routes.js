@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { prisma } from '../db/index.js';
 import { validate } from '../middleware/validate.js';
 import { isTrade, optionalAuthenticate } from '../middleware/auth.js';
+import { accessWhere } from '../services/partner/access.service.js';
 import { publicHotelQuerySchema, slugParamSchema } from '../validation/hotel.js';
 import { findHotelOr404, listHotels } from '../services/hotel/hotel.service.js';
 import { resolveMarkup } from '../services/hotel/pricingRule.service.js';
@@ -41,7 +42,8 @@ hotelRoutes.get('/', validate({ query: publicHotelQuerySchema }), async (req, re
     const { hotels, ...page } = await listHotels({
         ...req.valid.query,
         status: PUBLIC_STATUSES,
-        b2cOnly: !isTrade(req.user)
+        b2cOnly: !isTrade(req.user),
+        access: accessWhere(req.user, 'HOTEL')
     });
 
     // One resolution for the page: the buyer is the same on every row.
@@ -75,7 +77,8 @@ hotelRoutes.get(
         const hotel = await findHotelOr404(req.valid.params.slug, {
             locale,
             statuses: PUBLIC_STATUSES,
-            b2cOnly: !isTrade(req.user)
+            b2cOnly: !isTrade(req.user),
+            access: accessWhere(req.user, 'HOTEL')
         });
         const { markupBps } = await resolveMarkup({ partner: req.user?.partner, hotel });
 

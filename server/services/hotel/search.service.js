@@ -4,6 +4,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.
 import { eachNight, nightsBetween, todayInTimezone } from '../../lib/time.js';
 import { issueOfferToken } from '../../lib/hotel/offerToken.js';
 import { isTrade } from '../../middleware/auth.js';
+import { assertAllowed, deniedIds, restrictIds } from '../partner/access.service.js';
 import { defaultProvider } from './providers/index.js';
 import { DEFAULT_CHILD_POLICY, categorise, resolveOccupancy } from './occupancy.service.js';
 import { quoteStay } from './pricing.service.js';
@@ -233,7 +234,10 @@ export const searchHotels = async (criteria, viewer) => {
         guests: party.adults + party.children.length,
         destinationPath: criteria.destinationPath ?? null,
         destinationSlug: criteria.destinationSlug ?? null,
-        hotelIds: criteria.hotelIds ?? null,
+        // Narrowed to what this partner may sell, if it has an allow list,
+        // and never any property on its deny list.
+        hotelIds: restrictIds(criteria.hotelIds ?? null, viewer, 'HOTEL'),
+        excludeHotelIds: deniedIds(viewer, 'HOTEL'),
         countryCode: criteria.countryCode ?? null,
         propertyTypes: criteria.propertyType
             ? Array.isArray(criteria.propertyType)
@@ -380,6 +384,8 @@ export const hotelAvailability = async (slugOrId, criteria, viewer) => {
         throw new NotFoundError('Hotel not found');
     }
 
+    assertAllowed(viewer, 'HOTEL', hotel.id, 'Hotel not found');
+
     const { nights, today } = validateStay({ checkIn, checkOut, timezone: hotel.timezone });
     const party = categorise(adults, childAges, DEFAULT_CHILD_POLICY);
     const provider = defaultProvider();
@@ -484,6 +490,10 @@ export const revalidateOffer = async (
     if (!hotel) {
         throw new NotFoundError('That hotel is no longer available');
     }
+
+    // Checked at booking as at search: a token quoted before a partner was
+    // denied a property, or by someone else, must not book it.
+    assertAllowed(viewer, 'HOTEL', hotel.id, 'That hotel is no longer available');
 
     const { today } = validateStay({
         checkIn: offer.checkIn,

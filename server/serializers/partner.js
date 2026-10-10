@@ -1,5 +1,18 @@
+import { config } from '../config.js';
 import { CAPABILITIES, can } from '../lib/permissions.js';
 import { toContact } from './user.js';
+
+/** One line of a partner's allow or deny list, with the product it names. */
+export const toProductAccess = (entry) => ({
+    id: entry.id,
+    productType: entry.productType,
+    productId: entry.productId,
+    mode: entry.mode,
+    note: entry.note ?? null,
+    product: entry.product ?? null,
+    createdAt: entry.createdAt,
+    createdBy: entry.createdByUser ? toContact(entry.createdByUser) : null
+});
 
 const primaryContactOf = (partner) => {
     const users = partner.users ?? [];
@@ -70,6 +83,26 @@ export const toPartnerDetail = (partner, viewer) => {
         users: (partner.users ?? []).map(toContact),
         updatedAt: partner.updatedAt,
 
+        // The signed agreement on file. The file itself is reached through
+        // the contract endpoint, by signed link; here only the facts.
+        contract: {
+            required: partner.contractRequired ?? true,
+            onFile: Boolean(partner.contractAssetId && !partner.contractAsset?.deletedAt),
+            signedAt: partner.contractSignedAt ?? null,
+            version: partner.contractVersion ?? null,
+            uploadedAt: partner.contractUploadedAt ?? null,
+            uploadedBy: partner.contractUploadedByUser ? toContact(partner.contractUploadedByUser) : null,
+            filename: partner.contractAsset?.originalFilename ?? null
+        },
+        terms: {
+            current: config.partners.termsVersion,
+            url: config.partners.termsUrl,
+            acceptedVersion: partner.termsVersion ?? null,
+            acceptedAt: partner.termsAcceptedAt ?? null,
+            acceptedBy: partner.termsAcceptedByUser ? toContact(partner.termsAcceptedByUser) : null,
+            outdated: partner.termsVersion !== config.partners.termsVersion
+        },
+
         review: {
             approvedAt: partner.approvedAt ?? null,
             approvedBy: partner.approvedByUser ? toContact(partner.approvedByUser) : null,
@@ -78,7 +111,13 @@ export const toPartnerDetail = (partner, viewer) => {
             rejectionReason: partner.rejectionReason ?? null,
             suspendedAt: partner.suspendedAt ?? null,
             suspendedBy: partner.suspendedByUser ? toContact(partner.suspendedByUser) : null,
-            suspensionReason: partner.suspensionReason ?? null
+            suspensionReason: partner.suspensionReason ?? null,
+            blockedAt: partner.blockedAt ?? null,
+            blockedBy: partner.blockedByUser ? toContact(partner.blockedByUser) : null,
+            blockedReason: partner.blockedReason ?? null,
+            terminatedAt: partner.terminatedAt ?? null,
+            terminatedBy: partner.terminatedByUser ? toContact(partner.terminatedByUser) : null,
+            terminatedReason: partner.terminatedReason ?? null
         }
     };
 

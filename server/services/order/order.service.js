@@ -16,6 +16,7 @@ import { readTourOfferToken } from '../../lib/tour/offerToken.js';
 import { impliedOrderStatus, LIVE_ITEM_STATUSES, orderMachine } from '../../lib/order/machines.js';
 import { ACTOR } from '../../lib/transfer/machines.js';
 import { isTrade, readsAllBookings } from '../../middleware/auth.js';
+import { accessWhere } from '../partner/access.service.js';
 import { CAPABILITIES, can } from '../../lib/permissions.js';
 import {
     cancelHotelBookingInTx,
@@ -261,7 +262,7 @@ const snapshotPackage = (pkg, decoded, slots, kosher) => ({
 export const prepareOrder = async (input, actor, { now = new Date() } = {}) => {
     const decoded = readPackageOfferToken(input.packageToken);
     const trade = isTrade(actor);
-    const pkg = await findPackageOr404(decoded.packageId, { statuses: ['ACTIVE'], b2cOnly: !trade });
+    const pkg = await findPackageOr404(decoded.packageId, { statuses: ['ACTIVE'], b2cOnly: !trade, access: accessWhere(actor, 'PACKAGE') });
     const today = todayInTimezone(pkg.timezone, now);
 
     if ((pkg.sellableFrom && toDateOnly(pkg.sellableFrom) > today) || (pkg.sellableUntil && toDateOnly(pkg.sellableUntil) < today)) {

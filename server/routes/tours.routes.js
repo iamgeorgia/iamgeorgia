@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
 import { isTrade, optionalAuthenticate } from '../middleware/auth.js';
+import { accessWhere } from '../services/partner/access.service.js';
 import {
     publicTourQuerySchema,
     tourAvailabilityQuerySchema,
@@ -42,7 +43,8 @@ tourRoutes.get('/', validate({ query: publicTourQuerySchema }), async (req, res)
     const { tours, ...page } = await listTours({
         ...req.valid.query,
         status: PUBLIC_STATUSES,
-        b2cOnly: !isTrade(req.user)
+        b2cOnly: !isTrade(req.user),
+        access: accessWhere(req.user, 'TOUR')
     });
 
     // No viewer: a catalogue card must not carry status or the operator even
@@ -56,7 +58,8 @@ tourRoutes.get('/:slug', validate({ params: tourSlugParamSchema, query: publicTo
         locale,
         statuses: PUBLIC_STATUSES,
         b2cOnly: !isTrade(req.user),
-        includePartnerOnly: isTrade(req.user)
+        includePartnerOnly: isTrade(req.user),
+        access: accessWhere(req.user, 'TOUR')
     });
 
     res.json(toTourDetail(tour, locale));

@@ -1123,6 +1123,65 @@ is fixed (409 `ROLE_LOCKED`); everything else about a role is data.
 | GET | `/admin/roles/:key` | |
 | POST | `/admin/roles` | `{ key, name, description?, side: PLATFORM \| PARTNER, capabilities }`. A key is lower case (`^[a-z][a-z0-9_]{2,40}$`), so a panel-made role can never be mistaken for a system one; a platform role carries no `partner.*` capability and a partner role only those and the bell (400 `CAPABILITY_WRONG_SIDE`); a capability goes into a role only from a caller who holds it (403 `ROLE_ABOVE_CEILING`). Audited `ROLE_CREATED` |
 | PATCH | `/admin/roles/:key` | `{ name?, description?, capabilities? }`, the whole capability set afterwards. Adding is handing out (the ceiling applies); removing is not. Audited `ROLE_UPDATED` with `{ changes: { capabilities: { added, removed } } }` |
+### Contract, terms and the end of a partnership
+
+A company trades on the platform under a signed agreement and the platform
+terms in force. Both are gates, not paperwork.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/invitations/:token` | the preview now carries `terms: { version, url }`, the text to present and the version to send back |
+| POST | `/invitations/:token/accept` | now carries `terms: { accepted: true, version }`; any version but the current one is 400 `TERMS_VERSION_STALE` with `current`. Stamped on the company, audited `PARTNER_TERMS_ACCEPTED` |
+| POST | `/admin/partners/:id/contract` | `partners.contract.write` (super admin, admin). Multipart: `file` (a PDF, filed as a private `CONTRACT` the company owns), `signedAt` (YYYY-MM-DD), `version?`. A second upload replaces the first; audited `PARTNER_CONTRACT_UPLOADED` |
+| GET | `/admin/partners/:id/contract` · `/partner/contract` | `partners.contract.write` or `partners.financial.read`; the company's own users for their own. A short-lived `{ url, expiresAt }`, audited as every private file is. 404 when nothing is on file |
+| PUT | `/admin/partners/:id/contract-requirement` | `partners.contract.write`: `{ contractRequired, reason }`. Companies approved before the gate existed were grandfathered (`contractRequired: false`); waiving it for a new one is an admin's decision, on the trail |
+| POST | `/admin/partners/:id/approve` | 400 `CONTRACT_MISSING` while `contractRequired` and no contract is on file. The same on `POST /admin/partners` in `approve` mode, which takes `contract: { assetId, signedAt, version? }` (a `CONTRACT` file uploaded through `/admin/media` first, re-parented to the new company) or `contractRequired: false` |
+| GET | `/partner/terms` | In every status: `{ current, url, acceptedVersion, acceptedAt, outdated }` |
+| POST | `/partner/terms/accept` | `partner.terms.accept` (the owner): `{ version }`, the current one or 400 `TERMS_VERSION_STALE`. Audited |
+| POST | `/admin/partners/:id/block` | `partners.write`: `{ reason }`, from APPROVED or SUSPENDED. Sessions end at once; signing in answers 403 `{ reason: "PARTNER_BLOCKED" }` after the password check. `unblock` puts the company back to APPROVED as it was |
+| POST | `/admin/partners/:id/terminate` | `{ reason, confirm: <Partner ID> }`, from any status but TERMINATED, and nothing leads out of it: every account is deactivated, every open link spent, every invitation withdrawn, sessions ended; bookings and balances stay under the company's name. Signing in answers 403 `PARTNER_TERMINATED` |
+| DELETE | `/admin/partners/:id` | 409 `USE_TERMINATE` once the company has any booking, receivable or payable |
+
+The partner detail carries `contract { required, onFile, signedAt, version,
+uploadedAt, uploadedBy, filename }`, `terms { current, url, acceptedVersion,
+acceptedAt, acceptedBy, outdated }` and `review.blocked*` / `review.terminated*`.
+
+Behind `requireApprovedPartner` and on the public booking routes, a company
+whose `terms.acceptedVersion` is not the current one is refused with 403
+`{ reason: "TERMS_OUTDATED", termsVersion, acceptedVersion }` until its owner
+accepts; `/partner/me`, `/partner/terms` and `/partner/contract` stay open so
+the page that asks can render. Bump `PARTNER_TERMS_VERSION` and every company
+accepts again on its next visit. The driver panel refuses drivers of a
+blocked or terminated supplier as it does a suspended one.
+
+### What one partner may sell — product access
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/admin/partners/:id/product-access` | `partners.read`: `{ data: [{ id, productType: HOTEL \| TRANSFER \| TOUR \| SERVICE \| PACKAGE, productId, mode: ALLOW \| DENY, note, product: { id, name, slug }, createdAt, createdBy }] }` |
+| PUT | `/admin/partners/:id/product-access` | `partners.access.write` (super admin, admin): `{ entries: [{ productType, productId, mode, note? }] }`, the whole list — what is absent is removed. Every product must exist (422 `UNKNOWN_PRODUCT`). Audited `PARTNER_PRODUCT_ACCESS_CHANGED` with `{ added, removed, changed }` |
+
+No rows means everything. A DENY row hides that product from the company
+wherever it is listed, searched, quoted or booked (a 404, as for a product
+that is not on its channel); one or more ALLOW rows for a type turn that type
+into an allow-list. `TRANSFER` names a vehicle class. The rows travel with the
+session's partner, so a change applies on the next request, to every user of
+the company alike; staff and the public are never on the list. A package is
+gated as a package; the hotels and tours inside it are the package's own.
+
+### A partner's team — `/partner/team`
+
+`partner.team.manage`: `PARTNER_OWNER` and `PARTNER_ADMIN`, on an approved
+partner. The same verbs as above, scoped to the session's company — another
+company's user id is **404**. Differences: invite roles are `PARTNER_ADMIN`
+`PARTNER_AGENT` `PARTNER_FINANCE`; `PATCH /partner/team/:id/role` accepts any
+partner role including `PARTNER_OWNER`, and `PUT /partner/team/:id/roles`
+the whole set; `GET /partner/team/grantable` says which the caller may give.
+An owner manages everyone (other owners included) while an admin manages
+agents only — a finance user can do what an admin cannot (403
+`ROLE_ABOVE_CEILING`); `PATCH /partner/team/:id/primary-contact` moves the one
+primary contact to an active member, within the same ceiling on both the
+member gaining it and the one losing it (so a partner admin cannot take it
 | DELETE | `/admin/roles/:key` | Never a system role (409 `SYSTEM_ROLE`), never one still held (409 `ROLE_IN_USE`). Audited `ROLE_DELETED` |
 
 from an owner); a team holds at most `PARTNER_TEAM_MAX`

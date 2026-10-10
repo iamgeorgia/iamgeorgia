@@ -2840,6 +2840,7 @@ model FileAsset {
   roomTypeImages    RoomTypeImage[]
   hotelDocuments    HotelDocument[]
   featuredForHotels Hotel[]         @relation("HotelFeaturedImage")
+  contractOf        Partner?        @relation("PartnerContract")
 
   fleetVehicleImages    TransferFleetVehicleImage[]    @relation("FleetVehicleImages")
   fleetVehicleDocuments TransferFleetVehicleDocument[] @relation("FleetVehicleDocuments")
@@ -3162,6 +3163,10 @@ enum PartnerStatus {
   APPROVED
   REJECTED
   SUSPENDED
+  /// Access withdrawn by the platform; reversible, nothing else changes.
+  BLOCKED
+  /// The relationship is over: accounts deactivated, nothing reopens.
+  TERMINATED
 
   @@map("partner_status")
 }
@@ -3199,6 +3204,12 @@ enum AuditAction {
   PARTNER_CREDIT_LIMIT_CHANGED
   PARTNER_CREDIT_WARNING
   PENALTY_OVERRIDDEN
+  PARTNER_CONTRACT_UPLOADED
+  PARTNER_TERMS_ACCEPTED
+  PARTNER_BLOCKED
+  PARTNER_UNBLOCKED
+  PARTNER_TERMINATED
+  PARTNER_PRODUCT_ACCESS_CHANGED
 
   PARTNER_INVITED
   PARTNER_CREATED
@@ -3439,6 +3450,11 @@ model User {
   partnersApproved  Partner[]      @relation("PartnerApprovedBy")
   partnersRejected  Partner[]      @relation("PartnerRejectedBy")
   partnersSuspended Partner[]      @relation("PartnerSuspendedBy")
+  partnersBlocked    Partner[]     @relation("PartnerBlockedBy")
+  partnersTerminated Partner[]     @relation("PartnerTerminatedBy")
+  contractsUploaded  Partner[]     @relation("PartnerContractUploadedBy")
+  termsAccepted      Partner[]     @relation("PartnerTermsAcceptedBy")
+  productAccessGiven PartnerProductAccess[] @relation("ProductAccessCreatedBy")
   filesUploaded     FileAsset[]    @relation("FileUploadedBy")
   bookingsMade      HotelBooking[] @relation("BookingBookedBy")
   holdsCreated      BookingHold[]  @relation("HoldCreatedBy")
@@ -3616,6 +3632,36 @@ model Partner {
   creditLimitCurrency String?         @map("credit_limit_currency") @db.Char(3)
   creditLimitMode     CreditLimitMode @default(BLOCK) @map("credit_limit_mode")
   penalties           PenaltyEntry[]  @relation("PartnerPenalties")
+
+  /// The signed contract, as a private file; approval waits for it unless
+  /// `contractRequired` was switched off (partners approved before the gate
+  /// existed, or on an admin's say-so, audited).
+  contractAssetId          String?   @unique @map("contract_asset_id")
+  contractAsset            FileAsset? @relation("PartnerContract", fields: [contractAssetId], references: [id], onDelete: SetNull)
+  contractSignedAt         DateTime? @map("contract_signed_at")
+  contractVersion          String?   @map("contract_version")
+  contractUploadedAt       DateTime? @map("contract_uploaded_at")
+  contractUploadedByUserId String?   @map("contract_uploaded_by_user_id")
+  contractUploadedByUser   User?     @relation("PartnerContractUploadedBy", fields: [contractUploadedByUserId], references: [id], onDelete: SetNull)
+  contractRequired         Boolean   @default(true) @map("contract_required")
+
+  /// The platform terms the company last accepted. The portal is shut until
+  /// this matches the current version.
+  termsVersion          String?   @map("terms_version")
+  termsAcceptedAt       DateTime? @map("terms_accepted_at")
+  termsAcceptedByUserId String?   @map("terms_accepted_by_user_id")
+  termsAcceptedByUser   User?     @relation("PartnerTermsAcceptedBy", fields: [termsAcceptedByUserId], references: [id], onDelete: SetNull)
+
+  blockedAt         DateTime? @map("blocked_at")
+  blockedByUserId   String?   @map("blocked_by_user_id")
+  blockedByUser     User?     @relation("PartnerBlockedBy", fields: [blockedByUserId], references: [id], onDelete: SetNull)
+  blockedReason     String?   @map("blocked_reason")
+  terminatedAt      DateTime? @map("terminated_at")
+  terminatedByUserId String?  @map("terminated_by_user_id")
+  terminatedByUser  User?     @relation("PartnerTerminatedBy", fields: [terminatedByUserId], references: [id], onDelete: SetNull)
+  terminatedReason  String?   @map("terminated_reason")
+
+  productAccess PartnerProductAccess[] @relation("PartnerProductAccess")
   receivables      Receivable[]        @relation("PartnerReceivables")
   supplierPayables SupplierPayable[]   @relation("PartnerSupplierPayables")
   paymentRecords   PaymentRecord[]     @relation("PartnerPaymentRecords")
@@ -5419,6 +5465,40 @@ enum CreditLimitMode {
   WARN
 
   @@map("credit_limit_mode")
+}
+
+enum AccessMode {
+  ALLOW
+  DENY
+
+  @@map("access_mode")
+}
+
+/// What one partner may or may not sell, by product.
+///
+/// No rows: everything. A DENY row hides that product from the partner
+/// wherever it is searched, quoted or booked. One or more ALLOW rows for a
+/// product type turn that type into an allow-list for the partner. Read with
+/// the session, so every catalogue query applies it without another round
+/// trip.
+model PartnerProductAccess {
+  id        String  @id @default(cuid())
+  partnerId String  @map("partner_id")
+  partner   Partner @relation("PartnerProductAccess", fields: [partnerId], references: [id], onDelete: Cascade)
+
+  productType PricingProductType @map("product_type")
+  /// A hotel, vehicle class, tour, service or package id.
+  productId   String             @map("product_id")
+  mode        AccessMode
+  note        String?
+
+  createdByUserId String? @map("created_by_user_id")
+  createdByUser   User?   @relation("ProductAccessCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@unique([partnerId, productType, productId])
+  @@index([productType, productId])
+  @@map("partner_product_access")
 }
 
 /// What a cancellation cost the buyer, as a row finance works from: the

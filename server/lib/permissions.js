@@ -43,6 +43,10 @@ export const CAPABILITIES = Object.freeze({
     PARTNERS_FINANCIAL_READ: 'partners.financial.read',
     /** How much a partner may owe before a booking is refused or finance told. */
     PARTNERS_CREDIT_WRITE: 'partners.credit.write',
+    /** Filing the signed contract approval waits for. */
+    PARTNERS_CONTRACT_WRITE: 'partners.contract.write',
+    /** Which products one partner may sell: the allow and deny lists. */
+    PARTNERS_ACCESS_WRITE: 'partners.access.write',
 
     FINANCE_MARGIN_READ: 'finance.margin.read',
     FINANCE_PAYABLES_READ: 'finance.payables.read',
@@ -87,7 +91,9 @@ export const CAPABILITIES = Object.freeze({
     PARTNER_BOOKINGS_CANCEL: 'partner.bookings.cancel',
     PARTNER_INVENTORY_WRITE: 'partner.inventory.write',
     PARTNER_STATEMENT_READ: 'partner.statement.read',
-    PARTNER_INVOICES_READ: 'partner.invoices.read'
+    PARTNER_INVOICES_READ: 'partner.invoices.read',
+    /** Accepting the platform terms on the company's behalf. */
+    PARTNER_TERMS_ACCEPT: 'partner.terms.accept'
 });
 
 const C = CAPABILITIES;
@@ -141,6 +147,8 @@ const ADMIN = [
     C.PARTNERS_WRITE,
     C.FINANCE_COMMISSION_WRITE,
     C.PARTNERS_CREDIT_WRITE,
+    C.PARTNERS_CONTRACT_WRITE,
+    C.PARTNERS_ACCESS_WRITE,
     ...FINANCE_READ
 ];
 
@@ -207,7 +215,8 @@ export const DEFAULT_ROLE_LISTS = {
         C.PARTNER_BOOKINGS_CANCEL,
         C.PARTNER_INVENTORY_WRITE,
         C.PARTNER_STATEMENT_READ,
-        C.PARTNER_INVOICES_READ
+        C.PARTNER_INVOICES_READ,
+        C.PARTNER_TERMS_ACCEPT
     ],
     PARTNER_ADMIN: [
         ...PARTNER_MEMBER,

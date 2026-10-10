@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import request from 'supertest';
 
+import { config } from '../../config.js';
 import { prisma } from '../../db/index.js';
 import { hashPassword } from '../../lib/password.js';
 import { createToken, hashToken, expiresIn } from '../../lib/tokens.js';
@@ -552,6 +553,12 @@ export const makePartner = async (tracker, { status = 'APPROVED', ...overrides }
                 phone: '+995322123456',
                 email: testEmail('company'),
                 submittedAt: new Date(),
+                // A fixture company trades as one that was onboarded before
+                // the contract gate and has accepted the terms in force; the
+                // contract and terms suites override both to exercise them.
+                contractRequired: false,
+                termsVersion: config.partners.termsVersion,
+                termsAcceptedAt: new Date(),
                 ...overrides
             }
         })
@@ -749,7 +756,8 @@ export const registrationPayload = (email, overrides = {}) => ({
         accountHolder: 'Kazbegi Lodge LLC',
         ...overrides.financial
     },
-    password: overrides.password ?? TEST_PASSWORD
+    password: overrides.password ?? TEST_PASSWORD,
+    terms: overrides.terms ?? { accepted: true, version: config.partners.termsVersion }
 });
 
 /** The full admin create-partner body, in whichever mode. */

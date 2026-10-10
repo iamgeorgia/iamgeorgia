@@ -164,7 +164,9 @@ const resolveSession = async (req) => {
 const resolveToken = async (token) => {
     const session = await prisma.session.findUnique({
         where: { tokenHash: hashToken(token) },
-        include: { user: { include: { partner: true, ...accessInclude } } }
+        // The partner comes with what it may sell, so every catalogue query
+        // applies the company's allow and deny lists without another read.
+        include: { user: { include: { partner: { include: { productAccess: true } }, ...accessInclude } } }
     });
 
     if (!session || session.revokedAt || session.expiresAt <= new Date()) {
@@ -413,7 +415,7 @@ export const requireDriver = async (req, res, next) => {
     // from simply signing in again.
     const partnerStatus = driver.provider?.partner?.status;
 
-    if (driver.provider?.status === 'ARCHIVED' || partnerStatus === 'SUSPENDED' || partnerStatus === 'REJECTED') {
+    if (driver.provider?.status === 'ARCHIVED' || ['SUSPENDED', 'REJECTED', 'BLOCKED', 'TERMINATED'].includes(partnerStatus)) {
         throw new ForbiddenError('Your transfer company is not active on the platform', {
             reason: 'DRIVER_PROVIDER_INACTIVE'
         });
@@ -447,7 +449,26 @@ export const requireApprovedPartner = (req, res, next) => {
         throw new ForbiddenError('Partner account is not active', { partnerStatus: status ?? null });
     }
 
+    assertTermsCurrent(req.user);
+
     next();
+};
+
+/**
+ * The portal and the booking routes stay shut for a company that has not
+ * accepted the terms now in force. `/partner/me` and the terms routes are
+ * not behind this, which is how the owner gets to accept them. The 403
+ * names the version so the client shows the right text.
+ */
+const assertTermsCurrent = (viewer) => {
+    if (viewer.partner.termsVersion !== config.partners.termsVersion) {
+        throw new ForbiddenError('The platform terms must be accepted before continuing', {
+            reason: 'TERMS_OUTDATED',
+            partnerStatus: viewer.partner.status,
+            termsVersion: config.partners.termsVersion,
+            acceptedVersion: viewer.partner.termsVersion ?? null
+        });
+    }
 };
 
 const PARTNER_BOOKING_CHANGES = [CAPABILITIES.PARTNER_BOOKINGS_WRITE, CAPABILITIES.PARTNER_BOOKINGS_CANCEL];
@@ -494,6 +515,8 @@ export const rejectUnapprovedPartner = (req, res, next) => {
     if (status !== 'APPROVED') {
         throw new ForbiddenError('Partner account is not active', { partnerStatus: status ?? null });
     }
+
+    assertTermsCurrent(req.user);
 
     if (!READ_METHODS.has(req.method) && !can(req.user, ...PARTNER_BOOKING_CHANGES)) {
         throw new ForbiddenError('Your role cannot make or change bookings', {

@@ -150,14 +150,16 @@ export const buildPublishChecklist = (hotel) => {
     return missing;
 };
 
-export const findHotelOr404 = async (idOrSlug, { locale, statuses, b2cOnly } = {}) => {
+export const findHotelOr404 = async (idOrSlug, { locale, statuses, b2cOnly, access } = {}) => {
     const hotel = await prisma.hotel.findFirst({
         where: {
             OR: [{ id: idOrSlug }, { slug: idOrSlug }],
             ...(statuses ? { status: { in: statuses } } : {}),
             // 404, not 403: a B2B-only property simply does not exist on the
             // public channel, and saying more would confirm it does somewhere.
-            ...(b2cOnly ? { b2cEnabled: true } : {})
+            // The same for a property a partner may not sell (`access`).
+            ...(b2cOnly ? { b2cEnabled: true } : {}),
+            ...(access ?? {})
         },
         include: detailInclude(locale)
     });
@@ -184,6 +186,8 @@ const buildWhere = ({
     destinationSlug,
     kosher,
     kosherCertified,
+    // What this partner may sell: an `id` filter from the access service.
+    access,
     // The catalogue has no dates, so "today" is the platform's rather than any
     // one property's. A certificate lapsing at a Tbilisi midnight is at most a
     // few hours out of step on a browse page, and the dated search — where it
@@ -193,6 +197,7 @@ const buildWhere = ({
     // The sales channel. Everything is B2B by default; only records switched
     // on for B2C exist as far as an anonymous visitor is concerned.
     ...(b2cOnly ? { b2cEnabled: true } : {}),
+    ...(access ?? {}),
     ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
     ...(destinationId ? { destinationId } : {}),
     ...(supplierId ? { supplierId } : {}),

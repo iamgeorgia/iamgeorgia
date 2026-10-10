@@ -1,10 +1,12 @@
 import { Router } from 'express';
+import multer from 'multer';
 
+import { config } from '../config.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate, requireCapability, requireCapabilityByMethod, requireFieldsCapability } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import { NotFoundError } from '../lib/errors.js';
-import { toPartnerSummary, toPartnerDetail, toAuditEntry, toInvitation } from '../serializers/partner.js';
+import { toPartnerSummary, toPartnerDetail, toAuditEntry, toInvitation, toProductAccess } from '../serializers/partner.js';
 import { prisma } from '../db/index.js';
 import {
     partnerQuerySchema,
@@ -15,6 +17,11 @@ import {
     approveSchema,
     rejectSchema,
     suspendSchema,
+    blockSchema,
+    terminateSchema,
+    contractUploadSchema,
+    contractRequirementSchema,
+    productAccessSchema,
     financialUpdateSchema
 } from '../validation/partner.js';
 import {
@@ -28,7 +35,12 @@ import {
     updateFinancial,
     reissueInvitation,
     listAudit,
-    primaryContactOf
+    primaryContactOf,
+    uploadContract,
+    contractLink,
+    setContractRequirement,
+    listProductAccess,
+    setProductAccess
 } from '../services/partner.service.js';
 import { sendMail, sendMailQuietly, invitationUrl, activationUrl } from '../lib/mailer/index.js';
 
@@ -153,6 +165,73 @@ adminPartnerRoutes.post('/:id/approve', ...reviewAction('approve', approveSchema
 adminPartnerRoutes.post('/:id/reject', ...reviewAction('reject', rejectSchema));
 adminPartnerRoutes.post('/:id/suspend', ...reviewAction('suspend', suspendSchema));
 adminPartnerRoutes.post('/:id/reactivate', ...reviewAction('reactivate', approveSchema));
+// No email for these: a blocked or terminated company is told at the door,
+// by the sign-in refusal, and the reason stays on the trail.
+adminPartnerRoutes.post('/:id/block', ...reviewAction('block', blockSchema));
+adminPartnerRoutes.post('/:id/unblock', ...reviewAction('unblock', approveSchema));
+adminPartnerRoutes.post('/:id/terminate', ...reviewAction('terminate', terminateSchema));
+
+// --- Contract ---------------------------------------------------------------
+
+const contractGuard = requireCapability(CAPABILITIES.PARTNERS_CONTRACT_WRITE);
+
+// In memory, like the media router: the file is checked and forwarded to
+// object storage within the request.
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: config.media.maxDocumentBytes, files: 1 }
+});
+
+/** Files the signed contract (multipart: `file`, `signedAt`, `version`). */
+adminPartnerRoutes.post(
+    '/:id/contract',
+    contractGuard,
+    upload.single('file'),
+    validate({ params: idParamSchema, body: contractUploadSchema }),
+    async (req, res) => {
+        await uploadContract(req.valid.params.id, req.file, req.valid.body, req.user, req);
+
+        res.status(201).json(toPartnerDetail(await findPartnerOr404(req.valid.params.id, req.user), req.user));
+    }
+);
+
+/** A short-lived link to the contract on file. Reading it is audited by the media service. */
+adminPartnerRoutes.get(
+    '/:id/contract',
+    requireCapability(CAPABILITIES.PARTNERS_CONTRACT_WRITE, CAPABILITIES.PARTNERS_FINANCIAL_READ),
+    validate({ params: idParamSchema }),
+    async (req, res) => {
+        res.json(await contractLink(req.valid.params.id, req.user, req));
+    }
+);
+
+/** Whether this company must have a contract on file before approval. */
+adminPartnerRoutes.put(
+    '/:id/contract-requirement',
+    contractGuard,
+    validate({ params: idParamSchema, body: contractRequirementSchema }),
+    async (req, res) => {
+        await setContractRequirement(req.valid.params.id, req.valid.body, req.user, req);
+
+        res.json(toPartnerDetail(await findPartnerOr404(req.valid.params.id, req.user), req.user));
+    }
+);
+
+// --- Product access ---------------------------------------------------------
+
+adminPartnerRoutes.get('/:id/product-access', validate({ params: idParamSchema }), async (req, res) => {
+    res.json({ data: (await listProductAccess(req.valid.params.id)).map(toProductAccess) });
+});
+
+/** Replaces the whole list. The sidebar's partner editor sends what it shows. */
+adminPartnerRoutes.put(
+    '/:id/product-access',
+    requireCapability(CAPABILITIES.PARTNERS_ACCESS_WRITE),
+    validate({ params: idParamSchema, body: productAccessSchema }),
+    async (req, res) => {
+        res.json({ data: (await setProductAccess(req.valid.params.id, req.valid.body.entries, req.user, req)).map(toProductAccess) });
+    }
+);
 
 // --- Financial --------------------------------------------------------------
 

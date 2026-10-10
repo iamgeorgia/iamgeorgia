@@ -2,12 +2,14 @@ import { config } from '../config.js';
 import { prisma } from '../db/index.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { nextPartnerReference } from '../lib/reference.js';
-import { NotFoundError, ConflictError, BadRequestError } from '../lib/errors.js';
+import { NotFoundError, ConflictError, BadRequestError, UnprocessableEntityError } from '../lib/errors.js';
 import { lockKey } from '../lib/locks.js';
+import { dateOnlyToUtc } from '../lib/time.js';
 import { canViewFinancial } from '../serializers/partner.js';
 import { companyFullSchema } from '../validation/partner.js';
 import { issueAuthToken, revokePartnerSessions, revokeUserSessions } from './auth.service.js';
 import { issueInvitation, revokeOpenInvitations } from './invitation.service.js';
+import { issueSignedUrl, uploadFile } from './media/upload.service.js';
 
 const CONTACT_ORDER = [{ isPrimaryContact: 'desc' }, { createdAt: 'asc' }];
 
@@ -16,8 +18,16 @@ const detailInclude = (withFinancial) => ({
     approvedByUser: true,
     rejectedByUser: true,
     suspendedByUser: true,
+    blockedByUser: true,
+    terminatedByUser: true,
+    contractUploadedByUser: true,
+    termsAcceptedByUser: true,
+    contractAsset: { select: { id: true, originalFilename: true, sizeBytes: true, createdAt: true, deletedAt: true } },
     ...(withFinancial ? { financial: true } : {})
 });
+
+/** The statuses in which the relationship has been ended by the platform. */
+export const CLOSED_STATUSES = ['BLOCKED', 'TERMINATED'];
 
 /**
  * The only legal ways a partner's status may change, and from where.
@@ -50,6 +60,26 @@ const TRANSITIONS = {
         from: ['SUSPENDED', 'REJECTED'],
         to: 'APPROVED',
         audit: 'PARTNER_REACTIVATED'
+    },
+    // Blocking is suspension with the door shut: the company cannot even sign
+    // in. Unblocking puts it back exactly where it was, approved.
+    block: {
+        from: ['APPROVED', 'SUSPENDED'],
+        to: 'BLOCKED',
+        audit: 'PARTNER_BLOCKED'
+    },
+    unblock: {
+        from: ['BLOCKED'],
+        to: 'APPROVED',
+        audit: 'PARTNER_UNBLOCKED'
+    },
+    // The end of the relationship, from anywhere. Nothing leads out of it:
+    // the company's bookings and debts stay on the books under its name,
+    // which is why it is terminated rather than deleted.
+    terminate: {
+        from: ['INVITED', 'REGISTRATION_IN_PROGRESS', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'SUSPENDED', 'BLOCKED'],
+        to: 'TERMINATED',
+        audit: 'PARTNER_TERMINATED'
     }
 };
 
@@ -78,6 +108,36 @@ const assertReadyForApproval = (partner) => {
     if (!result.success) {
         throw new BadRequestError('Company details are incomplete', result.error.issues);
     }
+
+    // The contract is the gate: a company trades on the platform under a
+    // signed agreement or not at all, unless an admin recorded that it
+    // trades without one (grandfathered, or waived on the record).
+    if (partner.contractRequired && !partner.contractAssetId) {
+        throw new BadRequestError('A signed contract must be on file before this partner can be approved', {
+            reason: 'CONTRACT_MISSING'
+        });
+    }
+};
+
+/**
+ * Checks a contract file an admin uploaded ahead of creating the partner: a
+ * READY private CONTRACT file, not yet attached to any company.
+ */
+const findAttachableContract = async (client, assetId) => {
+    const asset = await client.fileAsset.findFirst({
+        where: { id: assetId, deletedAt: null },
+        include: { contractOf: { select: { id: true } } }
+    });
+
+    if (!asset || asset.category !== 'CONTRACT' || asset.status !== 'READY') {
+        throw new UnprocessableEntityError('That file is not a contract on file', { reason: 'CONTRACT_FILE_INVALID' });
+    }
+
+    if (asset.contractOf) {
+        throw new UnprocessableEntityError('That contract already belongs to another partner', { reason: 'CONTRACT_FILE_TAKEN' });
+    }
+
+    return asset;
 };
 
 export const findPartnerOr404 = async (id, viewer, { financial = true } = {}) => {
@@ -165,7 +225,7 @@ const assertEmailFree = async (email) => {
  * tells the panel whether to say so.
  */
 export const adminCreatePartner = async (payload, admin, req) => {
-    const { mode, company, contact, financial, commissionRateBps, notes, documents } = payload;
+    const { mode, company, contact, financial, commissionRateBps, notes, documents, contract, contractRequired } = payload;
 
     await assertEmailFree(contact.email);
     await assertRegistrationNumberFree(company.registrationNumber);
@@ -173,6 +233,8 @@ export const adminCreatePartner = async (payload, admin, req) => {
     const isDraft = mode === 'invite';
 
     return prisma.$transaction(async (tx) => {
+        const contractAsset = contract ? await findAttachableContract(tx, contract.assetId) : null;
+
         const partner = await tx.partner.create({
             data: {
                 ...company,
@@ -181,10 +243,36 @@ export const adminCreatePartner = async (payload, admin, req) => {
                 ...(commissionRateBps === undefined ? {} : { commissionRateBps }),
                 ...(notes === undefined ? {} : { notes }),
                 documents,
+                contractRequired,
+                ...(contractAsset
+                    ? {
+                          contractAssetId: contractAsset.id,
+                          contractSignedAt: dateOnlyToUtc(contract.signedAt),
+                          contractVersion: contract.version ?? null,
+                          contractUploadedAt: new Date(),
+                          contractUploadedByUserId: admin.id
+                      }
+                    : {}),
                 ...(isDraft ? {} : { submittedAt: new Date() }),
                 ...(mode === 'approve' ? { approvedAt: new Date(), approvedByUserId: admin.id } : {})
             }
         });
+
+        if (contractAsset) {
+            // The file was uploaded before the company existed; it is the
+            // company's now, so the company's own users may read it.
+            await tx.fileAsset.update({ where: { id: contractAsset.id }, data: { partnerId: partner.id } });
+
+            await recordAudit(tx, {
+                action: 'PARTNER_CONTRACT_UPLOADED',
+                actor: admin,
+                entityType: AUDIT_ENTITY.partner,
+                entityId: partner.id,
+                summary: `${admin.email} filed the signed contract for ${partner.name}`,
+                metadata: { assetId: contractAsset.id, signedAt: contract.signedAt, version: contract.version ?? null },
+                req
+            });
+        }
 
         if (isDraft) {
             // No user row yet. An account with no password, for someone who may
@@ -239,7 +327,9 @@ export const adminCreatePartner = async (payload, admin, req) => {
             entityType: AUDIT_ENTITY.partner,
             entityId: partner.id,
             summary: `${admin.email} created ${partner.name} and sent an activation link to ${contact.email}`,
-            metadata: { reference: partner.reference, mode },
+            // A company created to trade without a contract is on the trail
+            // as such, next to who decided it.
+            metadata: { reference: partner.reference, mode, contractRequired },
             req
         });
 
@@ -367,6 +457,40 @@ export const transitionPartner = async (id, action, input, admin, req) => {
         summary = `${admin.email} suspended ${partner.name}`;
     }
 
+    if (action === 'block') {
+        Object.assign(data, {
+            blockedAt: now,
+            blockedByUserId: admin.id,
+            blockedReason: input.reason,
+            suspendedAt: null,
+            suspendedByUserId: null,
+            suspensionReason: null
+        });
+        summary = `${admin.email} blocked ${partner.name}`;
+    }
+
+    if (action === 'unblock') {
+        // Back to approved as it was: the original approval stands, only the
+        // block is lifted.
+        Object.assign(data, { blockedAt: null, blockedByUserId: null, blockedReason: null });
+        summary = `${admin.email} unblocked ${partner.name}`;
+    }
+
+    if (action === 'terminate') {
+        if (input.confirm.trim().toUpperCase() !== partner.reference) {
+            throw new BadRequestError('Type the Partner ID exactly to confirm termination', {
+                expected: partner.reference
+            });
+        }
+
+        Object.assign(data, {
+            terminatedAt: now,
+            terminatedByUserId: admin.id,
+            terminatedReason: input.reason
+        });
+        summary = `${admin.email} terminated ${partner.name}`;
+    }
+
     return prisma.$transaction(async (tx) => {
         // Serialised per partner, and the status re-read under the lock: the
         // check above ran outside the transaction, and an approve and a
@@ -385,7 +509,17 @@ export const transitionPartner = async (id, action, input, admin, req) => {
 
         const updated = await tx.partner.update({ where: { id }, data });
 
-        if (rule.to === 'REJECTED' || rule.to === 'SUSPENDED') {
+        if (rule.to === 'TERMINATED') {
+            // Nobody from the company signs in again: the accounts are
+            // switched off, every open password or activation link is spent,
+            // and any invitation still out there is withdrawn. The user rows
+            // stay, because bookings and audit lines point at them.
+            await tx.user.updateMany({ where: { partnerId: id, isActive: true }, data: { isActive: false } });
+            await tx.authToken.updateMany({ where: { usedAt: null, user: { partnerId: id } }, data: { usedAt: now } });
+            await revokeOpenInvitations(tx, { partnerId: id });
+        }
+
+        if (rule.to === 'REJECTED' || rule.to === 'SUSPENDED' || CLOSED_STATUSES.includes(rule.to)) {
             await revokePartnerSessions(tx, id);
 
             // Drivers are not members of the company — they carry no
@@ -454,6 +588,31 @@ export const deletePartner = async (id, { confirm }, admin, req) => {
     if (confirm.trim().toUpperCase() !== partner.reference) {
         throw new BadRequestError('Type the Partner ID exactly to confirm deletion', {
             expected: partner.reference
+        });
+    }
+
+    // A company with a booking or a balance on the books is history, not
+    // clutter: deleting it would orphan money. It is terminated instead, and
+    // stays under its own name.
+    const [bookings, debts] = await Promise.all([
+        Promise.all([
+            prisma.hotelBooking.count({ where: { partnerId: id } }),
+            prisma.transferBooking.count({ where: { partnerId: id } }),
+            prisma.tourBooking.count({ where: { partnerId: id } }),
+            prisma.serviceBooking.count({ where: { partnerId: id } }),
+            prisma.order.count({ where: { partnerId: id } })
+        ]),
+        Promise.all([
+            prisma.receivable.count({ where: { debtorPartnerId: id } }),
+            prisma.supplierPayable.count({ where: { supplierPartnerId: id } })
+        ])
+    ]);
+
+    if (bookings.some((count) => count > 0) || debts.some((count) => count > 0)) {
+        throw new ConflictError('This partner has bookings or balances on the books; terminate it instead', {
+            reason: 'USE_TERMINATE',
+            bookings: bookings.reduce((sum, count) => sum + count, 0),
+            ledgerEntries: debts.reduce((sum, count) => sum + count, 0)
         });
     }
 
@@ -552,7 +711,7 @@ export const reissueInvitation = async (id, admin, req) => {
         throw new BadRequestError('This partner has no contact address to invite');
     }
 
-    if (partner.status === 'APPROVED' || partner.status === 'SUSPENDED') {
+    if (partner.status === 'APPROVED' || partner.status === 'SUSPENDED' || CLOSED_STATUSES.includes(partner.status)) {
         throw new ConflictError('This partner has already completed registration');
     }
 
@@ -595,3 +754,280 @@ export const listAudit = (entityId, { take = 100 } = {}) =>
 
 export const primaryContactOf = (partner) =>
     (partner.users ?? []).find((user) => user.isPrimaryContact) ?? partner.users?.[0] ?? null;
+
+// --- Contract and terms ---------------------------------------------------
+
+/**
+ * Files the signed contract. A private CONTRACT file owned by the company,
+ * so its own owner reads it through the same signed link an admin does. A
+ * second upload replaces the first; the previous file stays on disk, named
+ * on the trail.
+ */
+export const uploadContract = async (id, file, { signedAt, version }, admin, req) => {
+    const partner = await prisma.partner.findUnique({ where: { id } });
+
+    if (!partner) {
+        throw new NotFoundError('Partner not found');
+    }
+
+    if (partner.status === 'TERMINATED') {
+        throw new ConflictError('This partner has been terminated', { status: partner.status });
+    }
+
+    const asset = await uploadFile(
+        {
+            buffer: file?.buffer,
+            originalFilename: file?.originalname ?? 'contract.pdf',
+            declaredMimeType: file?.mimetype,
+            category: 'CONTRACT',
+            partnerId: id
+        },
+        admin,
+        req
+    );
+
+    return prisma.$transaction(async (tx) => {
+        const updated = await tx.partner.update({
+            where: { id },
+            data: {
+                contractAssetId: asset.id,
+                contractSignedAt: dateOnlyToUtc(signedAt),
+                contractVersion: version ?? null,
+                contractUploadedAt: new Date(),
+                contractUploadedByUserId: admin.id
+            }
+        });
+
+        await recordAudit(tx, {
+            action: 'PARTNER_CONTRACT_UPLOADED',
+            actor: admin,
+            entityType: AUDIT_ENTITY.partner,
+            entityId: id,
+            summary: `${admin.email} filed the signed contract for ${partner.name}`,
+            metadata: { assetId: asset.id, signedAt, version: version ?? null, replaced: partner.contractAssetId },
+            req
+        });
+
+        return updated;
+    });
+};
+
+/** A short-lived link to the contract, for an admin or the company itself. Audited by the media service. */
+export const contractLink = async (id, viewer, req) => {
+    const partner = await prisma.partner.findUnique({ where: { id }, select: { contractAssetId: true } });
+
+    if (!partner) {
+        throw new NotFoundError('Partner not found');
+    }
+
+    if (!partner.contractAssetId) {
+        throw new NotFoundError('No contract on file');
+    }
+
+    return issueSignedUrl(partner.contractAssetId, viewer, req);
+};
+
+/** Waives or reinstates the contract requirement, with a reason on the trail. */
+export const setContractRequirement = async (id, { contractRequired, reason }, admin, req) => {
+    const partner = await prisma.partner.findUnique({ where: { id } });
+
+    if (!partner) {
+        throw new NotFoundError('Partner not found');
+    }
+
+    if (partner.contractRequired === contractRequired) {
+        return partner;
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const updated = await tx.partner.update({ where: { id }, data: { contractRequired } });
+
+        await recordAudit(tx, {
+            action: 'PARTNER_UPDATED',
+            actor: admin,
+            entityType: AUDIT_ENTITY.partner,
+            entityId: id,
+            summary: `${admin.email} ${contractRequired ? 'required a contract from' : 'waived the contract for'} ${partner.name}`,
+            metadata: { changes: { contractRequired: { from: partner.contractRequired, to: contractRequired } }, reason },
+            req
+        });
+
+        return updated;
+    });
+};
+
+/** Whether the company has accepted the terms now in force. */
+export const termsCurrent = (partner) => partner?.termsVersion === config.partners.termsVersion;
+
+/**
+ * The owner accepts the current terms for the company. Any other version is
+ * refused: the client shows the text it was given, and that text must be
+ * the one being agreed to.
+ */
+export const acceptTerms = async (user, { version }, req) => {
+    if (version !== config.partners.termsVersion) {
+        throw new BadRequestError('Those are not the current terms', {
+            reason: 'TERMS_VERSION_STALE',
+            current: config.partners.termsVersion
+        });
+    }
+
+    const partner = await prisma.partner.findUnique({ where: { id: user.partnerId } });
+
+    if (!partner) {
+        throw new NotFoundError('Partner not found');
+    }
+
+    if (termsCurrent(partner)) {
+        return partner;
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const updated = await tx.partner.update({
+            where: { id: partner.id },
+            data: { termsVersion: version, termsAcceptedAt: new Date(), termsAcceptedByUserId: user.id }
+        });
+
+        await recordAudit(tx, {
+            action: 'PARTNER_TERMS_ACCEPTED',
+            actor: user,
+            entityType: AUDIT_ENTITY.partner,
+            entityId: partner.id,
+            summary: `${user.email} accepted the platform terms (${version}) for ${partner.name}`,
+            metadata: { version, previous: partner.termsVersion },
+            req
+        });
+
+        return updated;
+    });
+};
+
+// --- Product access -------------------------------------------------------
+
+const PRODUCT_TABLE = {
+    HOTEL: (client, ids) => client.hotel.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, slug: true } }),
+    TRANSFER: (client, ids) => client.transferVehicle.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, slug: true } }),
+    TOUR: (client, ids) => client.tour.findMany({ where: { id: { in: ids } }, select: { id: true, title: true, slug: true } }),
+    SERVICE: (client, ids) => client.service.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, slug: true } }),
+    PACKAGE: (client, ids) => client.package.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, slug: true } })
+};
+
+/** The products behind a set of access rows, by type, for display and for checking they exist. */
+const resolveProducts = async (client, entries) => {
+    const byType = new Map();
+
+    for (const entry of entries) {
+        if (!byType.has(entry.productType)) {
+            byType.set(entry.productType, new Set());
+        }
+
+        byType.get(entry.productType).add(entry.productId);
+    }
+
+    const found = new Map();
+
+    for (const [type, ids] of byType) {
+        for (const product of await PRODUCT_TABLE[type](client, [...ids])) {
+            found.set(`${type}:${product.id}`, { id: product.id, name: product.name ?? product.title, slug: product.slug });
+        }
+    }
+
+    return found;
+};
+
+export const listProductAccess = async (id) => {
+    const partner = await prisma.partner.findUnique({ where: { id }, select: { id: true } });
+
+    if (!partner) {
+        throw new NotFoundError('Partner not found');
+    }
+
+    const entries = await prisma.partnerProductAccess.findMany({
+        where: { partnerId: id },
+        include: { createdByUser: true },
+        orderBy: [{ productType: 'asc' }, { createdAt: 'asc' }]
+    });
+    const products = await resolveProducts(prisma, entries);
+
+    return entries.map((entry) => ({ ...entry, product: products.get(`${entry.productType}:${entry.productId}`) ?? null }));
+};
+
+/**
+ * Replaces the company's access list as a whole. What the admin sends is the
+ * list; what was there and is absent now is removed. Every product named
+ * must exist, so a typo cannot quietly become a rule that matches nothing.
+ */
+export const setProductAccess = async (id, entries, admin, req) => {
+    const partner = await prisma.partner.findUnique({ where: { id }, select: { id: true, name: true } });
+
+    if (!partner) {
+        throw new NotFoundError('Partner not found');
+    }
+
+    const products = await resolveProducts(prisma, entries);
+    const unknown = entries.filter((entry) => !products.has(`${entry.productType}:${entry.productId}`));
+
+    if (unknown.length > 0) {
+        throw new UnprocessableEntityError('Some products do not exist', {
+            reason: 'UNKNOWN_PRODUCT',
+            products: unknown.map((entry) => ({ productType: entry.productType, productId: entry.productId }))
+        });
+    }
+
+    await prisma.$transaction(async (tx) => {
+        const existing = await tx.partnerProductAccess.findMany({ where: { partnerId: id } });
+        const keyOf = (row) => `${row.productType}:${row.productId}`;
+        const wanted = new Map(entries.map((entry) => [keyOf(entry), entry]));
+        const current = new Map(existing.map((row) => [keyOf(row), row]));
+
+        const removed = existing.filter((row) => !wanted.has(keyOf(row)));
+        const added = entries.filter((entry) => !current.has(keyOf(entry)));
+        const changed = entries.filter((entry) => {
+            const row = current.get(keyOf(entry));
+
+            return row && (row.mode !== entry.mode || (row.note ?? null) !== (entry.note ?? null));
+        });
+
+        if (removed.length > 0) {
+            await tx.partnerProductAccess.deleteMany({ where: { id: { in: removed.map((row) => row.id) } } });
+        }
+
+        for (const entry of changed) {
+            await tx.partnerProductAccess.update({
+                where: { id: current.get(keyOf(entry)).id },
+                data: { mode: entry.mode, note: entry.note ?? null }
+            });
+        }
+
+        if (added.length > 0) {
+            await tx.partnerProductAccess.createMany({
+                data: added.map((entry) => ({
+                    partnerId: id,
+                    productType: entry.productType,
+                    productId: entry.productId,
+                    mode: entry.mode,
+                    note: entry.note ?? null,
+                    createdByUserId: admin.id
+                }))
+            });
+        }
+
+        if (removed.length + added.length + changed.length > 0) {
+            const describe = (row) => ({ productType: row.productType, productId: row.productId, mode: row.mode });
+
+            await recordAudit(tx, {
+                action: 'PARTNER_PRODUCT_ACCESS_CHANGED',
+                actor: admin,
+                entityType: AUDIT_ENTITY.partner,
+                entityId: id,
+                summary: `${admin.email} changed what ${partner.name} may sell`,
+                metadata: { added: added.map(describe), removed: removed.map(describe), changed: changed.map(describe) },
+                req
+            });
+        }
+    });
+
+    // Read back after the commit, not inside it: the list is served by the
+    // default client, which would not see the transaction's own writes.
+    return listProductAccess(id);
+};

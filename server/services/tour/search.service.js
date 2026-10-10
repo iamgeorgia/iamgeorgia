@@ -11,6 +11,7 @@ import { optionInclude } from './option.service.js';
 import { availableUnits, readTourInventoryMap } from './inventory.service.js';
 import { fitsOption, partyFor, quoteTour, resolveSeason, resolveTier, unitsFor } from './pricing.service.js';
 import { isTrade } from '../../middleware/auth.js';
+import { accessWhere, deniedIds, restrictIds } from '../partner/access.service.js';
 
 /**
  * Tour availability and search.
@@ -178,7 +179,8 @@ export const tourAvailability = async (slugOrId, criteria, viewer) => {
         locale,
         statuses: ['ACTIVE'],
         b2cOnly: !trade,
-        includePartnerOnly: trade
+        includePartnerOnly: trade,
+        access: accessWhere(viewer, 'TOUR')
     });
 
     const options = tour.options.filter((option) => option.status === 'ACTIVE');
@@ -248,6 +250,7 @@ export const searchTours = async (criteria, viewer) => {
             ...criteria,
             status: ['ACTIVE'],
             b2cOnly: !trade,
+            access: accessWhere(viewer, 'TOUR'),
             locale,
             page,
             pageSize
@@ -271,7 +274,9 @@ export const searchTours = async (criteria, viewer) => {
         childAges,
         markupBps,
         b2cOnly: !trade,
-        includePartnerOnly: trade
+        includePartnerOnly: trade,
+        tourIds: restrictIds(null, viewer, 'TOUR'),
+        excludeTourIds: deniedIds(viewer, 'TOUR')
     });
 
     const now = new Date();
@@ -415,7 +420,7 @@ export const revalidateTourOffer = async (offer, viewer, { strict = true, requir
     // checked here as availability checked it when the token was issued.
     const trade = isTrade(viewer);
     const tour = await prisma.tour.findFirst({
-        where: { id: offer.tourId, status: 'ACTIVE', ...(trade ? {} : { b2cEnabled: true }) },
+        where: { id: offer.tourId, status: 'ACTIVE', ...(trade ? {} : { b2cEnabled: true }), ...accessWhere(viewer, 'TOUR') },
         include: {
             destination: true,
             supplier: { select: { id: true, reference: true, name: true } },

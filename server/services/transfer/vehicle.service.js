@@ -3,6 +3,7 @@ import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { NotFoundError } from '../../lib/errors.js';
 import { localise } from '../../serializers/localise.js';
 import { isStaff, isTrade } from '../../middleware/auth.js';
+import { accessWhere } from '../partner/access.service.js';
 
 /**
  * Vehicle classes — the sellable products.
@@ -49,8 +50,9 @@ export const visibilityScope = (viewer) => {
     }
 
     // Trade, not merely signed in: a partner still waiting for approval, or
-    // suspended, sees what the public sees, as it does for hotels.
-    return isTrade(viewer) ? { status: 'ACTIVE' } : { status: 'ACTIVE', b2cEnabled: true };
+    // suspended, sees what the public sees, as it does for hotels. A trade
+    // buyer sees the classes its company may sell.
+    return isTrade(viewer) ? { status: 'ACTIVE', ...accessWhere(viewer, 'TRANSFER') } : { status: 'ACTIVE', b2cEnabled: true };
 };
 
 /**

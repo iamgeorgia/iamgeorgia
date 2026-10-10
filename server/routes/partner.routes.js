@@ -6,10 +6,11 @@ import { validate } from '../middleware/validate.js';
 import { authenticate, requireApprovedPartner, requireCapability, requirePartner } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { partnerSelfUpdateSchema, accountUpdateSchema, financialUpdateSchema } from '../validation/partner.js';
+import { config } from '../config.js';
+import { partnerSelfUpdateSchema, accountUpdateSchema, financialUpdateSchema, acceptTermsSchema } from '../validation/partner.js';
 import { toPartnerDetail } from '../serializers/partner.js';
 import { toUser } from '../serializers/user.js';
-import { findPartnerOr404, readFinancial, updateFinancial } from '../services/partner.service.js';
+import { findPartnerOr404, readFinancial, updateFinancial, contractLink, acceptTerms } from '../services/partner.service.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 
 export const partnerRoutes = Router();
@@ -37,6 +38,41 @@ partnerRoutes.get('/me', async (req, res) => {
 
     res.json(toPartnerDetail(partner, req.user));
 });
+
+// --- Contract and terms -----------------------------------------------------
+//
+// Readable in every status and before the terms are accepted: this is what
+// the "please accept the terms" page and the company's own copy of its
+// contract are served from. Everything else waits behind the gate.
+
+partnerRoutes.get('/contract', async (req, res) => {
+    res.json(await contractLink(ownPartnerId(req), req.user, req));
+});
+
+partnerRoutes.get('/terms', async (req, res) => {
+    const partner = await findPartnerOr404(ownPartnerId(req), req.user, { financial: false });
+
+    res.json({
+        current: config.partners.termsVersion,
+        url: config.partners.termsUrl,
+        acceptedVersion: partner.termsVersion ?? null,
+        acceptedAt: partner.termsAcceptedAt ?? null,
+        outdated: partner.termsVersion !== config.partners.termsVersion
+    });
+});
+
+/** The owner accepts the current terms for the company. */
+partnerRoutes.post(
+    '/terms/accept',
+    requireCapability(CAPABILITIES.PARTNER_TERMS_ACCEPT),
+    validate({ body: acceptTermsSchema }),
+    async (req, res) => {
+        ownPartnerId(req);
+        await acceptTerms(req.user, req.valid.body, req);
+
+        res.json(toPartnerDetail(await findPartnerOr404(req.user.partnerId, req.user, { financial: false }), req.user));
+    }
+);
 
 /**
  * A user editing their own name, position and phone.

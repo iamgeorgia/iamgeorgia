@@ -4,7 +4,7 @@ import { createToken, hashToken, expiresIn } from '../lib/tokens.js';
 import { hashPassword } from '../lib/password.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { nextPartnerReference } from '../lib/reference.js';
-import { NotFoundError, ConflictError, GoneError, ForbiddenError } from '../lib/errors.js';
+import { NotFoundError, ConflictError, GoneError, ForbiddenError, BadRequestError } from '../lib/errors.js';
 
 /**
  * Creates an invitation and returns the plaintext token exactly once.
@@ -102,7 +102,9 @@ export const toInvitationPreview = (invitation) => ({
               website: invitation.partner.website ?? null
           }
         : null,
-    prefill: invitation.prefill ?? {}
+    prefill: invitation.prefill ?? {},
+    // The terms the form must present and the version it must send back.
+    terms: { version: config.partners.termsVersion, url: config.partners.termsUrl }
 });
 
 /**
@@ -131,7 +133,16 @@ export const markRegistrationStarted = async (invitation) => {
  */
 export const acceptInvitation = async (token, payload, req) => {
     const invitation = await resolveInvitation(token);
-    const { company, contact, financial, password } = payload;
+    const { company, contact, financial, password, terms } = payload;
+
+    // The terms accepted are the terms in force. A form that was open across
+    // a version change is sent back to read the new text, not waved through.
+    if (terms.version !== config.partners.termsVersion) {
+        throw new BadRequestError('The platform terms have changed; please read and accept the current version', {
+            reason: 'TERMS_VERSION_STALE',
+            current: config.partners.termsVersion
+        });
+    }
 
     // The invitation belongs to one address. Registering under a different one
     // would let a forwarded email be claimed by whoever received it.
@@ -185,7 +196,7 @@ export const acceptInvitation = async (token, payload, req) => {
                   data: { ...companyData, reference: await nextPartnerReference(tx) }
               });
 
-        await tx.user.create({
+        const owner = await tx.user.create({
             data: {
                 email: contact.email,
                 passwordHash,
@@ -197,6 +208,23 @@ export const acceptInvitation = async (token, payload, req) => {
                 isPrimaryContact: true,
                 partnerId: saved.id
             }
+        });
+
+        // Accepted by the person registering, on the company's behalf, and
+        // stamped with the version they were shown.
+        await tx.partner.update({
+            where: { id: saved.id },
+            data: { termsVersion: terms.version, termsAcceptedAt: new Date(), termsAcceptedByUserId: owner.id }
+        });
+
+        await recordAudit(tx, {
+            action: 'PARTNER_TERMS_ACCEPTED',
+            actor: { id: owner.id, email: owner.email },
+            entityType: AUDIT_ENTITY.partner,
+            entityId: saved.id,
+            summary: `${owner.email} accepted the platform terms (${terms.version}) for ${saved.name}`,
+            metadata: { version: terms.version, previous: null },
+            req
         });
 
         await tx.partnerFinancialDetail.upsert({

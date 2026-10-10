@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
 import { isTrade, optionalAuthenticate } from '../middleware/auth.js';
+import { accessWhere } from '../services/partner/access.service.js';
 import {
     packageOfferTokenSchema,
     packageQuoteQuerySchema,
@@ -26,7 +27,12 @@ const PUBLIC_STATUSES = ['ACTIVE'];
 
 packageRoutes.get('/', validate({ query: publicPackageQuerySchema }), async (req, res) => {
     const { locale } = req.valid.query;
-    const { packages, ...page } = await listPackages({ ...req.valid.query, status: PUBLIC_STATUSES, b2cOnly: !isTrade(req.user) });
+    const { packages, ...page } = await listPackages({
+        ...req.valid.query,
+        status: PUBLIC_STATUSES,
+        b2cOnly: !isTrade(req.user),
+        access: accessWhere(req.user, 'PACKAGE')
+    });
 
     res.json({ data: packages.map((pkg) => toPackageSummary(pkg, locale)), ...page });
 });
@@ -40,7 +46,12 @@ packageRoutes.post('/quotes/revalidate', validate({ body: packageOfferTokenSchem
 
 packageRoutes.get('/:slug', validate({ params: packageSlugParamSchema, query: publicPackageQuerySchema }), async (req, res) => {
     const { locale } = req.valid.query;
-    const pkg = await findPackageOr404(req.valid.params.slug, { locale, statuses: PUBLIC_STATUSES, b2cOnly: !isTrade(req.user) });
+    const pkg = await findPackageOr404(req.valid.params.slug, {
+        locale,
+        statuses: PUBLIC_STATUSES,
+        b2cOnly: !isTrade(req.user),
+        access: accessWhere(req.user, 'PACKAGE')
+    });
 
     res.json(toPackageDetail(pkg, locale, null));
 });

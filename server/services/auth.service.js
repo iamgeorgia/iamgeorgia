@@ -4,7 +4,7 @@ import { hashPassword, verifyPassword, needsRehash, dummyVerify } from '../lib/p
 import { createToken, hashToken, expiresIn } from '../lib/tokens.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { containsPersonal, PERSONAL_PASSWORD_MESSAGE } from '../validation/normalize.js';
-import { UnauthorizedError, BadRequestError, NotFoundError, ConflictError, GoneError } from '../lib/errors.js';
+import { UnauthorizedError, BadRequestError, NotFoundError, ConflictError, GoneError, ForbiddenError } from '../lib/errors.js';
 import { accessInclude, withAccess } from './rbac/access.js';
 
 // One message for every way a sign-in can fail. Distinguishing "no such
@@ -126,7 +126,7 @@ export const login = async ({ email, password }, req) => {
         ? await verifyPassword(password, user.passwordHash)
         : await dummyVerify(password);
 
-    if (!user || !user.passwordHash || !passwordMatches || !user.isActive) {
+    const loginFailed = async (reason) => {
         if (user) {
             await recordAudit(prisma, {
                 action: 'USER_LOGIN_FAILED',
@@ -134,10 +134,34 @@ export const login = async ({ email, password }, req) => {
                 entityType: AUDIT_ENTITY.user,
                 entityId: user.id,
                 summary: `Failed sign-in for ${user.email}`,
-                metadata: { reason: !user.passwordHash ? 'not_activated' : !user.isActive ? 'inactive' : 'bad_password' },
+                metadata: { reason },
                 req
             });
         }
+    };
+
+    if (!user || !user.passwordHash || !passwordMatches) {
+        await loginFailed(!user?.passwordHash ? 'not_activated' : 'bad_password');
+
+        throw new UnauthorizedError(LOGIN_FAILED);
+    }
+
+    // A blocked or terminated company gets a straight answer, after the
+    // password has been checked so the answer is only given to someone who
+    // holds it. Unlike the review states, there is no page to show them.
+    if (user.partner && (user.partner.status === 'BLOCKED' || user.partner.status === 'TERMINATED')) {
+        await loginFailed(`partner_${user.partner.status.toLowerCase()}`);
+
+        throw new ForbiddenError(
+            user.partner.status === 'BLOCKED'
+                ? 'Your company’s access to the platform has been blocked'
+                : 'Your company no longer has an account on the platform',
+            { reason: `PARTNER_${user.partner.status}`, partnerStatus: user.partner.status }
+        );
+    }
+
+    if (!user.isActive) {
+        await loginFailed('inactive');
 
         throw new UnauthorizedError(LOGIN_FAILED);
     }

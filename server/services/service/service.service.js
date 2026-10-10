@@ -27,8 +27,9 @@ export const serviceInclude = (locale) => ({
     translations: translationInclude(locale)
 });
 
-const buildWhere = ({ search, status, b2cOnly, destinationId, destinationSlug, destinationPath, supplierId, category, isKosher }) => ({
+const buildWhere = ({ search, status, b2cOnly, destinationId, destinationSlug, destinationPath, supplierId, category, isKosher, access }) => ({
     ...(b2cOnly ? { b2cEnabled: true } : {}),
+    ...(access ?? {}),
     ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
     ...(destinationId ? { destinationId } : {}),
     ...(destinationSlug ? { destination: { slug: destinationSlug } } : {}),
@@ -64,12 +65,13 @@ export const listServices = async (query) => {
     return { services, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 };
 
-export const findServiceOr404 = async (idOrSlug, { locale, statuses, b2cOnly } = {}) => {
+export const findServiceOr404 = async (idOrSlug, { locale, statuses, b2cOnly, access } = {}) => {
     const service = await prisma.service.findFirst({
         where: {
             OR: [{ id: idOrSlug }, { slug: idOrSlug }],
             ...(statuses ? { status: { in: statuses } } : {}),
-            ...(b2cOnly ? { b2cEnabled: true } : {})
+            ...(b2cOnly ? { b2cEnabled: true } : {}),
+            ...(access ?? {})
         },
         include: serviceInclude(locale)
     });

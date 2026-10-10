@@ -51,7 +51,10 @@ export const findTourCandidates = async ({
     maxDays = null,
     featured = null,
     b2cOnly = false,
-    includePartnerOnly = false
+    includePartnerOnly = false,
+    // A partner's allow list (null: any) and deny list (null: none).
+    tourIds = null,
+    excludeTourIds = null
 }) => {
     const departureDate = dateOnlyToUtc(date);
     const weekday = weekdayOf(date);
@@ -155,6 +158,8 @@ export const findTourCandidates = async ({
            -- only what is switched on for B2C, and only PUBLIC options.
            AND (${!b2cOnly}::boolean OR t.b2c_enabled)
            AND (${includePartnerOnly}::boolean OR o.visibility = 'PUBLIC')
+           AND (${tourIds}::text[] IS NULL OR t.id = ANY(${tourIds}::text[]))
+           AND (${excludeTourIds}::text[] IS NULL OR NOT (t.id = ANY(${excludeTourIds}::text[])))
            AND px.pax BETWEEN o.min_pax AND o.max_pax
            AND inv.total_units - inv.blocked_units - inv.booked_units - inv.held_units >= u.units
            -- An option with no net price on its tier is not for sale, and a
