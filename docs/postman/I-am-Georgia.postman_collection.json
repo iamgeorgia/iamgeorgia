@@ -11206,7 +11206,7 @@
                     "{{corePartnerId}}"
                   ]
                 },
-                "description": "**Expected: 200**, the full record: `users`, `review` (who approved / rejected / suspended and when), `documents`, `commissionRateBps`.\n\nBecause the caller is an admin the response also carries `financial` (bank details) and `notes`. A partner user reading its own record sees `financial` only with an OWNER or FINANCE role, and never sees `notes` or `review.rejectionNote` — those are written *about* the partner, not for them. Folder 05 covers that side."
+                "description": "**Expected: 200**, the full record: `users`, `review` (who approved / rejected / suspended and when), `documents`, `commissionRateBps`.\n\nBecause the caller is an admin the response also carries `financial` (bank details) and `notes`. A partner user reading its own record sees `financial` only with an OWNER or ACCOUNTANT role, and never sees `notes` or `review.rejectionNote` — those are written *about* the partner, not for them. Folder 05 covers that side."
               },
               "response": [],
               "event": [
@@ -33757,7 +33757,7 @@
             "description": "**Expected: 201** `{ user, link, email, emailSent }` for a super admin — the activation link is returned as well as emailed. 403 otherwise.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"email\": \"pm-staff-{{runId}}@example.test\",\n    \"firstName\": \"Postman\",\n    \"lastName\": \"Staff\",\n    \"role\": \"RESERVATIONS\"\n}"
+              "raw": "{\n    \"email\": \"pm-staff-{{runId}}@example.test\",\n    \"firstName\": \"Postman\",\n    \"lastName\": \"Staff\",\n    \"role\": \"TOUR_OPERATOR\"\n}"
             }
           },
           "response": [],
@@ -33893,10 +33893,10 @@
                 "role"
               ]
             },
-            "description": "**Expected: 200** with `role: FINANCE`. The account's sessions end.",
+            "description": "**Expected: 200** with `role: ACCOUNTANT`. The account's sessions end.",
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"role\": \"FINANCE\"\n}"
+              "raw": "{\n    \"role\": \"ACCOUNTANT\"\n}"
             }
           },
           "response": [],
@@ -33917,7 +33917,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test('Status is 200', () => pm.response.to.have.status(200));",
-                  "pm.test('Role changed', () => pm.expect(pm.response.json().role).to.eql('FINANCE'));"
+                  "pm.test('Role changed', () => pm.expect(pm.response.json().role).to.eql('ACCOUNTANT'));"
                 ]
               }
             }

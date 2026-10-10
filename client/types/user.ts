@@ -52,7 +52,7 @@ export interface InviteUserInput {
 }
 
 /** Platform roles a super admin may invite. SUPER_ADMIN itself is a role change, never an invitation. */
-export const STAFF_INVITE_ROLES = ["ADMIN", "MANAGEMENT", "RESERVATIONS", "FINANCE", "DISPATCHER"] as const;
+export const STAFF_INVITE_ROLES = ["ADMIN", "MANAGEMENT", "TOUR_OPERATOR", "ACCOUNTANT", "DISPATCHER"] as const;
 
 /** Platform roles a staff account may be moved between. */
 export const STAFF_ROLES = ["SUPER_ADMIN", ...STAFF_INVITE_ROLES] as const;

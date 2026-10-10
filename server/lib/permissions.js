@@ -127,9 +127,9 @@ export const DEFAULT_ROLE_LISTS = {
     /** Reads everything, margins included; writes nothing. */
     MANAGEMENT: [C.AUDIT_READ, ...PLATFORM_READ, ...FINANCE_READ.filter((cap) => cap !== C.PARTNERS_FINANCIAL_READ)],
     /** Runs the bookings desk: creates, amends, cancels; never sees a margin. */
-    RESERVATIONS: [...PLATFORM_READ, C.BOOKINGS_WRITE, C.BOOKINGS_CANCEL],
+    TOUR_OPERATOR: [...PLATFORM_READ, C.BOOKINGS_WRITE, C.BOOKINGS_CANCEL],
     /** Records the money and reads what it needs to reconcile it. */
-    FINANCE: [
+    ACCOUNTANT: [
         C.AUDIT_READ,
         C.CATALOGUE_READ,
         C.BOOKINGS_READ,

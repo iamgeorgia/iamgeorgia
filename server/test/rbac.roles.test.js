@@ -39,7 +39,7 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
     let to;
 
     before(async () => {
-        for (const role of ['MANAGEMENT', 'RESERVATIONS', 'FINANCE', 'DISPATCHER']) {
+        for (const role of ['MANAGEMENT', 'TOUR_OPERATOR', 'ACCOUNTANT', 'DISPATCHER']) {
             cookies[role] = (await signIn(app, (await makeAdmin(tracker, { role })).email)).cookie;
         }
 
@@ -93,7 +93,7 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
 
         const read = await request(app)
             .get(`/api/admin/transfers/bookings/${booking.reference}`)
-            .set('Cookie', cookies.RESERVATIONS);
+            .set('Cookie', cookies.TOUR_OPERATOR);
 
         assert.equal(read.status, 200);
         assert.equal(read.body.partner.id, agency.id);
@@ -101,27 +101,27 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
             assert.ok(!(field in read.body), `reservations sees ${field}`);
         }
 
-        const done = await cancel(booking.reference, 'RESERVATIONS');
+        const done = await cancel(booking.reference, 'TOUR_OPERATOR');
 
         assert.equal(done.status, 200);
         assert.equal((await prisma.transferBooking.findUnique({ where: { id: booking.id } })).status, 'CANCELLED');
 
-        const pricing = await request(app).get('/api/admin/pricing-rules').set('Cookie', cookies.RESERVATIONS);
+        const pricing = await request(app).get('/api/admin/pricing-rules').set('Cookie', cookies.TOUR_OPERATOR);
         assert.equal(pricing.status, 403);
     });
 
     it('lets finance read bookings and partners but not cancel', async () => {
         const booking = await agencyBooking();
 
-        assert.equal((await cancel(booking.reference, 'FINANCE')).status, 403);
+        assert.equal((await cancel(booking.reference, 'ACCOUNTANT')).status, 403);
         assert.equal(
-            (await request(app).get(`/api/admin/transfers/bookings/${booking.reference}`).set('Cookie', cookies.FINANCE)).status,
+            (await request(app).get(`/api/admin/transfers/bookings/${booking.reference}`).set('Cookie', cookies.ACCOUNTANT)).status,
             200
         );
-        assert.equal((await request(app).get('/api/admin/partners').set('Cookie', cookies.FINANCE)).status, 200);
+        assert.equal((await request(app).get('/api/admin/partners').set('Cookie', cookies.ACCOUNTANT)).status, 200);
 
         // Finance does not run the fleet.
-        assert.equal((await request(app).get('/api/admin/transfers/dispatch/legs').set('Cookie', cookies.FINANCE)).status, 403);
+        assert.equal((await request(app).get('/api/admin/transfers/dispatch/legs').set('Cookie', cookies.ACCOUNTANT)).status, 403);
     });
 
     it('keeps the revenue tiles from a dispatcher who reads the same list', async () => {
@@ -130,7 +130,7 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
 
         assert.equal((await list('DISPATCHER')).status, 200);
         assert.equal((await summary('DISPATCHER')).status, 403);
-        assert.equal((await summary('RESERVATIONS')).status, 403);
+        assert.equal((await summary('TOUR_OPERATOR')).status, 403);
         assert.equal((await summary('MANAGEMENT')).status, 200);
     });
 
@@ -145,7 +145,7 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
             ['post', '/api/transfers/bookings', {}]
         ];
 
-        for (const role of ['MANAGEMENT', 'FINANCE', 'DISPATCHER']) {
+        for (const role of ['MANAGEMENT', 'ACCOUNTANT', 'DISPATCHER']) {
             for (const [method, path, body] of paths) {
                 const res = await request(app)[method](path).set('Cookie', cookies[role]).send(body);
 
@@ -159,16 +159,16 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
         }
 
         // The booking desk makes and changes bookings; what it sends is then judged on its merits.
-        assert.equal((await request(app).post('/api/bookings').set('Cookie', cookies.RESERVATIONS).send({})).status, 400);
+        assert.equal((await request(app).post('/api/bookings').set('Cookie', cookies.TOUR_OPERATOR).send({})).status, 400);
         const amend = await request(app)
             .patch(`/api/transfers/bookings/${booking.reference}`)
-            .set('Cookie', cookies.RESERVATIONS)
+            .set('Cookie', cookies.TOUR_OPERATOR)
             .send({ flightNumber: 'TK 379' });
         assert.equal(amend.status, 200);
     });
 
     it('sizes the badges to the role: each queue for the people who work it', async () => {
-        const finance = await request(app).get('/api/admin/badges').set('Cookie', cookies.FINANCE);
+        const finance = await request(app).get('/api/admin/badges').set('Cookie', cookies.ACCOUNTANT);
 
         assert.equal(finance.status, 200);
         assert.equal(typeof finance.body.pendingPartners, 'number');
@@ -188,7 +188,7 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
         const docs = await request(app).get(`/api/admin/hotels/${hotelId}/documents`).set('Cookie', cookies.DISPATCHER);
         assert.equal(docs.status, 403);
 
-        const docsAsDesk = await request(app).get(`/api/admin/hotels/${hotelId}/documents`).set('Cookie', cookies.RESERVATIONS);
+        const docsAsDesk = await request(app).get(`/api/admin/hotels/${hotelId}/documents`).set('Cookie', cookies.TOUR_OPERATOR);
         assert.equal(docsAsDesk.status, 200);
     });
 

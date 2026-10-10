@@ -47,7 +47,7 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
         const res = await request(app)
             .post('/api/admin/users')
             .set('Cookie', cookie)
-            .send({ email: testEmail('staff'), firstName: 'Tamar', lastName: 'Kiknadze', role: 'RESERVATIONS', ...overrides });
+            .send({ email: testEmail('staff'), firstName: 'Tamar', lastName: 'Kiknadze', role: 'TOUR_OPERATOR', ...overrides });
 
         if (res.body.user?.id) {
             tracker.user(res.body.user);
@@ -77,11 +77,11 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
     });
 
     it('invites a staff member, emails the link, returns it, and the invitee signs in with the role', async () => {
-        const res = await invite({ role: 'FINANCE' });
+        const res = await invite({ role: 'ACCOUNTANT' });
 
         assert.equal(res.status, 201);
         assert.equal(res.body.user.status, 'INVITED');
-        assert.equal(res.body.user.role, 'FINANCE');
+        assert.equal(res.body.user.role, 'ACCOUNTANT');
         assert.equal(res.body.user.invitedBy.id, superAdmin.id);
         assert.equal(res.body.emailSent, true);
         assert.match(res.body.link.url, /\/activate\//);
@@ -90,7 +90,7 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
 
         const [invited] = await auditRows(res.body.user.id, 'USER_INVITED');
         assert.equal(invited.actorUserId, superAdmin.id);
-        assert.equal(invited.metadata.role, 'FINANCE');
+        assert.equal(invited.metadata.role, 'ACCOUNTANT');
 
         const activated = await request(app)
             .post(`/api/auth/activation/${tokenOf(res.body.link)}`)
@@ -101,7 +101,7 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
         const session = await signIn(app, res.body.user.email, NEW_PASSWORD);
 
         assert.equal(session.status, 200);
-        assert.equal(session.body.user.role, 'FINANCE');
+        assert.equal(session.body.user.role, 'ACCOUNTANT');
         assert.ok(session.body.user.capabilities.includes('finance.payments.write'));
         assert.ok(!session.body.user.capabilities.includes('catalogue.write'));
 
@@ -175,7 +175,7 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
     });
 
     it('deactivates an account, which ends its access at once, and reactivates it', async () => {
-        const user = await makeAdmin(tracker, { role: 'RESERVATIONS' });
+        const user = await makeAdmin(tracker, { role: 'TOUR_OPERATOR' });
         const { cookie } = await signIn(app, user.email);
 
         const off = await request(app)
@@ -226,7 +226,7 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
     });
 
     it('spends a pending reset link when it deactivates, so the link cannot switch the account back on', async () => {
-        const user = await makeAdmin(tracker, { role: 'FINANCE' });
+        const user = await makeAdmin(tracker, { role: 'ACCOUNTANT' });
         const { token } = await makeAuthToken({ userId: user.id, purpose: 'PASSWORD_RESET' });
 
         await request(app).post(`/api/admin/users/${user.id}/deactivate`).set('Cookie', superCookie).send({});
@@ -299,9 +299,9 @@ describe('staff accounts', { skip: dbAvailable ? false : 'Postgres is not reacha
         assert.equal((await request(app).get(`/api/admin/users/${partnerUser.id}`).set('Cookie', superCookie)).status, 404);
 
         const byStatus = await request(app)
-            .get('/api/admin/users?status=INVITED&role=RESERVATIONS&pageSize=100')
+            .get('/api/admin/users?status=INVITED&role=TOUR_OPERATOR&pageSize=100')
             .set('Cookie', superCookie);
-        assert.ok(byStatus.body.data.every((user) => user.status === 'INVITED' && user.role === 'RESERVATIONS'));
+        assert.ok(byStatus.body.data.every((user) => user.status === 'INVITED' && user.role === 'TOUR_OPERATOR'));
         assert.ok(byStatus.body.data.some((user) => user.id === invited.body.user.id));
 
         const byName = await request(app).get('/api/admin/users?q=unique-surname').set('Cookie', superCookie);

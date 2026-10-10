@@ -15,8 +15,8 @@ export const staffRoleLabels: Record<StaffRole, string> = {
   SUPER_ADMIN: "Super admin",
   ADMIN: "Administrator",
   MANAGEMENT: "Management",
-  RESERVATIONS: "Reservations",
-  FINANCE: "Finance",
+  TOUR_OPERATOR: "Tour operator",
+  ACCOUNTANT: "Accountant",
   DISPATCHER: "Dispatcher",
 };
 
@@ -25,8 +25,8 @@ export const staffRoleDescriptions: Record<StaffRole, string> = {
   SUPER_ADMIN: "Everything, including the staff accounts and the audit log.",
   ADMIN: "Runs everything except the staff accounts and the books: reads every figure, records no payments.",
   MANAGEMENT: "Reads everything, margins included, and changes nothing.",
-  RESERVATIONS: "Works the bookings — confirm, decline, cancel — without seeing margins.",
-  FINANCE: "Reads bookings, partners, bank details and margins.",
+  TOUR_OPERATOR: "Works the bookings — confirm, decline, cancel — without seeing margins.",
+  ACCOUNTANT: "Keeps the books: payments, refunds, write-offs and terms; reads bookings, partners, bank details and margins.",
   DISPATCHER: "Fleet, drivers and dispatch only.",
 };
 

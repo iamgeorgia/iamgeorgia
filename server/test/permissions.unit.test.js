@@ -14,11 +14,11 @@ import {
 
 const C = CAPABILITIES;
 
-const STAFF_ALL = ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'RESERVATIONS', 'FINANCE'];
-const FINANCE_READERS = ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'FINANCE'];
+const STAFF_ALL = ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'TOUR_OPERATOR', 'ACCOUNTANT'];
+const FINANCE_READERS = ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'ACCOUNTANT'];
 /** Who moves money. An admin runs the company and reads every figure; the books are the finance desk's. */
-const FINANCE_WRITERS = ['SUPER_ADMIN', 'FINANCE'];
-const BANK_DETAIL_READERS = ['SUPER_ADMIN', 'ADMIN', 'FINANCE'];
+const FINANCE_WRITERS = ['SUPER_ADMIN', 'ACCOUNTANT'];
+const BANK_DETAIL_READERS = ['SUPER_ADMIN', 'ADMIN', 'ACCOUNTANT'];
 const PARTNER_ALL = ['PARTNER_OWNER', 'PARTNER_ADMIN', 'PARTNER_AGENT', 'PARTNER_FINANCE'];
 
 /** Who holds what, written out so a change to the table is a change here too. */
@@ -31,9 +31,9 @@ const EXPECTED = {
     [C.CATALOGUE_WRITE]: ['SUPER_ADMIN', 'ADMIN'],
     [C.PRICING_WRITE]: ['SUPER_ADMIN', 'ADMIN'],
     [C.BOOKINGS_READ]: STAFF_ALL,
-    [C.BOOKINGS_WRITE]: ['SUPER_ADMIN', 'ADMIN', 'RESERVATIONS'],
-    [C.BOOKINGS_CANCEL]: ['SUPER_ADMIN', 'ADMIN', 'RESERVATIONS'],
-    [C.DISPATCH_READ]: ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'RESERVATIONS', 'DISPATCHER'],
+    [C.BOOKINGS_WRITE]: ['SUPER_ADMIN', 'ADMIN', 'TOUR_OPERATOR'],
+    [C.BOOKINGS_CANCEL]: ['SUPER_ADMIN', 'ADMIN', 'TOUR_OPERATOR'],
+    [C.DISPATCH_READ]: ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'TOUR_OPERATOR', 'DISPATCHER'],
     [C.DISPATCH_WRITE]: ['SUPER_ADMIN', 'ADMIN', 'DISPATCHER'],
     [C.PARTNERS_READ]: STAFF_ALL,
     [C.PARTNERS_WRITE]: ['SUPER_ADMIN', 'ADMIN'],
@@ -67,7 +67,7 @@ describe('permissions', () => {
         assert.deepEqual([...ROLES].sort(), [...STAFF_ALL, 'DISPATCHER', 'DRIVER', ...PARTNER_ALL].sort());
         assert.deepEqual([...PLATFORM_ROLES].sort(), [...STAFF_ALL, 'DISPATCHER', 'DRIVER'].sort());
         assert.ok(!STAFF_ROLES.includes('DRIVER'));
-        assert.ok(STAFF_ROLES.includes('FINANCE'));
+        assert.ok(STAFF_ROLES.includes('ACCOUNTANT'));
     });
 
     it('grants each capability to exactly the roles the matrix says', () => {
@@ -98,15 +98,15 @@ describe('permissions', () => {
 
     it('keeps money away from the desk roles', () => {
         assert.equal(can({ role: 'DISPATCHER' }, C.FINANCE_MARGIN_READ), false);
-        assert.equal(can({ role: 'RESERVATIONS' }, C.FINANCE_MARGIN_READ), false);
+        assert.equal(can({ role: 'TOUR_OPERATOR' }, C.FINANCE_MARGIN_READ), false);
         assert.equal(can({ role: 'DRIVER' }, C.CATALOGUE_READ), false);
         assert.equal(can({ role: 'MANAGEMENT' }, C.BOOKINGS_WRITE), false);
         assert.equal(can({ role: 'ADMIN' }, C.USERS_STAFF_MANAGE), false);
     });
 
     it('answers "any of" and fails closed for nobody and for an unknown role', () => {
-        assert.equal(can({ role: 'FINANCE' }, C.CATALOGUE_WRITE, C.FINANCE_PAYMENTS_WRITE), true);
-        assert.equal(can({ role: 'FINANCE' }, C.CATALOGUE_WRITE, C.PRICING_WRITE), false);
+        assert.equal(can({ role: 'ACCOUNTANT' }, C.CATALOGUE_WRITE, C.FINANCE_PAYMENTS_WRITE), true);
+        assert.equal(can({ role: 'ACCOUNTANT' }, C.CATALOGUE_WRITE, C.PRICING_WRITE), false);
         assert.equal(can(undefined, C.NOTIFICATIONS_READ), false);
         assert.equal(can(null, C.NOTIFICATIONS_READ), false);
         assert.equal(can({ role: 'GHOST' }, C.NOTIFICATIONS_READ), false);

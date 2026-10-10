@@ -135,7 +135,7 @@ describe('financial data exposure', { skip: dbAvailable ? false : 'Postgres is n
     it('keeps the bank route from staff who read partners but hold no financial capability', async () => {
         const partner = await scenario();
 
-        for (const role of ['MANAGEMENT', 'RESERVATIONS']) {
+        for (const role of ['MANAGEMENT', 'TOUR_OPERATOR']) {
             const cookie = await cookieFor(await makeAdmin(tracker, { role }));
 
             const detail = await request(app).get(`/api/admin/partners/${partner.id}`).set('Cookie', cookie);
@@ -150,7 +150,7 @@ describe('financial data exposure', { skip: dbAvailable ? false : 'Postgres is n
 
         const finance = await request(app)
             .get(`/api/admin/partners/${partner.id}/financial`)
-            .set('Cookie', await cookieFor(await makeAdmin(tracker, { role: 'FINANCE' })));
+            .set('Cookie', await cookieFor(await makeAdmin(tracker, { role: 'ACCOUNTANT' })));
         assert.equal(finance.status, 200);
         assert.equal(finance.body.iban, IBAN);
     });

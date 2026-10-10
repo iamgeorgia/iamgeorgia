@@ -60,9 +60,9 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
 
     before(async () => {
         config.finance.opsEmail = 'finance-desk@example.test';
-        finance = await makeAdmin(tracker, { role: 'FINANCE' });
-        cookies.FINANCE = (await signIn(app, finance.email)).cookie;
-        cookies.RESERVATIONS = (await signIn(app, (await makeAdmin(tracker, { role: 'RESERVATIONS' })).email)).cookie;
+        finance = await makeAdmin(tracker, { role: 'ACCOUNTANT' });
+        cookies.ACCOUNTANT = (await signIn(app, finance.email)).cookie;
+        cookies.TOUR_OPERATOR = (await signIn(app, (await makeAdmin(tracker, { role: 'TOUR_OPERATOR' })).email)).cookie;
 
         supplier = await makePartner(tracker, { kind: 'TRANSPORT' });
         agency = await makePartner(tracker, { kind: 'TOUR_OPERATOR', paymentDueDays: 10 });
@@ -206,7 +206,7 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
 
         const paid = await request(app)
             .post(`/api/admin/finance/payables/${payable.id}/instalments/1/pay`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .set('Idempotency-Key', unique('pay'))
             .send({ method: 'BANK_TRANSFER', paidAt: new Date().toISOString() });
         assert.equal(paid.status, 201, JSON.stringify(paid.body));
@@ -311,7 +311,7 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
         clearOutbox();
         const res = await request(app)
             .post('/api/admin/finance/payments')
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .set('Idempotency-Key', unique('pay'))
             .send({
                 direction: 'IN',
@@ -362,7 +362,7 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
         const soon = await dueIn(2 * DAY);
         const late = await dueIn(-DAY);
 
-        const res = await request(app).get('/api/admin/finance/due?days=7').set('Cookie', cookies.FINANCE);
+        const res = await request(app).get('/api/admin/finance/due?days=7').set('Cookie', cookies.ACCOUNTANT);
         assert.equal(res.status, 200, JSON.stringify(res.body));
         assert.equal(res.body.days, 7);
 
@@ -380,15 +380,15 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
         assert.ok(res.body.instalments.every((row, index, rows) => index === 0 || rows[index - 1].dueAt <= row.dueAt), 'earliest first');
 
         assert.ok((await countDueInstalments({ days: 7 })) >= 2);
-        const badges = await request(app).get('/api/admin/badges').set('Cookie', cookies.FINANCE);
+        const badges = await request(app).get('/api/admin/badges').set('Cookie', cookies.ACCOUNTANT);
         assert.equal(badges.status, 200);
         assert.ok(badges.body.paymentsDue >= 2);
         assert.equal(typeof badges.body.unreadNotifications, 'number');
 
-        const desk = await request(app).get('/api/admin/badges').set('Cookie', cookies.RESERVATIONS);
+        const desk = await request(app).get('/api/admin/badges').set('Cookie', cookies.TOUR_OPERATOR);
         assert.equal(desk.body.paymentsDue, null, 'a role that may not read payables gets no count');
 
-        const refused = await request(app).get('/api/admin/finance/due').set('Cookie', cookies.RESERVATIONS);
+        const refused = await request(app).get('/api/admin/finance/due').set('Cookie', cookies.TOUR_OPERATOR);
         assert.equal(refused.status, 403);
     });
 });

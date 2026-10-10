@@ -42,7 +42,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
     let to;
 
     before(async () => {
-        for (const role of ['FINANCE', 'MANAGEMENT', 'RESERVATIONS', 'ADMIN']) {
+        for (const role of ['ACCOUNTANT', 'MANAGEMENT', 'TOUR_OPERATOR', 'ADMIN']) {
             cookies[role] = (await signIn(app, (await makeAdmin(tracker, { role })).email)).cookie;
         }
 
@@ -82,7 +82,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         });
     };
 
-    const pay = (body, cookie = cookies.FINANCE, key = unique('pay')) =>
+    const pay = (body, cookie = cookies.ACCOUNTANT, key = unique('pay')) =>
         request(app).post('/api/admin/finance/payments').set('Cookie', cookie).set('Idempotency-Key', key).send({
             method: 'BANK_TRANSFER',
             currency: 'GEL',
@@ -160,15 +160,15 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         const key = unique('retry-key');
         const body = { direction: 'IN', amountCents: 5_000, allocations: [{ receivableId: one.receivable.id, amountCents: 5_000 }] };
 
-        const first = await pay(body, cookies.FINANCE, key);
-        const again = await pay(body, cookies.FINANCE, key);
+        const first = await pay(body, cookies.ACCOUNTANT, key);
+        const again = await pay(body, cookies.ACCOUNTANT, key);
         assert.equal(first.status, 201);
         assert.equal(again.status, 200);
         assert.equal(again.body.replayed, true);
         assert.equal(again.body.payment.id, first.body.payment.id);
         assert.equal((await prisma.receivable.findUnique({ where: { id: one.receivable.id } })).paidCents, 5_000, 'paid once');
 
-        const different = await pay({ ...body, amountCents: 6_000, allocations: [{ receivableId: one.receivable.id, amountCents: 6_000 }] }, cookies.FINANCE, key);
+        const different = await pay({ ...body, amountCents: 6_000, allocations: [{ receivableId: one.receivable.id, amountCents: 6_000 }] }, cookies.ACCOUNTANT, key);
         assert.equal(different.status, 409);
         assert.equal(different.body.error.details.reason, 'IDEMPOTENCY_KEY_REUSED');
     });
@@ -191,7 +191,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         await prisma.transferBooking.update({ where: { id: one.id }, data: { status: 'CANCELLED', cancelledAt: new Date(), cancellationChargeCents: 5_000 } });
         await prisma.$transaction((tx) => syncBookingInTx(tx, 'TRANSFER', one.id));
 
-        const owed = await request(app).get(`/api/admin/finance/receivables/${one.receivable.id}`).set('Cookie', cookies.FINANCE);
+        const owed = await request(app).get(`/api/admin/finance/receivables/${one.receivable.id}`).set('Cookie', cookies.ACCOUNTANT);
         assert.equal(owed.body.refundDueCents, 15_000);
 
         const noReason = await pay({ direction: 'OUT', kind: 'REFUND', amountCents: 15_000, allocations: [{ receivableId: one.receivable.id, amountCents: 15_000 }] });
@@ -222,14 +222,14 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
 
         const res = await request(app)
             .post(`/api/admin/finance/payables/${one.payable.id}/instalments/1/pay`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ method: 'BANK_TRANSFER', paidAt: new Date().toISOString(), reference: 'OUT-1' });
 
         assert.equal(res.status, 201, JSON.stringify(res.body));
         assert.equal(res.body.payment.direction, 'OUT');
         assert.equal(res.body.payment.amountCents, 5_100);
 
-        const payable = await request(app).get(`/api/admin/finance/payables/${one.payable.id}`).set('Cookie', cookies.FINANCE);
+        const payable = await request(app).get(`/api/admin/finance/payables/${one.payable.id}`).set('Cookie', cookies.ACCOUNTANT);
         assert.equal(payable.body.status, 'PARTIAL');
         assert.equal(payable.body.paidCents, 5_100);
         assert.deepEqual(payable.body.instalments.map((i) => i.status), ['PAID', 'OPEN']);
@@ -239,18 +239,18 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
     it("sets a supplier's amount by hand, and writes off what is left, both with a reason", async () => {
         const one = await booked();
 
-        const noReason = await request(app).patch(`/api/admin/finance/payables/${one.payable.id}`).set('Cookie', cookies.FINANCE).send({ amountOverrideCents: 9_000 });
+        const noReason = await request(app).patch(`/api/admin/finance/payables/${one.payable.id}`).set('Cookie', cookies.ACCOUNTANT).send({ amountOverrideCents: 9_000 });
         assert.equal(noReason.status, 400);
 
         const above = await request(app)
             .patch(`/api/admin/finance/payables/${one.payable.id}`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ amountOverrideCents: 99_000, reason: 'Typo' });
         assert.equal(above.status, 422);
 
         const set = await request(app)
             .patch(`/api/admin/finance/payables/${one.payable.id}`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ amountOverrideCents: 9_000, reason: 'Agreed a discount with the supplier' });
         assert.equal(set.status, 200, JSON.stringify(set.body));
         assert.equal(set.body.amountCents, 9_000);
@@ -259,7 +259,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
 
         const waived = await request(app)
             .patch(`/api/admin/finance/payables/${one.payable.id}`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ waive: true, reason: 'Supplier closed down' });
         assert.equal(waived.body.status, 'WAIVED');
         assert.ok(waived.body.instalments.every((i) => i.status === 'WAIVED'));
@@ -271,7 +271,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
 
         const res = await request(app)
             .patch(`/api/admin/finance/receivables/${one.receivable.id}`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ dueAt, reason: 'Agreed longer terms for this group' });
 
         assert.equal(res.status, 200);
@@ -284,13 +284,13 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
     it('saves supplier terms and partner terms, and refuses terms that do not add up', async () => {
         const bad = await request(app)
             .put(`/api/admin/finance/terms/transfer-providers/${provider.id}`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ milestones: [{ kind: 'DEPOSIT', basis: 'PERCENT', value: 3000, anchor: 'CONFIRMATION', offsetDays: 3 }] });
         assert.equal(bad.status, 400, 'a deposit without a balance');
 
         const ok = await request(app)
             .put(`/api/admin/finance/terms/transfer-providers/${provider.id}`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ milestones: [{ kind: 'BALANCE', anchor: 'ARRIVAL', offsetDays: -7 }], cancellationLiability: 'MANUAL', cutoffTime: '12:00' });
         assert.equal(ok.status, 200, JSON.stringify(ok.body));
         assert.equal(ok.body.cancellationLiability, 'MANUAL');
@@ -299,11 +299,11 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         assert.equal(read.status, 200);
         assert.equal(read.body.cutoffTime, '12:00');
 
-        assert.equal((await request(app).get(`/api/admin/finance/terms/boats/${provider.id}`).set('Cookie', cookies.FINANCE)).status, 404);
+        assert.equal((await request(app).get(`/api/admin/finance/terms/boats/${provider.id}`).set('Cookie', cookies.ACCOUNTANT)).status, 404);
 
         const partnerTerms = await request(app)
             .patch(`/api/admin/finance/partners/${otherAgency.id}/terms`)
-            .set('Cookie', cookies.FINANCE)
+            .set('Cookie', cookies.ACCOUNTANT)
             .send({ paymentDueDays: 30, paymentDueAnchor: 'ARRIVAL' });
         assert.equal(partnerTerms.status, 200);
         assert.equal(partnerTerms.body.paymentDueDays, 30);
@@ -318,16 +318,16 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         assert.ok(gel.receivables.openCents > 0);
         assert.ok(gel.payables.openCents > 0);
 
-        const margin = await request(app).get('/api/admin/finance/reports/margin?groupBy=product').set('Cookie', cookies.FINANCE);
+        const margin = await request(app).get('/api/admin/finance/reports/margin?groupBy=product').set('Cookie', cookies.ACCOUNTANT);
         assert.equal(margin.status, 200);
         const transfers = margin.body.rows.find((row) => row.key === 'TRANSFER' && row.currency === 'GEL');
         assert.ok(transfers.bookings > 0);
 
-        const ageing = await request(app).get('/api/admin/finance/reports/ageing?side=payables').set('Cookie', cookies.FINANCE);
+        const ageing = await request(app).get('/api/admin/finance/reports/ageing?side=payables').set('Cookie', cookies.ACCOUNTANT);
         assert.equal(ageing.status, 200);
         assert.deepEqual(ageing.body.buckets, ['current', 'd1_30', 'd31_60', 'd61_90', 'd90_plus']);
 
-        const csv = await request(app).get('/api/admin/finance/reports/margin?format=csv').set('Cookie', cookies.FINANCE);
+        const csv = await request(app).get('/api/admin/finance/reports/margin?format=csv').set('Cookie', cookies.ACCOUNTANT);
         assert.equal(csv.status, 200);
         assert.match(csv.headers['content-type'], /text\/csv/);
         assert.match(csv.text.split('\r\n')[0], /^Product,Currency,Bookings,Revenue,Cost,Margin,Margin %$/);
@@ -372,7 +372,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         const payInstalment = (sequence) =>
             request(app)
                 .post(`/api/admin/finance/payables/${one.payable.id}/instalments/${sequence}/pay`)
-                .set('Cookie', cookies.FINANCE)
+                .set('Cookie', cookies.ACCOUNTANT)
                 .send({ method: 'BANK_TRANSFER', paidAt: new Date().toISOString(), reference: `OUT-${sequence}` });
 
         // Each locks only its own instalment; the payable's total is summed
@@ -380,7 +380,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         const results = await Promise.all([payInstalment(1), payInstalment(2)]);
         assert.deepEqual(results.map((res) => res.status), [201, 201]);
 
-        const payable = await request(app).get(`/api/admin/finance/payables/${one.payable.id}`).set('Cookie', cookies.FINANCE);
+        const payable = await request(app).get(`/api/admin/finance/payables/${one.payable.id}`).set('Cookie', cookies.ACCOUNTANT);
         assert.equal(payable.body.status, 'PAID');
         assert.equal(payable.body.paidCents, 17_000);
         assert.deepEqual(payable.body.instalments.map((i) => i.status), ['PAID', 'PAID']);
@@ -405,7 +405,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
             (await request(app).patch(`/api/admin/finance/receivables/${one.receivable.id}`).set('Cookie', cookies.ADMIN).send({ waive: true, reason: 'No' })).status,
             403
         );
-        assert.equal((await request(app).get('/api/admin/finance/receivables').set('Cookie', cookies.RESERVATIONS)).status, 403);
+        assert.equal((await request(app).get('/api/admin/finance/receivables').set('Cookie', cookies.TOUR_OPERATOR)).status, 403);
         assert.equal((await request(app).get('/api/admin/finance/payables').set('Cookie', cookies.AGENCY)).status, 403);
     });
 

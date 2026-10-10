@@ -51,8 +51,8 @@ const ROLES = [
     'SUPER_ADMIN',
     'ADMIN',
     'MANAGEMENT',
-    'RESERVATIONS',
-    'FINANCE',
+    'TOUR_OPERATOR',
+    'ACCOUNTANT',
     'DISPATCHER',
     'DRIVER',
     'PARTNER_OWNER',
@@ -86,7 +86,7 @@ describe('who reaches what, across the whole API', { skip: dbAvailable ? false :
     before(async () => {
         endpoints = (await listEndpoints()).filter((e) => !SKIP.has(`${e.method} ${e.path}`));
 
-        for (const role of ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'RESERVATIONS', 'FINANCE', 'DISPATCHER']) {
+        for (const role of ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'TOUR_OPERATOR', 'ACCOUNTANT', 'DISPATCHER']) {
             const user = await makeAdmin(tracker, { role });
             cookies[role] = (await signIn(app, user.email)).cookie;
         }

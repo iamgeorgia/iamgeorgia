@@ -59,7 +59,7 @@ describe('the users role constraint', { skip: dbAvailable ? false : 'Postgres is
     });
 
     it('keeps the desk roles on the platform side too', async () => {
-        for (const role of ['MANAGEMENT', 'RESERVATIONS', 'FINANCE']) {
+        for (const role of ['MANAGEMENT', 'TOUR_OPERATOR', 'ACCOUNTANT']) {
             tracker.user(await attempt({ role }));
             await assert.rejects(attempt({ role, partnerId: partner.id }), role);
         }

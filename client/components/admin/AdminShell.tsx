@@ -1,12 +1,13 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, ChevronDown, LogOut, Menu, Search } from "lucide-react";
+import { ChevronDown, LogOut, Menu, Search } from "lucide-react";
 import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminViewerProvider } from "./AdminViewerContext";
 import { NavigationProgressBar, NavigationProgressProvider } from "./NavigationProgress";
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { signOut } from "@/lib/api/partners";
 import { NO_BADGES } from "@/lib/api/admin";
 import { forgetViewer } from "@/lib/auth/useViewer";
@@ -38,32 +39,13 @@ function WithBadges({
   return children(use(badges));
 }
 
-function NotificationBell({ badges }: { badges: AdminBadges }) {
-  const awaiting = badges.pendingBookings + badges.pendingPartners;
-
-  return (
-    <button
-      type="button"
-      aria-label={`Notifications, ${awaiting} awaiting review`}
-      className="relative flex size-10 items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-soft hover:text-ink"
-    >
-      <Bell size={18} aria-hidden />
-      {awaiting > 0 && (
-        <span
-          className="absolute top-2 end-2 size-2 rounded-full bg-brand ring-2 ring-background"
-          aria-hidden
-        />
-      )}
-    </button>
-  );
-}
-
 const ROLE_LABELS: Record<string, string> = {
   SUPER_ADMIN: "Super admin",
   ADMIN: "Administrator",
   MANAGEMENT: "Management",
-  RESERVATIONS: "Reservations",
-  FINANCE: "Finance",
+  TOUR_OPERATOR: "Tour operator",
+  ACCOUNTANT: "Accountant",
+  FINANCE_OPERATOR: "Finance operator",
   DISPATCHER: "Dispatcher",
   DRIVER: "Driver",
 };
@@ -200,8 +182,11 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
             </div>
 
             <div className="ms-auto flex shrink-0 items-center gap-1">
-              <Suspense fallback={<NotificationBell badges={NO_BADGES} />}>
-                <WithBadges badges={badges}>{(resolved) => <NotificationBell badges={resolved} />}</WithBadges>
+              {/* The unread count rides on the badges request; the list is fetched when the bell opens. */}
+              <Suspense fallback={<NotificationBell scope="admin" unreadCount={NO_BADGES.unreadNotifications} />}>
+                <WithBadges badges={badges}>
+                  {(resolved) => <NotificationBell scope="admin" unreadCount={resolved.unreadNotifications} />}
+                </WithBadges>
               </Suspense>
 
               <div ref={accountRef} className="relative">

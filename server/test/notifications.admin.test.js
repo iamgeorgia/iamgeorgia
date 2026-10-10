@@ -52,9 +52,9 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         // Two reservations users, not finance ones: another file's sweep or
         // drain running at the same time tells every finance-capable user
         // about its instalments, and these counts must be this file's alone.
-        finance = await makeAdmin(tracker, { role: 'RESERVATIONS' });
-        management = await makeAdmin(tracker, { role: 'RESERVATIONS' });
-        cookies.FINANCE = (await signIn(app, finance.email)).cookie;
+        finance = await makeAdmin(tracker, { role: 'TOUR_OPERATOR' });
+        management = await makeAdmin(tracker, { role: 'TOUR_OPERATOR' });
+        cookies.ACCOUNTANT = (await signIn(app, finance.email)).cookie;
         cookies.MANAGEMENT = (await signIn(app, management.email)).cookie;
 
         const partner = await makePartner(tracker);
@@ -77,7 +77,7 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         const read = await notice(finance.id, { readAt: new Date(), kind: 'FINANCE_PAYABLE_OVERDUE' });
         const theirs = await notice(management.id);
 
-        const all = await request(app).get('/api/admin/notifications').set('Cookie', cookies.FINANCE);
+        const all = await request(app).get('/api/admin/notifications').set('Cookie', cookies.ACCOUNTANT);
         assert.equal(all.status, 200, JSON.stringify(all.body));
         const ids = all.body.data.map((row) => row.id);
         assert.ok(ids.includes(mine.id) && ids.includes(read.id));
@@ -85,10 +85,10 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         assert.equal(all.body.unreadCount, 1);
         assert.equal(all.body.data.find((row) => row.id === mine.id).entityType, 'SupplierPayable');
 
-        const unread = await request(app).get('/api/admin/notifications?unread=true').set('Cookie', cookies.FINANCE);
+        const unread = await request(app).get('/api/admin/notifications?unread=true').set('Cookie', cookies.ACCOUNTANT);
         assert.deepEqual(unread.body.data.map((row) => row.id), [mine.id]);
 
-        const count = await request(app).get('/api/admin/notifications/unread-count').set('Cookie', cookies.FINANCE);
+        const count = await request(app).get('/api/admin/notifications/unread-count').set('Cookie', cookies.ACCOUNTANT);
         assert.deepEqual(count.body, { unreadCount: 1 });
     });
 
@@ -97,20 +97,20 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         const other = await notice(finance.id);
         const theirs = await notice(management.id);
 
-        const refused = await request(app).post(`/api/admin/notifications/${theirs.id}/read`).set('Cookie', cookies.FINANCE);
+        const refused = await request(app).post(`/api/admin/notifications/${theirs.id}/read`).set('Cookie', cookies.ACCOUNTANT);
         assert.equal(refused.status, 404);
         assert.equal((await prisma.notification.findUnique({ where: { id: theirs.id } })).readAt, null);
 
-        const one = await request(app).post(`/api/admin/notifications/${mine.id}/read`).set('Cookie', cookies.FINANCE);
+        const one = await request(app).post(`/api/admin/notifications/${mine.id}/read`).set('Cookie', cookies.ACCOUNTANT);
         assert.equal(one.status, 200);
         assert.ok(one.body.readAt);
 
-        const all = await request(app).post('/api/admin/notifications/read-all').set('Cookie', cookies.FINANCE);
+        const all = await request(app).post('/api/admin/notifications/read-all').set('Cookie', cookies.ACCOUNTANT);
         assert.equal(all.status, 200);
         assert.ok(all.body.count >= 1);
         assert.ok((await prisma.notification.findUnique({ where: { id: other.id } })).readAt);
 
-        const count = await request(app).get('/api/admin/notifications/unread-count').set('Cookie', cookies.FINANCE);
+        const count = await request(app).get('/api/admin/notifications/unread-count').set('Cookie', cookies.ACCOUNTANT);
         assert.deepEqual(count.body, { unreadCount: 0 });
     });
 
@@ -131,7 +131,7 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         const read = await request(app).post(`/api/partner/notifications/${theirs.id}/read`).set('Cookie', cookies.OWNER);
         assert.equal(read.status, 200);
         assert.equal((await request(app).post(`/api/partner/notifications/${theirs.id}/read`).set('Cookie', cookies.OTHER_OWNER)).status, 404, 'scoped on the session, whoever asks');
-        assert.equal((await request(app).get('/api/partner/notifications').set('Cookie', cookies.FINANCE)).status, 403, 'staff use the admin bell');
+        assert.equal((await request(app).get('/api/partner/notifications').set('Cookie', cookies.ACCOUNTANT)).status, 403, 'staff use the admin bell');
     });
 });
 
@@ -158,7 +158,7 @@ describe('outbox dead letters', { skip: dbAvailable ? false : 'Postgres is not r
     };
 
     before(async () => {
-        for (const role of ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'RESERVATIONS']) {
+        for (const role of ['SUPER_ADMIN', 'ADMIN', 'MANAGEMENT', 'TOUR_OPERATOR']) {
             cookies[role] = (await signIn(app, (await makeAdmin(tracker, { role })).email)).cookie;
         }
     });
@@ -186,7 +186,7 @@ describe('outbox dead letters', { skip: dbAvailable ? false : 'Postgres is not r
         assert.equal(row.lastError, 'Simulated delivery failure');
         assert.equal(row.topic, 'finance.payable.instalment_due');
 
-        assert.equal((await request(app).get('/api/admin/outbox/failed').set('Cookie', cookies.RESERVATIONS)).status, 403);
+        assert.equal((await request(app).get('/api/admin/outbox/failed').set('Cookie', cookies.TOUR_OPERATOR)).status, 403);
     });
 
     it('re-queues a dead letter for one more attempt, audited, and refuses what has not failed', async () => {

@@ -68,7 +68,7 @@ describe('changing a booking needs more than reading it', { skip: dbAvailable ? 
 
         // Not a dispatcher: it reads no bookings, so with the lead email it is
         // a guest here like anyone else, and the router is what keeps it out.
-        for (const role of ['MANAGEMENT', 'FINANCE']) {
+        for (const role of ['MANAGEMENT', 'ACCOUNTANT']) {
             await assert.rejects(
                 amendBooking(booking.reference, { specialRequests: 'Late arrival', email: GUEST_EMAIL }, { role }),
                 isNotFound,
@@ -85,10 +85,10 @@ describe('changing a booking needs more than reading it', { skip: dbAvailable ? 
         const amended = await amendBooking(booking.reference, { specialRequests: 'Late arrival', email: GUEST_EMAIL }, undefined);
         assert.equal(amended.specialRequests, 'Late arrival');
 
-        const byDesk = await amendBooking(booking.reference, { specialRequests: 'Cot, please' }, { role: 'RESERVATIONS' });
+        const byDesk = await amendBooking(booking.reference, { specialRequests: 'Cot, please' }, { role: 'TOUR_OPERATOR' });
         assert.equal(byDesk.specialRequests, 'Cot, please');
 
-        const cancelled = await cancelBooking(booking.reference, { reason: 'Guest asked' }, { role: 'RESERVATIONS' });
+        const cancelled = await cancelBooking(booking.reference, { reason: 'Guest asked' }, { role: 'TOUR_OPERATOR' });
         assert.equal(cancelled.booking.status, 'CANCELLED');
     });
 });

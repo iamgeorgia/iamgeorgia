@@ -1320,7 +1320,7 @@ ones (`/admin/users` needs `users.staff.manage`, `/admin/audit` needs
 | Anonymous | `401` |
 | Any partner role, or a driver | `403` |
 | `ADMIN` / `SUPER_ADMIN` | `200`/`201` |
-| `MANAGEMENT` / `RESERVATIONS` / `FINANCE` / `DISPATCHER` | depends on the area — see the role table in `server/API.md` ("Users, roles and capabilities") |
+| `MANAGEMENT` / `TOUR_OPERATOR` / `ACCOUNTANT` / `DISPATCHER` | depends on the area — see the role table in `server/API.md` ("Users, roles and capabilities") |
 
 Worth doing once as a sweep across the whole surface, rather than per endpoint.
 The server's own `test/rbac.matrix.test.js` does exactly that for every route
@@ -1573,7 +1573,7 @@ field name → `400`.
 | Method | Path | Expected |
 | --- | --- | --- |
 | `GET` | `/api/admin/users?role&status&q&page&pageSize` | `200`, paginated; staff only — no drivers, no partner users |
-| `POST` | `/api/admin/users` | `201` — `{ user, link, email, emailSent }`; `role` ∈ `ADMIN` `MANAGEMENT` `RESERVATIONS` `FINANCE` `DISPATCHER` (`SUPER_ADMIN` → `400`). Taken email → `409` |
+| `POST` | `/api/admin/users` | `201` — `{ user, link, email, emailSent }`; `role` ∈ `ADMIN` `MANAGEMENT` `TOUR_OPERATOR` `ACCOUNTANT` `DISPATCHER` (`SUPER_ADMIN` → `400`). Taken email → `409` |
 | `GET` | `/api/admin/users/:id` | `200`; `status` derived (`INVITED` / `ACTIVE` / `DEACTIVATED`) |
 | `PATCH` | `/api/admin/users/:id/role` | `200`; the account's sessions end — its old cookie now gets `401` on `/api/auth/me` |
 | `POST` | `/api/admin/users/:id/deactivate` | `200`; sign-in now `401`. An invitation → `409` `NOT_ACTIVATED` |
@@ -1586,7 +1586,7 @@ sign in and check `user.role` and `user.capabilities`.
 
 ### Audit log — `/api/admin/audit`
 
-`audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE`. A `DISPATCHER`
+`audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT`. A `DISPATCHER`
 and every partner role → `403`.
 
 | Query | Expected |
@@ -1605,9 +1605,9 @@ What we owe suppliers (**payables**), what buyers owe us (**receivables**),
 and the **payments** that settle them. All under `/api/admin/finance`. Full
 contract in `server/API.md` → "Finance".
 
-**Who:** reads — `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE`. Changes
-(payments, adjustments, terms) — `SUPER_ADMIN`, `ADMIN`, `FINANCE`. A
-`MANAGEMENT` user gets `403` on every POST/PUT/PATCH here; `RESERVATIONS`,
+**Who:** reads — `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT`. Changes
+(payments, adjustments, terms) — `SUPER_ADMIN`, `ADMIN`, `ACCOUNTANT`. A
+`MANAGEMENT` user gets `403` on every POST/PUT/PATCH here; `TOUR_OPERATOR`,
 `DISPATCHER` and every partner role get `403` on all of it.
 
 ### The records appear on their own

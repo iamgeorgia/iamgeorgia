@@ -52,13 +52,13 @@ describe('roles as data', { skip: dbAvailable ? false : 'Postgres is not reachab
     });
 
     it('gives a new account the row for its primary role, and swaps it when the role changes', async () => {
-        const user = await makeAdmin(tracker, { role: 'RESERVATIONS' });
+        const user = await makeAdmin(tracker, { role: 'TOUR_OPERATOR' });
         const held = () => prisma.userRole.findMany({ where: { userId: user.id }, select: { roleId: true } });
 
-        assert.deepEqual((await held()).map((row) => row.roleId), [roles.RESERVATIONS.id]);
+        assert.deepEqual((await held()).map((row) => row.roleId), [roles.TOUR_OPERATOR.id]);
 
-        await prisma.user.update({ where: { id: user.id }, data: { role: 'FINANCE' } });
-        assert.deepEqual((await held()).map((row) => row.roleId), [roles.FINANCE.id]);
+        await prisma.user.update({ where: { id: user.id }, data: { role: 'ACCOUNTANT' } });
+        assert.deepEqual((await held()).map((row) => row.roleId), [roles.ACCOUNTANT.id]);
     });
 
     it('keeps a platform role off a partner account and the two sides apart', async () => {

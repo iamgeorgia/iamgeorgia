@@ -990,7 +990,7 @@ Media categories decide visibility, not the caller: `HOTEL_IMAGE`, `ROOM_IMAGE`,
 ## Users, roles and capabilities
 
 Eleven roles. Platform side, never attached to a partner: `SUPER_ADMIN`,
-`ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE`, `DISPATCHER`, `DRIVER`.
+`ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT`, `DISPATCHER`, `DRIVER`.
 Partner side, always attached to one: `PARTNER_OWNER`, `PARTNER_ADMIN`,
 `PARTNER_AGENT`, `PARTNER_FINANCE`. The database CHECK enforces the split.
 
@@ -1018,14 +1018,25 @@ What the platform roles reach in the admin panel:
 | Area | Read | Change |
 | --- | --- | --- |
 | Catalogue — destinations, amenities, hotels, tours, services, packages, transfer points/vehicles/routes | every staff role | `SUPER_ADMIN`, `ADMIN` |
-| A hotel's contracts and documents | the list: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE`; opening a file goes by its category — a contract or rate sheet needs `partners.financial.read`, a payment slip or invoice `finance.payments.read`, a driver's papers `dispatch.read`, a certificate `catalogue.read` | `SUPER_ADMIN`, `ADMIN` |
-| Bookings and orders, every company | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` (transfers: also `DISPATCHER`) | confirm/decline and cancel: `SUPER_ADMIN`, `ADMIN`, `RESERVATIONS` |
-| Fleet, drivers, dispatch | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `DISPATCHER` | `SUPER_ADMIN`, `ADMIN`, `DISPATCHER` (deleting a car or a driver: admins) |
-| Partners | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
-| A partner's bank details | `SUPER_ADMIN`, `ADMIN`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
-| Pricing rules | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | `SUPER_ADMIN`, `ADMIN` |
-| Net, markup and margin in any response | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | — |
-| Which agency bought a booking | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `RESERVATIONS`, `FINANCE` | — |
+| A hotel's contracts and documents | the list: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT`; opening a file goes by its category — a contract or rate sheet needs `partners.financial.read`, a payment slip or invoice `finance.payments.read`, a driver's papers `dispatch.read`, a certificate `catalogue.read` | `SUPER_ADMIN`, `ADMIN` |
+| Bookings and orders, every company | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT` (transfers: also `DISPATCHER`) | confirm/decline and cancel: `SUPER_ADMIN`, `ADMIN`, `TOUR_OPERATOR` |
+| Fleet, drivers, dispatch | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `DISPATCHER` | `SUPER_ADMIN`, `ADMIN`, `DISPATCHER` (deleting a car or a driver: admins) |
+| Partners | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
+| A partner's bank details | `SUPER_ADMIN`, `ADMIN`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
+| Pricing rules | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
+| Payments, refunds, write-offs, payment terms | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | `SUPER_ADMIN`, `ACCOUNTANT` |
+| Net, markup and margin in any response | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | — |
+| A partner's history (`/admin/partners/:id/audit`) | `audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | — |
+
+Reading every booking is not changing one. On the public booking routes
+(`/bookings`, `/tours/bookings`, `/transfers/bookings`, `/orders`) a staff
+session is refused at the router unless it holds `bookings.write` or
+`bookings.cancel` (403 `INSUFFICIENT_CAPABILITY`), and beneath that the
+services answer a desk that reads but may not change — management, finance —
+as they would a stranger, with a 404. The identity on `/auth/me` and
+`/partner/me` never carries bank details; `GET /partner/financial` and
+`GET /admin/partners/:id/financial` (`partners.financial.read`) do.
+| Which agency bought a booking | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT` | — |
 
 `GET /admin/badges` answers every staff role, with `null` for each queue the
 role does not work (a dispatcher gets `unassignedLegs` only; finance gets
@@ -1059,7 +1070,7 @@ as they would a stranger, with a 404. The identity on `/auth/me` and
 `/partner/me` never carries bank details; `GET /partner/financial` and
 `GET /admin/partners/:id/financial` (`partners.financial.read`) do.
 | GET | `/admin/users?role&status&q&page&pageSize` | `status` ∈ `INVITED` `ACTIVE` `DEACTIVATED`; `role` repeatable; envelope `{ data, total, page, pageSize, totalPages }` |
-| POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `RESERVATIONS` `FINANCE` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
+| POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `TOUR_OPERATOR` `ACCOUNTANT` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
 | GET | `/admin/users/:id` | `status` is derived: no password yet → `INVITED`; switched off → `DEACTIVATED`; else `ACTIVE`. Carries `invitedBy`, `invitedAt`, `deactivatedBy`, `deactivatedAt` |
 | PATCH | `/admin/users/:id/role` | `{ role }`, any staff role including `SUPER_ADMIN`; ends the account's sessions |
 | POST | `/admin/users/:id/deactivate` | `{ reason? }`; sessions end now and every unused activation or reset link is spent. 409 `NOT_ACTIVATED` for an invitation — delete it instead |
@@ -1087,7 +1098,7 @@ members, invited ones included (409 `TEAM_FULL`).
 
 ### Audit log — `/admin/audit`
 
-`audit.read` (`SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE`).
+`audit.read` (`SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT`).
 `GET /admin/audit?entityType&entityId&actorUserId&action&q&from&to&page&pageSize`
 answers the whole trail newest first, each entry `{ id, action, entityType,
 entityId, summary, metadata, actor, actorEmail, createdAt }`. `action` must be a

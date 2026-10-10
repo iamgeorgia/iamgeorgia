@@ -4,7 +4,7 @@ import { AuditAction } from '../generated/prisma/enums.ts';
 import { emailField, nameField, phoneField, textField } from './normalize.js';
 
 /** Platform roles an invitation may create. SUPER_ADMIN is only ever made by the CLI. */
-export const STAFF_INVITE_ROLES = ['ADMIN', 'MANAGEMENT', 'RESERVATIONS', 'FINANCE', 'DISPATCHER'];
+export const STAFF_INVITE_ROLES = ['ADMIN', 'MANAGEMENT', 'TOUR_OPERATOR', 'ACCOUNTANT', 'DISPATCHER'];
 
 /** Platform roles a staff member may be moved to. Promotion to SUPER_ADMIN is a role change, not an invitation. */
 export const STAFF_ROLES = ['SUPER_ADMIN', ...STAFF_INVITE_ROLES];

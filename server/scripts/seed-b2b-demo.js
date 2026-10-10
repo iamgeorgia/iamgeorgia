@@ -37,8 +37,8 @@ const STAFF = [
     ['superadmin', 'SUPER_ADMIN', 'Salome', 'Superadmin'],
     ['admin', 'ADMIN', 'Ana', 'Admin'],
     ['management', 'MANAGEMENT', 'Mariam', 'Manager'],
-    ['reservations', 'RESERVATIONS', 'Rezo', 'Reservations'],
-    ['finance', 'FINANCE', 'Pikria', 'Finance'],
+    ['reservations', 'TOUR_OPERATOR', 'Rezo', 'Reservations'],
+    ['finance', 'ACCOUNTANT', 'Pikria', 'Finance'],
     ['dispatcher', 'DISPATCHER', 'Dato', 'Dispatcher']
 ];
 

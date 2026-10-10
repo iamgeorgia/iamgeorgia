@@ -3125,10 +3125,14 @@ enum Role {
   ADMIN
   /// Platform staff who read everything, including margins, and write nothing.
   MANAGEMENT
-  /// Platform staff who create, amend and cancel bookings; never see a margin.
-  RESERVATIONS
-  /// Platform staff who record money: payments, terms, invoices, reports.
-  FINANCE
+  /// Platform staff who run the operation: bookings, tours, the fleet; never
+  /// a hotel price, never a margin.
+  TOUR_OPERATOR
+  /// Platform staff who keep the books: payments, refunds, terms, reports.
+  ACCOUNTANT
+  /// Platform staff who confirm the day's payments and watch the debts;
+  /// narrower than the accountant.
+  FINANCE_OPERATOR
   /// Transfer operations staff: dispatches drivers and cars, never touches
   /// fares, partners or margins. Platform-side (no partnerId), not an admin.
   DISPATCHER

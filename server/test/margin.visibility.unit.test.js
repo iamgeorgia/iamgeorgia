@@ -98,7 +98,7 @@ describe('transfer pricing rules', { skip: process.env.DATABASE_URL ? false : 'n
         ['tour booking', toTourBookingSummary, tourBooking]
     ]) {
         it(`gives each desk role its own view of a ${label}`, () => {
-            for (const role of ['MANAGEMENT', 'FINANCE']) {
+            for (const role of ['MANAGEMENT', 'ACCOUNTANT']) {
                 const summary = serialize(booking, staff(role));
 
                 assert.equal(summary.netTotalCents, 20_000, role);
@@ -107,7 +107,7 @@ describe('transfer pricing rules', { skip: process.env.DATABASE_URL ? false : 'n
                 assert.equal(summary.partner.id, 'agency-7', role);
             }
 
-            const desk = serialize(booking, staff('RESERVATIONS'));
+            const desk = serialize(booking, staff('TOUR_OPERATOR'));
 
             assert.equal(desk.partner.id, 'agency-7');
             for (const field of ['netTotalCents', 'markupBps', 'marginCents', 'bookedVia']) {

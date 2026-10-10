@@ -42,8 +42,9 @@ const STAFF = { partnerId: null };
 const ROLE_LABELS = {
     ADMIN: 'Administrator',
     MANAGEMENT: 'Management',
-    RESERVATIONS: 'Reservations',
-    FINANCE: 'Finance',
+    TOUR_OPERATOR: 'Tour operator',
+    ACCOUNTANT: 'Accountant',
+    FINANCE_OPERATOR: 'Finance operator',
     DISPATCHER: 'Dispatcher'
 };
 
