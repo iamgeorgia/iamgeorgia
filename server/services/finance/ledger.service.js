@@ -1,5 +1,6 @@
 import { config } from '../../config.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
+import { upsertPenaltyInTx } from './penalty.service.js';
 import { addDays, todayInTimezone, toDateOnly, zonedTimeToInstant } from '../../lib/time.js';
 
 /**
@@ -501,7 +502,10 @@ export const syncBookingReceivableInTx = async (tx, product, bookingId, actor = 
         return booking.receivable ?? null;
     }
 
-    const target = owed ? spec.buyerTotal(booking) : Math.max(0, booking.cancellationChargeCents ?? 0);
+    // What a cancelled booking still owes is the penalty row's word: the
+    // charge as calculated, unless a second person approved another figure.
+    const penalty = cancelled ? await upsertPenaltyInTx(tx, product, booking) : null;
+    const target = owed ? spec.buyerTotal(booking) : Math.max(0, penalty.overrideCents ?? penalty.chargeCents);
 
     if (!booking.receivable) {
         if (cancelled && (neverConfirmed(booking) || target === 0)) {

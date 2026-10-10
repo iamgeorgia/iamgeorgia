@@ -170,6 +170,33 @@ export const ageingQuerySchema = z.object({
     format: z.enum(['json', 'csv']).default('json')
 });
 
+/** A partner's credit limit; null is no limit, and a limit names its currency. */
+export const creditLimitSchema = z
+    .object({
+        creditLimitCents: z.number().int().min(0).max(10_000_000_000).nullable(),
+        creditLimitCurrency: currencyField.optional(),
+        creditLimitMode: z.enum(['BLOCK', 'WARN']).optional()
+    })
+    .strict()
+    .refine((value) => value.creditLimitCents === null || Boolean(value.creditLimitCurrency), {
+        message: 'A limit is in one currency',
+        path: ['creditLimitCurrency']
+    });
+
+export const penaltyQuerySchema = z
+    .object({
+        partnerId: idField.optional(),
+        product: z.enum(['HOTEL', 'TRANSFER', 'TOUR', 'SERVICE']).optional(),
+        currency: currencyField.optional(),
+        overridden: booleanQuery.optional(),
+        ...paging
+    })
+    .strict();
+
+export const commissionQuerySchema = z
+    .object({ ...reportBase, groupBy: z.enum(['partner', 'product']).default('partner'), partnerId: idField.optional() })
+    .strict();
+
 export const supplierTermsSchema = z
     .object({
         milestones: paymentMilestonesSchema,

@@ -6,6 +6,7 @@ import { ConflictError, NotFoundError, UnprocessableEntityError } from '../../li
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
+import { assertCreditInTx } from '../finance/credit.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextServiceBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, todayInTimezone, zonedTimeToInstant } from '../../lib/time.js';
@@ -195,6 +196,7 @@ export const confirmServiceBookingInTx = async (tx, prepared, { idempotencyKey }
             netTotalCents: quote.totals.netCents,
             sellTotalCents: quote.totals.sellCents,
             markupBps: quote.totals.markupBps,
+            commissionRateBps: actor?.partner?.commissionRateBps ?? null,
             leadName: `${prepared.lead.firstName} ${prepared.lead.lastName}`,
             leadEmail: prepared.lead.email,
             leadPhone: prepared.lead.phone ?? null,
@@ -277,6 +279,8 @@ export const confirmServiceBooking = async (input, actor, req) => {
 
     try {
         const booking = await prisma.$transaction(async (tx) => {
+            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.quote.totals.sellCents, currency: prepared.quote.currency }, actor, req);
+
             const created = await confirmServiceBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
             await syncBookingReceivableInTx(tx, 'SERVICE', created.id, actor, req);

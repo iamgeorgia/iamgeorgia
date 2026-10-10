@@ -7,6 +7,8 @@ import { CAPABILITIES, assertCan, can } from '../../lib/permissions.js';
 import { nextReference } from '../../lib/reference.js';
 import { adjustPayableInTx, adjustReceivableInTx, findPayableOr404, findReceivableOr404 } from './settlement.service.js';
 import { recordPaymentInTx } from './payment.service.js';
+import { findPenaltyOr404, overridePenaltyInTx } from './penalty.service.js';
+import { syncBookingReceivableInTx } from './ledger.service.js';
 
 /**
  * A money action one person asks for and another approves.
@@ -118,6 +120,28 @@ const KINDS = {
         },
         execute: (tx, request, actor, req, via) =>
             adjustReceivableInTx(tx, request.subjectId, request.payload, actor, req, via).then(() => ({ entityType: AUDIT_ENTITY.receivable, entityId: request.subjectId }))
+    },
+    PENALTY_OVERRIDE: {
+        requestCap: CAPABILITIES.FINANCE_ADJUSTMENTS_REQUEST,
+        approveCap: CAPABILITIES.FINANCE_ADJUSTMENTS_APPROVE,
+        subject: (payload, subjectId) => ({ subjectType: 'PenaltyEntry', subjectId }),
+        describe: async (payload, subjectId) => {
+            const penalty = await findPenaltyOr404(subjectId);
+
+            return {
+                amountCents: payload.overrideCents ?? penalty.chargeCents,
+                currency: penalty.currency,
+                summary:
+                    payload.overrideCents === null
+                        ? `Hand the penalty on ${penalty.reference} back to the policy's ${money(penalty.chargeCents, penalty.currency)}: ${payload.reason}`
+                        : `Set the penalty on ${penalty.reference} to ${money(payload.overrideCents, penalty.currency)} (charged ${money(penalty.chargeCents, penalty.currency)}): ${payload.reason}`
+            };
+        },
+        execute: (tx, request, actor, req, via) =>
+            overridePenaltyInTx(tx, request.subjectId, request.payload, actor, req, via, { syncReceivable: syncBookingReceivableInTx }).then(() => ({
+                entityType: AUDIT_ENTITY.penalty,
+                entityId: request.subjectId
+            }))
     }
 };
 

@@ -1,11 +1,16 @@
 import { Router } from 'express';
 import { z } from 'zod';
 
+import { config } from '../config.js';
 import { prisma } from '../db/index.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate, requireApprovedPartner, requireCapability, requirePartner } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
+import { addDays, todayInTimezone, zonedTimeToInstant } from '../lib/time.js';
+import { summaryQuerySchema } from '../validation/finance.js';
 import { toStatementReceivable, toSupplierStatementPayable } from '../serializers/finance.js';
+import { creditPosition } from '../services/finance/credit.service.js';
+import { commission } from '../services/finance/report.service.js';
 
 /**
  * A partner's own money, read from the portal.
@@ -102,4 +107,27 @@ partnerFinanceRoutes.get('/payables', validate({ query: statementQuerySchema }),
     ]);
 
     res.json({ data: payables.map(toSupplierStatementPayable), ...pageOf(total, req.valid.query) });
+});
+
+/** The company's credit limit and what is open against it. */
+partnerFinanceRoutes.get('/credit', async (req, res) => {
+    res.json(await creditPosition(req.user.partnerId));
+});
+
+/** What the company's own bookings were sold and bought for, by product, over a period (last 30 days by default). */
+partnerFinanceRoutes.get('/commission', validate({ query: summaryQuerySchema }), async (req, res) => {
+    const { from, to, currency } = req.valid.query;
+    const today = todayInTimezone(config.finance.defaultTimezone);
+    const toDay = to ?? today;
+    const fromDay = from ?? addDays(toDay, -30);
+
+    res.json(
+        await commission({
+            from: zonedTimeToInstant(fromDay, '00:00', config.finance.defaultTimezone),
+            to: zonedTimeToInstant(toDay, '23:59', config.finance.defaultTimezone),
+            currency,
+            groupBy: 'product',
+            partnerId: req.user.partnerId
+        })
+    );
 });

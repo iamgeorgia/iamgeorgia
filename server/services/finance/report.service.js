@@ -244,6 +244,59 @@ const cell = (value) => {
 export const toCsv = (columns, rows) =>
     [columns.map((column) => cell(column.label)).join(','), ...rows.map((row) => columns.map((column) => cell(column.value(row))).join(','))].join('\r\n') + '\r\n';
 
+/**
+ * What each agency's bookings brought in, at the rate it was on.
+ *
+ * Reads the `commission_entries` view: one row per confirmed partner
+ * booking with its sell, its net and the agency's commission rate frozen at
+ * the time. "Commission" here is the platform's: what the agency's
+ * bookings earned over net. Cancelled bookings are left out — what they
+ * still owe is the penalty report's.
+ */
+export const commission = async ({ from, to, currency, groupBy = 'partner', partnerId }) => {
+    const key = groupBy === 'product' ? Prisma.sql`c.product` : Prisma.sql`c.partner_id`;
+
+    const rows = await prisma.$queryRaw`
+        SELECT ${key} AS "groupKey", c.currency,
+               COUNT(*)::int AS "bookings",
+               COALESCE(SUM(c.sell_cents), 0)::bigint AS "sellCents",
+               COALESCE(SUM(c.net_cents), 0)::bigint AS "netCents",
+               MIN(c.commission_rate_bps)::int AS "minRateBps",
+               MAX(c.commission_rate_bps)::int AS "maxRateBps"
+          FROM commission_entries c
+         WHERE c.confirmed_at >= ${from} AND c.confirmed_at <= ${to} AND c.status <> 'CANCELLED'
+           ${currencyFilter('c.currency', currency)}
+           ${partnerId ? Prisma.sql`AND c.partner_id = ${partnerId}` : Prisma.empty}
+         GROUP BY 1, 2
+         ORDER BY 2, 4 DESC`;
+
+    const partnerIds = groupBy === 'partner' ? rows.map((row) => row.groupKey) : [];
+    const partners = partnerIds.length ? await prisma.partner.findMany({ where: { id: { in: partnerIds } }, select: { id: true, name: true } }) : [];
+    const names = new Map(partners.map((partner) => [partner.id, partner.name]));
+
+    return {
+        from,
+        to,
+        groupBy,
+        rows: rows.map((row) => {
+            const sellCents = int(row.sellCents);
+            const netCents = int(row.netCents);
+
+            return {
+                key: row.groupKey,
+                label: names.get(row.groupKey) ?? row.groupKey,
+                currency: row.currency,
+                bookings: row.bookings,
+                sellCents,
+                netCents,
+                commissionCents: sellCents - netCents,
+                commissionBps: netCents > 0 ? Math.round(((sellCents - netCents) * 10_000) / netCents) : null,
+                rateBps: row.minRateBps === row.maxRateBps ? row.minRateBps : { min: row.minRateBps, max: row.maxRateBps }
+            };
+        })
+    };
+};
+
 export const recordExport = (report, query, actor, req) =>
     recordAudit(prisma, {
         action: 'FINANCE_REPORT_EXPORTED',

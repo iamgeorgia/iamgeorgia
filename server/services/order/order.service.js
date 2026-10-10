@@ -6,6 +6,7 @@ import { ConflictError, GoneError, HttpError, NotFoundError, UnprocessableEntity
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { syncOrderReceivableInTx } from '../finance/ledger.service.js';
+import { assertCreditInTx } from '../finance/credit.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextOrderReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, toDateOnly, todayInTimezone } from '../../lib/time.js';
@@ -478,6 +479,9 @@ export const confirmOrder = async (input, actor, req) => {
     try {
         const order = await prisma.$transaction(
             async (tx) => {
+                // Before anything is claimed: an order refused for credit holds nothing.
+                await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.totals.sellTotalCents, currency: prepared.pkg.currency }, actor, req);
+
                 const reference = await nextOrderReference(tx);
                 const created = await tx.order.create({
                     data: {
@@ -498,6 +502,7 @@ export const confirmOrder = async (input, actor, req) => {
                         componentsSellCents: prepared.totals.componentsSellCents,
                         adjustmentCents: prepared.totals.adjustmentCents,
                         sellTotalCents: prepared.totals.sellTotalCents,
+                        commissionRateBps: actor?.partner?.commissionRateBps ?? null,
                         leadName: `${prepared.lead.firstName} ${prepared.lead.lastName}`,
                         leadEmail: prepared.lead.email,
                         leadPhone: prepared.lead.phone ?? null,

@@ -6,6 +6,7 @@ import { ConflictError, NotFoundError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
+import { assertCreditInTx } from '../finance/credit.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextTourBookingReference } from '../../lib/reference.js';
 import { dateOnlyToUtc, toDateOnly } from '../../lib/time.js';
@@ -243,6 +244,7 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
             netTotalCents: quote.totals.netCents,
             sellTotalCents: quote.totals.sellCents,
             markupBps: quote.totals.markupBps,
+            commissionRateBps: actor?.partner?.commissionRateBps ?? null,
             leadTravellerName: `${lead.firstName} ${lead.lastName}`,
             leadTravellerEmail: lead.email,
             leadTravellerPhone: lead.phone ?? null,
@@ -354,6 +356,8 @@ export const confirmTourBooking = async (input, actor, req) => {
 
     try {
         const booking = await prisma.$transaction(async (tx) => {
+            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.priced.quote.totals.sellCents, currency: prepared.priced.quote.currency }, actor, req);
+
             const created = await confirmTourBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
             await syncBookingReceivableInTx(tx, 'TOUR', created.id, actor, req);

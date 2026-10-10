@@ -41,6 +41,8 @@ export const CAPABILITIES = Object.freeze({
     PARTNERS_READ: 'partners.read',
     PARTNERS_WRITE: 'partners.write',
     PARTNERS_FINANCIAL_READ: 'partners.financial.read',
+    /** How much a partner may owe before a booking is refused or finance told. */
+    PARTNERS_CREDIT_WRITE: 'partners.credit.write',
 
     FINANCE_MARGIN_READ: 'finance.margin.read',
     FINANCE_PAYABLES_READ: 'finance.payables.read',
@@ -50,6 +52,8 @@ export const CAPABILITIES = Object.freeze({
     FINANCE_TERMS_WRITE: 'finance.terms.write',
     FINANCE_REPORTS_READ: 'finance.reports.read',
     FINANCE_EXPORT: 'finance.export',
+    /** What each agency earned us and was owed: the commission report. */
+    FINANCE_COMMISSION_READ: 'finance.commission.read',
     /** A partner's commission rate: the one figure on a partner that is money. */
     FINANCE_COMMISSION_WRITE: 'finance.commission.write',
     /** The free-text notes on a payable or receivable. */
@@ -104,6 +108,7 @@ const FINANCE_READ = [
     C.FINANCE_PAYMENTS_READ,
     C.FINANCE_REPORTS_READ,
     C.FINANCE_EXPORT,
+    C.FINANCE_COMMISSION_READ,
     C.INVOICES_READ,
     C.PARTNERS_FINANCIAL_READ
 ];
@@ -135,6 +140,7 @@ const ADMIN = [
     C.DISPATCH_WRITE,
     C.PARTNERS_WRITE,
     C.FINANCE_COMMISSION_WRITE,
+    C.PARTNERS_CREDIT_WRITE,
     ...FINANCE_READ
 ];
 
@@ -172,7 +178,8 @@ export const DEFAULT_ROLE_LISTS = {
         ...FINANCE_READ,
         ...FINANCE_WRITE,
         ...FINANCE_ASK,
-        C.FINANCE_COMMISSION_WRITE
+        C.FINANCE_COMMISSION_WRITE,
+        C.PARTNERS_CREDIT_WRITE
     ],
     /** Confirms the day's payments and watches the debts; narrower than the accountant. */
     FINANCE_OPERATOR: [

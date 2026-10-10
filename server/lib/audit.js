@@ -31,6 +31,7 @@ export const AUDIT_ENTITY = {
     user: 'User',
     role: 'AccessRole',
     approval: 'ApprovalRequest',
+    penalty: 'PenaltyEntry',
     destination: 'Destination',
     hotel: 'Hotel',
     roomType: 'RoomType',

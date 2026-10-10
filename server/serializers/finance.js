@@ -220,6 +220,23 @@ export const toStatementReceivable = (receivable) => ({
 });
 
 /** A supplier's own payables: its net and its schedule, nothing of ours. Listed, not filtered. */
+/** A cancellation penalty: the charge, and the figure approved in its place if any. */
+export const toPenalty = (penalty) => ({
+    id: penalty.id,
+    bookingType: penalty.bookingType,
+    bookingId: penalty.bookingId,
+    reference: penalty.reference,
+    partner: penalty.partner ? { id: penalty.partner.id, name: penalty.partner.name, reference: penalty.partner.reference } : null,
+    currency: penalty.currency,
+    chargeCents: penalty.chargeCents,
+    overrideCents: penalty.overrideCents ?? null,
+    overrideReason: penalty.overrideReason ?? null,
+    effectiveCents: penalty.overrideCents ?? penalty.chargeCents,
+    approvalId: penalty.approvalId ?? null,
+    createdAt: penalty.createdAt,
+    updatedAt: penalty.updatedAt
+});
+
 export const toSupplierStatementPayable = (payable) => ({
     id: payable.id,
     product: payable.product,

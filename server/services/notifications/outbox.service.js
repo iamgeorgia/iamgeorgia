@@ -932,6 +932,21 @@ const handlers = {
     }
 };
 
+/** A WARN-mode partner booked past its credit limit: the finance desk hears, in-app. */
+handlers[TOPICS.CREDIT_LIMIT_WARNING] = async ({ partnerId, limitCents, outstandingCents, requestedCents, currency }) => {
+    const partner = await prisma.partner.findUnique({ where: { id: partnerId }, select: { name: true } });
+    if (!partner) return;
+
+    await notify(await financeUserIds(), {
+        kind: 'FINANCE_CREDIT_WARNING',
+        title: `Over its credit limit: ${partner.name}`,
+        body: `Owes ${formatMoney(outstandingCents + requestedCents, currency)} open against a limit of ${formatMoney(limitCents, currency)} after this booking.`,
+        payload: { partnerId, limitCents, outstandingCents, requestedCents, currency },
+        entityType: 'Partner',
+        entityId: partnerId
+    });
+};
+
 const APPROVAL_KIND_LABELS = {
     REFUND: 'Refund',
     PAYABLE_OVERRIDE: 'Supplier amount override',

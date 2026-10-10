@@ -6,7 +6,7 @@ import { adjustPayableSchema, adjustReceivableSchema, recordPaymentSchema } from
 const idField = z.string().min(1).max(64);
 const paging = { page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(100).default(25) };
 
-export const APPROVAL_KINDS = ['REFUND', 'PAYABLE_OVERRIDE', 'PAYABLE_WAIVE', 'RECEIVABLE_DUE_DATE', 'RECEIVABLE_WAIVE'];
+export const APPROVAL_KINDS = ['REFUND', 'PAYABLE_OVERRIDE', 'PAYABLE_WAIVE', 'RECEIVABLE_DUE_DATE', 'RECEIVABLE_WAIVE', 'PENALTY_OVERRIDE'];
 export const APPROVAL_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'];
 
 /**
@@ -31,12 +31,18 @@ const receivableWaive = adjustReceivableSchema.refine((body) => body.waive === t
     message: 'A write-off request waives, and only that'
 });
 
+/** What the buyer owes for a cancellation instead of the policy's charge; null hands it back to the policy. */
+const penaltyOverride = z
+    .object({ overrideCents: z.number().int().min(0).max(1_000_000_000).nullable(), reason: textField(500) })
+    .strict();
+
 export const PAYLOAD_SCHEMAS = {
     REFUND: refundPayload,
     PAYABLE_OVERRIDE: payableOverride,
     PAYABLE_WAIVE: payableWaive,
     RECEIVABLE_DUE_DATE: receivableDueDate,
-    RECEIVABLE_WAIVE: receivableWaive
+    RECEIVABLE_WAIVE: receivableWaive,
+    PENALTY_OVERRIDE: penaltyOverride
 };
 
 export const requestApprovalSchema = z

@@ -1266,6 +1266,8 @@ model TourBooking {
   netTotalCents  Int    @map("net_total_cents")
   sellTotalCents Int    @map("sell_total_cents")
   markupBps      Int    @map("markup_bps")
+  /// The agency's own commission rate when it booked, beside the markup actually applied (a pricing rule may have won).
+  commissionRateBps Int? @map("commission_rate_bps")
 
   leadTravellerName  String  @map("lead_traveller_name")
   leadTravellerEmail String  @map("lead_traveller_email")
@@ -1526,6 +1528,8 @@ model ServiceBooking {
   netTotalCents  Int    @map("net_total_cents")
   sellTotalCents Int    @map("sell_total_cents")
   markupBps      Int    @map("markup_bps")
+  /// The agency's own commission rate when it booked, beside the markup actually applied (a pricing rule may have won).
+  commissionRateBps Int? @map("commission_rate_bps")
 
   leadName  String  @map("lead_name")
   leadEmail String  @map("lead_email")
@@ -1810,6 +1814,8 @@ model Order {
   componentsSellCents Int    @map("components_sell_cents")
   adjustmentCents     Int    @default(0) @map("adjustment_cents")
   sellTotalCents      Int    @map("sell_total_cents")
+  /// The agency's own commission rate when it booked.
+  commissionRateBps   Int?   @map("commission_rate_bps")
 
   leadName        String  @map("lead_name")
   leadEmail       String  @map("lead_email")
@@ -2503,6 +2509,8 @@ model HotelBooking {
   taxTotalCents          Int    @default(0) @map("tax_total_cents")
   payableAtPropertyCents Int    @default(0) @map("payable_at_property_cents")
   markupBps              Int    @map("markup_bps")
+  /// The agency's own commission rate when it booked, beside the markup actually applied (a pricing rule may have won).
+  commissionRateBps      Int?   @map("commission_rate_bps")
 
   /// Reserved for partner-currency quoting: the rate used, and when it was
   /// taken. Without them an invoice cannot be reproduced after the rate moves.
@@ -3188,6 +3196,9 @@ enum AuditAction {
   APPROVAL_CANCELLED
   PAYABLE_NOTES_CHANGED
   RECEIVABLE_NOTES_CHANGED
+  PARTNER_CREDIT_LIMIT_CHANGED
+  PARTNER_CREDIT_WARNING
+  PENALTY_OVERRIDDEN
 
   PARTNER_INVITED
   PARTNER_CREATED
@@ -3596,6 +3607,15 @@ model Partner {
   paymentDueDays   Int                 @default(14) @map("payment_due_days")
   paymentDueAnchor ReceivableDueAnchor @default(CONFIRMATION) @map("payment_due_anchor")
   paymentTermsNote String?             @map("payment_terms_note")
+
+  /// How much the company may owe, open, in one currency. Null is no limit.
+  /// Counts only that currency's open receivables; nothing is summed across
+  /// exchange rates. BLOCK refuses the booking that would pass it; WARN lets
+  /// it through and tells finance.
+  creditLimitCents    Int?            @map("credit_limit_cents")
+  creditLimitCurrency String?         @map("credit_limit_currency") @db.Char(3)
+  creditLimitMode     CreditLimitMode @default(BLOCK) @map("credit_limit_mode")
+  penalties           PenaltyEntry[]  @relation("PartnerPenalties")
   receivables      Receivable[]        @relation("PartnerReceivables")
   supplierPayables SupplierPayable[]   @relation("PartnerSupplierPayables")
   paymentRecords   PaymentRecord[]     @relation("PartnerPaymentRecords")
@@ -4224,6 +4244,8 @@ model TransferBooking {
   netTotalCents  Int    @map("net_total_cents")
   sellTotalCents Int    @map("sell_total_cents")
   markupBps      Int    @map("markup_bps")
+  /// The agency's own commission rate when it booked, beside the markup actually applied (a pricing rule may have won).
+  commissionRateBps Int? @map("commission_rate_bps")
 
   leadPassengerName  String  @map("lead_passenger_name")
   leadPassengerEmail String  @map("lead_passenger_email")
@@ -4516,6 +4538,7 @@ enum NotificationKind {
   FINANCE_INVOICE_SYNC_FAILED
   APPROVAL_REQUESTED
   APPROVAL_DECIDED
+  FINANCE_CREDIT_WARNING
 
   @@map("notification_kind")
 }
@@ -5339,6 +5362,7 @@ enum ApprovalKind {
   PAYABLE_WAIVE
   RECEIVABLE_DUE_DATE
   RECEIVABLE_WAIVE
+  PENALTY_OVERRIDE
 
   @@map("approval_kind")
 }
@@ -5388,4 +5412,35 @@ model ApprovalRequest {
   @@index([requestedByUserId, status])
   @@index([subjectType, subjectId, status])
   @@map("approval_requests")
+}
+
+enum CreditLimitMode {
+  BLOCK
+  WARN
+
+  @@map("credit_limit_mode")
+}
+
+/// What a cancellation cost the buyer, as a row finance works from: the
+/// charge as the policy calculated it, and the figure a second person
+/// approved in its place, which the ledger then owes instead.
+model PenaltyEntry {
+  id              String         @id @default(cuid())
+  bookingType     FinanceProduct @map("booking_type")
+  bookingId       String         @map("booking_id")
+  reference       String
+  partnerId       String?        @map("partner_id")
+  partner         Partner?       @relation("PartnerPenalties", fields: [partnerId], references: [id], onDelete: SetNull)
+  currency        String         @db.Char(3)
+  chargeCents     Int            @map("charge_cents")
+  overrideCents   Int?           @map("override_cents")
+  overrideReason  String?        @map("override_reason")
+  approvalId      String?        @map("approval_id")
+  createdByUserId String?        @map("created_by_user_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  @@unique([bookingType, bookingId])
+  @@index([partnerId, createdAt])
+  @@map("penalty_entries")
 }

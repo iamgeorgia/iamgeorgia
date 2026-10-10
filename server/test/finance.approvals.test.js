@@ -58,8 +58,11 @@ describe('approval requests', { skip: dbAvailable ? false : 'Postgres is not rea
         to = tracker.transferPoint(await makeTransferPoint({ latitude: 42.4781, longitude: 44.4783 }));
     });
 
+    // Only this file's requests: another suite's are in flight at the same time.
+    const approvalIds = [];
+
     after(async () => {
-        await prisma.approvalRequest.deleteMany({ where: { requestedBy: { email: { endsWith: '@example.test' } } } });
+        await prisma.approvalRequest.deleteMany({ where: { id: { in: approvalIds } } });
         await tracker.cleanup();
         await disconnect();
     });
@@ -84,7 +87,13 @@ describe('approval requests', { skip: dbAvailable ? false : 'Postgres is not rea
             ...body
         });
 
-    const ask = (body, cookie = cookies.ACCOUNTANT) => request(app).post('/api/admin/approvals').set('Cookie', cookie).send(body);
+    const ask = async (body, cookie = cookies.ACCOUNTANT) => {
+        const res = await request(app).post('/api/admin/approvals').set('Cookie', cookie).send(body);
+
+        if (res.body?.id) approvalIds.push(res.body.id);
+
+        return res;
+    };
     const decide = (id, verb, cookie, body = {}) => request(app).post(`/api/admin/approvals/${id}/${verb}`).set('Cookie', cookie).send(body);
 
     it('refuses a refund and a write-off done alone, by anyone, and names the request to open instead', async () => {

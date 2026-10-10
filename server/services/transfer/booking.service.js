@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { prisma } from '../../db/index.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
+import { assertCreditInTx } from '../finance/credit.service.js';
 import { BadRequestError, ConflictError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { sqlStateOf } from '../../middleware/errors.js';
@@ -283,6 +284,7 @@ export const confirmTransferBookingInTx = async (tx, prepared, { idempotencyKey 
             netTotalCents: quote.totals.netCents,
             sellTotalCents: quote.totals.sellCents,
             markupBps: quote.totals.markupBps,
+            commissionRateBps: actor?.partner?.commissionRateBps ?? null,
             leadPassengerName: `${prepared.leadPassenger.firstName} ${prepared.leadPassenger.lastName}`,
             leadPassengerEmail: prepared.leadPassenger.email,
             leadPassengerPhone: prepared.leadPassenger.phone ?? null,
@@ -410,6 +412,8 @@ export const confirmTransferBooking = async (input, actor, req) => {
 
     try {
         const booking = await prisma.$transaction(async (tx) => {
+            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.quote.totals.sellCents, currency: prepared.quote.currency }, actor, req);
+
             const created = await confirmTransferBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
             // What the buyer owes; an order's transfer is owed through the order.

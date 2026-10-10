@@ -1228,6 +1228,37 @@ told how it went.
 `GET /admin/badges` carries `pendingApprovals`: requests waiting on the
 viewer's decision, `null` for someone who decides none.
 
+### Penalties, credit limits and commission
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/admin/finance/penalties?partnerId&product&currency&overridden&page&pageSize` | `finance.receivables.read`. Every cancelled booking has a row: `{ id, bookingType, bookingId, reference, partner, currency, chargeCents, overrideCents, overrideReason, effectiveCents, approvalId }`. The ledger chases `effectiveCents` (`overrideCents ?? chargeCents`); an override arrives only through a `PENALTY_OVERRIDE` approval request (`subjectId` the penalty, payload `{ overrideCents: number \| null, reason }`), never above the charge |
+| GET | `/admin/finance/partners/:id/credit` | `finance.receivables.read` or `partners.write`: `{ limitCents, currency, mode, outstandingCents, availableCents }` |
+| PATCH | `/admin/finance/partners/:id/credit` | `partners.credit.write` (super admin, admin, accountant): `{ creditLimitCents: number \| null, creditLimitCurrency?, creditLimitMode?: BLOCK \| WARN }`. Null is no limit. Audited `PARTNER_CREDIT_LIMIT_CHANGED` with `changes` |
+| GET | `/admin/finance/reports/commission?from&to&currency&groupBy=partner\|product&partnerId&format` | `finance.commission.read` (the finance readers): per agency or product, confirmed bookings in the period and their sell, net, `commissionCents` (sell − net) and the agency rate frozen at booking (`rateBps`). CSV with `finance.export` |
+| GET | `/partner/finance/credit` · `/partner/finance/commission?from&to&currency` | `partner.statement.read`: the company's own position and its own bookings by product |
+
+A credit limit is checked in the transaction that confirms a booking, under
+a lock on the partner and before anything is claimed: in BLOCK mode the
+booking is refused with 422 `{ reason: "CREDIT_LIMIT_EXCEEDED", limitCents,
+outstandingCents, requestedCents, currency }` and holds nothing; in WARN mode
+it goes through, the trail records `PARTNER_CREDIT_WARNING`, and the finance
+desk is told. The limit counts only its own currency's open receivables.
+Every booking an agency confirms also freezes the agency's commission rate
+beside the markup actually applied (`commissionRateBps`, on every booking
+and order), which is what the commission report reads.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/payables?status&supplierPartnerId&product&currency&dueBefore&needsReview&q&page&pageSize` | `status` repeatable; `supplierPartnerId=PLATFORM` for platform-owned inventory. Each row: `booking { kind, id, reference, status }`, `supplier`, amounts (`original`, `amount`, `paid`, `outstanding`, `refundDue`), `status`, `nextDueAt`, `needsReview`/`reviewReason`, `instalments[]` |
+| GET | `/payables/:id` | Instalments carry their `allocations[]` with the payment each came from |
+| PATCH | `/payables/:id` | `{ amountOverrideCents?: int or null, waive?: true, notes?, reason }` — `reason` always required. An override is what the supplier is owed from then on, kept through every later recalculation (null hands it back to the rules); 422 `ABOVE_ORIGINAL` past the booked net. `waive` writes off what is left |
+| POST | `/payables/:id/instalments/:sequence/pay` | `{ method, paidAt, amountCents?, reference?, note? }` — an OUT payment of the instalment's outstanding amount (or `amountCents`). 201 `{ payment, replayed }` |
+| GET | `/receivables?status&debtorPartnerId&currency&dueBefore&overdue&q&page&pageSize` | `debtorPartnerId=GUEST` for guests without an account. Each row: `subject { kind: HOTEL, TRANSFER, TOUR, SERVICE or ORDER, id, reference, status }`, `debtor { partner, name, email }`, amounts, `dueAt`, `overdue` |
+| GET | `/receivables/:id` | With `allocations[]` |
+| PATCH | `/receivables/:id` | `{ dueAt?: ISO or null, waive?: true, notes?, reason }` — moving the due date is audited as `RECEIVABLE_DUE_DATE_CHANGED`; a later date re-arms the overdue alert |
+| GET | `/payments?direction&kind&method&currency&counterpartyPartnerId&from&to&q&page&pageSize` | |
+| GET | `/payments/:id` | |
 | POST | `/payments` | See below. `Idempotency-Key` header (8–200 chars): a retry answers 200 with the original and `replayed: true`; the same key for a different amount, currency or direction is 409 `IDEMPOTENCY_KEY_REUSED` |
 | POST | `/payments/:id/allocations` | `{ allocations: [...] }` — spreads what an earlier payment left unallocated |
 | GET | `/reports/summary?currency&from&to&format` | Per currency: receivables open / overdue / refund due, payables open / overdue / due within 7 days / needing review, and cash in and out in the period (`from`/`to` are dates, Tbilisi days, last 30 by default) |

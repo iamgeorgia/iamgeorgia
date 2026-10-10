@@ -63,7 +63,9 @@ export const TOPICS = Object.freeze({
 
     // Approvals: a request opened for someone else to decide, and decided.
     APPROVAL_REQUESTED: 'finance.approval.requested',
-    APPROVAL_DECIDED: 'finance.approval.decided'
+    APPROVAL_DECIDED: 'finance.approval.decided',
+    /** A WARN-mode partner booked past its credit limit; finance hears. */
+    CREDIT_LIMIT_WARNING: 'finance.credit.warning'
 });
 
 /** Writes one event on the given client — a transaction handle, in practice. */

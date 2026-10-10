@@ -22,11 +22,16 @@ import {
     dueQuerySchema,
     supplierTermsSchema,
     partnerTermsSchema,
+    creditLimitSchema,
+    penaltyQuerySchema,
+    commissionQuerySchema,
     financeIdParamSchema,
     instalmentParamSchema,
     termsParamSchema
 } from '../validation/finance.js';
-import { toPayable, toReceivable, toPayment, toSupplierTerms, toDueInstalment } from '../serializers/finance.js';
+import { toPayable, toReceivable, toPayment, toSupplierTerms, toDueInstalment, toPenalty } from '../serializers/finance.js';
+import { listPenalties } from '../services/finance/penalty.service.js';
+import { creditPosition, setCreditLimit } from '../services/finance/credit.service.js';
 import { listDue } from '../services/finance/reminder.service.js';
 import {
     listPayables,
@@ -39,7 +44,7 @@ import {
     findPaymentOr404
 } from '../services/finance/settlement.service.js';
 import { recordPayment, allocatePayment, payInstalment, paymentInclude } from '../services/finance/payment.service.js';
-import { summary, margin, ageing, toCsv, recordExport } from '../services/finance/report.service.js';
+import { summary, margin, ageing, commission, toCsv, recordExport } from '../services/finance/report.service.js';
 import { getSupplierTerms, putSupplierTerms, updatePartnerTerms } from '../services/finance/terms.service.js';
 import { prisma } from '../db/index.js';
 
@@ -289,7 +294,66 @@ adminFinanceRoutes.get(
     }
 );
 
+// --- Penalties and credit -------------------------------------------------------------
+
+/** Every cancellation's charge, and what was approved in its place. */
+adminFinanceRoutes.get('/penalties', requireCapability(C.FINANCE_RECEIVABLES_READ), validate({ query: penaltyQuerySchema }), async (req, res) => {
+    const { penalties, ...meta } = await listPenalties(req.valid.query);
+
+    res.json({ data: penalties.map(toPenalty), ...meta });
+});
+
+adminFinanceRoutes.get(
+    '/partners/:id/credit',
+    requireCapability(C.FINANCE_RECEIVABLES_READ, C.PARTNERS_WRITE),
+    validate({ params: financeIdParamSchema }),
+    async (req, res) => {
+        res.json(await creditPosition(req.valid.params.id));
+    }
+);
+
+adminFinanceRoutes.patch(
+    '/partners/:id/credit',
+    requireCapability(C.PARTNERS_CREDIT_WRITE),
+    validate({ params: financeIdParamSchema, body: creditLimitSchema }),
+    async (req, res) => {
+        await setCreditLimit(req.valid.params.id, req.valid.body, req.user, req);
+
+        res.json(await creditPosition(req.valid.params.id));
+    }
+);
+
 // --- Reports --------------------------------------------------------------------------
+
+adminFinanceRoutes.get(
+    '/reports/commission',
+    requireCapability(C.FINANCE_COMMISSION_READ),
+    validate({ query: commissionQuerySchema }),
+    exportGate,
+    async (req, res) => {
+        const report = await commission({ ...req.valid.query, ...period(req.valid.query) });
+
+        if (req.valid.query.format !== 'csv') return res.json(report);
+
+        await recordExport('commission', req.valid.query, req.user, req);
+        sendCsv(
+            res,
+            'finance-commission',
+            toCsv(
+                [
+                    { label: report.groupBy === 'product' ? 'Product' : 'Partner', value: (r) => r.label },
+                    { label: 'Currency', value: (r) => r.currency },
+                    { label: 'Bookings', value: (r) => r.bookings },
+                    { label: 'Sold', value: (r) => major(r.sellCents) },
+                    { label: 'Net', value: (r) => major(r.netCents) },
+                    { label: 'Commission', value: (r) => major(r.commissionCents) },
+                    { label: 'Commission %', value: (r) => (r.commissionBps === null ? '' : (r.commissionBps / 100).toFixed(2)) }
+                ],
+                report.rows
+            )
+        );
+    }
+);
 
 adminFinanceRoutes.get(
     '/reports/summary',

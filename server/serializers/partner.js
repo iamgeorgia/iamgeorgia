@@ -64,6 +64,9 @@ export const toPartnerDetail = (partner, viewer) => {
         socialLinks: partner.socialLinks ?? [],
         documents: partner.documents ?? [],
         commissionRateBps: partner.commissionRateBps,
+        creditLimitCents: partner.creditLimitCents ?? null,
+        creditLimitCurrency: partner.creditLimitCurrency ?? null,
+        creditLimitMode: partner.creditLimitMode ?? 'BLOCK',
         users: (partner.users ?? []).map(toContact),
         updatedAt: partner.updatedAt,
 

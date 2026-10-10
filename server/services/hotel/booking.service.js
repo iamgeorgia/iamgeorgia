@@ -11,6 +11,7 @@ import {
 import { assertReplayOwner } from '../../lib/idempotency.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { syncBookingInTx, syncBookingReceivableInTx, syncPayableInTx } from '../finance/ledger.service.js';
+import { assertCreditInTx } from '../finance/credit.service.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { nextHotelBookingReference } from '../../lib/reference.js';
 import { addDays, dateOnlyToUtc, nightsBetween, toDateOnly } from '../../lib/time.js';
@@ -353,6 +354,8 @@ export const confirmHotelBookingInTx = async (
             taxTotalCents: priced.quote.totals.taxIncludedCents,
             payableAtPropertyCents: priced.quote.totals.payableAtPropertyCents,
             markupBps: priced.quote.totals.markupBps,
+            // The agency's own rate at the time, beside the markup actually applied (a rule may have won).
+            commissionRateBps: actor?.partner?.commissionRateBps ?? null,
             leadGuestName: `${prepared.leadGuest.firstName} ${prepared.leadGuest.lastName}`,
             leadGuestEmail: prepared.leadGuest.email,
             leadGuestPhone: prepared.leadGuest.phone ?? null,
@@ -487,6 +490,15 @@ export const confirmBooking = async (input, actor, req) => {
 
     try {
         const booking = await prisma.$transaction(async (tx) => {
+            // Before anything is claimed: a booking refused for credit holds no room.
+            await assertCreditInTx(
+                tx,
+                actor?.partnerId,
+                { addCents: prepared.priced.quote.totals.sellCents + prepared.priced.quote.totals.taxIncludedCents, currency: prepared.priced.quote.currency },
+                actor,
+                req
+            );
+
             const created = await confirmHotelBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
             // What the buyer owes. Here, not in the InTx above: inside an
