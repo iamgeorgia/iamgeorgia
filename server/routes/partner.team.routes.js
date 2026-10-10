@@ -12,13 +12,17 @@ import {
     userIdParamSchema,
     teamQuerySchema
 } from '../validation/user.js';
+import { setRolesSchema } from '../validation/rbac.js';
 import { toUserSummary } from '../serializers/user.js';
+import { toRole } from '../serializers/role.js';
 import {
     listUsers,
     findUserOr404,
     inviteUser,
     resendActivation,
     changeRole,
+    setUserRoles,
+    grantable,
     deactivateUser,
     reactivateUser,
     revokeSessions,
@@ -64,6 +68,13 @@ partnerTeamRoutes.post('/', inviteLimiter, validate({ body: inviteTeamMemberSche
     res.status(201).json({ user: toUserSummary(issued.user), ...(await activation(req, issued)) });
 });
 
+/** What the caller may hand out: the company roles it dominates. Before `/:id`, so the word is a route. */
+partnerTeamRoutes.get('/grantable', async (req, res) => {
+    const { roles } = await grantable(scopeOf(req), req.user);
+
+    res.json({ roles: roles.map(toRole) });
+});
+
 partnerTeamRoutes.get('/:id', validate({ params: userIdParamSchema }), async (req, res) => {
     res.json(toUserSummary(await findUserOr404(req.valid.params.id, scopeOf(req))));
 });
@@ -75,6 +86,11 @@ partnerTeamRoutes.patch(
         res.json(toUserSummary(await changeRole(scopeOf(req), req.valid.params.id, req.valid.body, req.user, req)));
     }
 );
+
+/** The whole set the member holds afterwards. */
+partnerTeamRoutes.put('/:id/roles', validate({ params: userIdParamSchema, body: setRolesSchema }), async (req, res) => {
+    res.json(toUserSummary(await setUserRoles(scopeOf(req), req.valid.params.id, req.valid.body, req.user, req)));
+});
 
 partnerTeamRoutes.patch('/:id/primary-contact', validate({ params: userIdParamSchema }), async (req, res) => {
     res.json(toUserSummary(await setPrimaryContact(scopeOf(req), req.valid.params.id, req.user, req)));

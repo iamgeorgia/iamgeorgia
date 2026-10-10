@@ -12,13 +12,19 @@ import {
     userIdParamSchema,
     staffQuerySchema
 } from '../validation/user.js';
-import { toUserSummary } from '../serializers/user.js';
+import { setRolesSchema, overrideSchema, overrideParamSchema } from '../validation/rbac.js';
+import { toUserSummary, toUserDetail } from '../serializers/user.js';
+import { toRole } from '../serializers/role.js';
 import {
     listUsers,
     findUserOr404,
     inviteUser,
     resendActivation,
     changeRole,
+    setUserRoles,
+    grantable,
+    grantOverride,
+    revokeOverride,
     deactivateUser,
     reactivateUser,
     revokeSessions,
@@ -67,16 +73,41 @@ adminUserRoutes.post('/', inviteLimiter, validate({ body: inviteStaffSchema }), 
 });
 
 adminUserRoutes.get('/:id', validate({ params: userIdParamSchema }), async (req, res) => {
-    res.json(toUserSummary(await findUserOr404(req.valid.params.id, STAFF)));
+    res.json(toUserDetail(await findUserOr404(req.valid.params.id, STAFF)));
+});
+
+/** What the caller may hand out here: the roles it dominates, the capabilities it may write by name. */
+adminUserRoutes.get('/:id/grantable', validate({ params: userIdParamSchema }), async (req, res) => {
+    await findUserOr404(req.valid.params.id, STAFF);
+    const { roles, capabilities } = await grantable(STAFF, req.user);
+
+    res.json({ roles: roles.map(toRole), capabilities });
 });
 
 adminUserRoutes.patch(
     '/:id/role',
     validate({ params: userIdParamSchema, body: changeStaffRoleSchema }),
     async (req, res) => {
-        res.json(toUserSummary(await changeRole(STAFF, req.valid.params.id, req.valid.body, req.user, req)));
+        res.json(toUserDetail(await changeRole(STAFF, req.valid.params.id, req.valid.body, req.user, req)));
     }
 );
+
+/** The whole set the account holds afterwards. */
+adminUserRoutes.put('/:id/roles', validate({ params: userIdParamSchema, body: setRolesSchema }), async (req, res) => {
+    res.json(toUserDetail(await setUserRoles(STAFF, req.valid.params.id, req.valid.body, req.user, req)));
+});
+
+adminUserRoutes.post('/:id/overrides', validate({ params: userIdParamSchema, body: overrideSchema }), async (req, res) => {
+    await grantOverride(STAFF, req.valid.params.id, req.valid.body, req.user, req);
+
+    res.status(201).json(toUserDetail(await findUserOr404(req.valid.params.id, STAFF)));
+});
+
+adminUserRoutes.delete('/:id/overrides/:capability', validate({ params: overrideParamSchema }), async (req, res) => {
+    await revokeOverride(STAFF, req.valid.params.id, req.valid.params.capability, req.user, req);
+
+    res.json(toUserDetail(await findUserOr404(req.valid.params.id, STAFF)));
+});
 
 adminUserRoutes.post(
     '/:id/deactivate',

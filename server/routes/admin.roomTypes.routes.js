@@ -1,6 +1,8 @@
 import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
+import { requireCapability } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import {
     attachRoomImageSchema,
     childPolicySchema,
@@ -220,6 +222,8 @@ adminChildPolicyRoutes.get('/', validate({ params: hotelScopedParamSchema }), as
 
 adminChildPolicyRoutes.put(
     '/',
+    // Age bands carry charges: `pricing.write`, over and above the catalogue capability.
+    requireCapability(CAPABILITIES.PRICING_WRITE),
     validate({ params: hotelScopedParamSchema, body: childPolicySchema }),
     async (req, res) => {
         const policy = await upsertChildPolicy(req.valid.params.hotelId, req.valid.body, req.user, req);

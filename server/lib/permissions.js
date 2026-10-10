@@ -20,8 +20,15 @@ export const CAPABILITIES = Object.freeze({
     SETTINGS_WRITE: 'settings.write',
     AUDIT_READ: 'audit.read',
 
+    /** Edit the roles themselves: what each may do, and who holds which. */
+    ROLES_MANAGE: 'roles.manage',
+
     CATALOGUE_READ: 'catalogue.read',
+    /** Every product's content and availability. Hotel prices need `pricing.write` as well. */
     CATALOGUE_WRITE: 'catalogue.write',
+    /** Tours alone: content, options, seasons, departures. The tour operator's door into the catalogue. */
+    TOURS_WRITE: 'tours.write',
+    /** What a hotel costs and what it sells for: rates, rate plans, taxes, policies, child charges, and the markup rules. */
     PRICING_WRITE: 'pricing.write',
 
     BOOKINGS_READ: 'bookings.read',
@@ -43,6 +50,8 @@ export const CAPABILITIES = Object.freeze({
     FINANCE_TERMS_WRITE: 'finance.terms.write',
     FINANCE_REPORTS_READ: 'finance.reports.read',
     FINANCE_EXPORT: 'finance.export',
+    /** A partner's commission rate: the one figure on a partner that is money. */
+    FINANCE_COMMISSION_WRITE: 'finance.commission.write',
 
     INVOICES_READ: 'invoices.read',
     INVOICES_WRITE: 'invoices.write',
@@ -105,6 +114,7 @@ const ADMIN = [
     C.BOOKINGS_CANCEL,
     C.DISPATCH_WRITE,
     C.PARTNERS_WRITE,
+    C.FINANCE_COMMISSION_WRITE,
     ...FINANCE_READ
 ];
 
@@ -122,13 +132,17 @@ const PARTNER_MEMBER = [C.NOTIFICATIONS_READ, C.PARTNER_BOOKINGS_READ];
  * seed, the tests, and any viewer built from a bare `{ role }`.
  */
 export const DEFAULT_ROLE_LISTS = {
-    SUPER_ADMIN: [...ADMIN, ...FINANCE_WRITE, C.USERS_STAFF_MANAGE, C.SETTINGS_WRITE],
+    SUPER_ADMIN: [...ADMIN, ...FINANCE_WRITE, C.USERS_STAFF_MANAGE, C.ROLES_MANAGE, C.SETTINGS_WRITE],
     ADMIN,
     /** Reads everything, margins included; writes nothing. */
     MANAGEMENT: [C.AUDIT_READ, ...PLATFORM_READ, ...FINANCE_READ.filter((cap) => cap !== C.PARTNERS_FINANCIAL_READ)],
-    /** Runs the bookings desk: creates, amends, cancels; never sees a margin. */
-    TOUR_OPERATOR: [...PLATFORM_READ, C.BOOKINGS_WRITE, C.BOOKINGS_CANCEL],
-    /** Records the money and reads what it needs to reconcile it. */
+    /**
+     * Runs the operation: the bookings desk, the tours, the fleet and its
+     * drivers. Never a hotel price — those are `catalogue.write` and
+     * `pricing.write`, neither of which it holds — and never a margin.
+     */
+    TOUR_OPERATOR: [...PLATFORM_READ, C.BOOKINGS_WRITE, C.BOOKINGS_CANCEL, C.TOURS_WRITE, C.DISPATCH_WRITE],
+    /** Keeps the books: records the money, sets terms and commission, reads what it needs to reconcile. */
     ACCOUNTANT: [
         C.AUDIT_READ,
         C.CATALOGUE_READ,
@@ -136,7 +150,19 @@ export const DEFAULT_ROLE_LISTS = {
         C.PARTNERS_READ,
         C.NOTIFICATIONS_READ,
         ...FINANCE_READ,
-        ...FINANCE_WRITE
+        ...FINANCE_WRITE,
+        C.FINANCE_COMMISSION_WRITE
+    ],
+    /** Confirms the day's payments and watches the debts; narrower than the accountant. */
+    FINANCE_OPERATOR: [
+        C.CATALOGUE_READ,
+        C.BOOKINGS_READ,
+        C.PARTNERS_READ,
+        C.NOTIFICATIONS_READ,
+        C.FINANCE_PAYABLES_READ,
+        C.FINANCE_RECEIVABLES_READ,
+        C.FINANCE_PAYMENTS_READ,
+        C.FINANCE_PAYMENTS_WRITE
     ],
     /** Assigns drivers and cars; reads the catalogue to do it; no money, no partners. */
     DISPATCHER: [C.CATALOGUE_READ, C.DISPATCH_READ, C.DISPATCH_WRITE, C.NOTIFICATIONS_READ],

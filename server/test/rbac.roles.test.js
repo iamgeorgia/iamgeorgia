@@ -5,6 +5,7 @@ import request from 'supertest';
 
 import { createApp } from '../app.js';
 import { prisma, disconnect } from '../db/index.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import {
     createTracker,
     makeAdmin,
@@ -122,6 +123,75 @@ describe('the staff desks and partner sub-roles', { skip: dbAvailable ? false : 
 
         // Finance does not run the fleet.
         assert.equal((await request(app).get('/api/admin/transfers/dispatch/legs').set('Cookie', cookies.ACCOUNTANT)).status, 403);
+    });
+
+    it('lets the tour operator run tours and the fleet, and never a hotel price', async () => {
+        const as = (role) => (method, path, body = {}) => request(app)[method](path).set('Cookie', cookies[role]).send(body);
+        const op = as('TOUR_OPERATOR');
+        const hotel = 'rbacmissinghotel';
+
+        // Its own doors: tours and the fleet (judged on their merits past the guard).
+        assert.equal((await op('post', '/api/admin/tours')).status, 400);
+        assert.equal((await op('post', '/api/admin/transfers/drivers')).status, 400);
+
+        // Every hotel price lever, and the rest of the catalogue, is closed.
+        const closed = [
+            ['put', `/api/admin/hotels/${hotel}/room-types/x/rate-plans/y/rates`],
+            ['post', `/api/admin/hotels/${hotel}/tax-fees`],
+            ['post', `/api/admin/hotels/${hotel}/room-types/x/rate-plans`],
+            ['post', `/api/admin/hotels/${hotel}/policies/cancellation`],
+            ['put', `/api/admin/hotels/${hotel}/child-policy`],
+            ['patch', `/api/admin/hotels/${hotel}`, { currency: 'USD' }],
+            ['post', '/api/admin/hotels'],
+            ['post', '/api/admin/packages'],
+            ['post', '/api/admin/pricing-rules'],
+            ['post', '/api/admin/transfers/vehicles'],
+            ['post', '/api/admin/services']
+        ];
+
+        for (const [method, path, body] of closed) {
+            const res = await op(method, path, body);
+            assert.equal(res.status, 403, `${method.toUpperCase()} ${path}`);
+            assert.equal(res.body.error.details.reason, 'INSUFFICIENT_CAPABILITY', path);
+        }
+    });
+
+    it('keeps hotel prices and the commission behind their own capability even for a catalogue editor', async () => {
+        // A tour operator handed the whole catalogue by name still cannot price a hotel.
+        const editor = await makeAdmin(tracker, { role: 'TOUR_OPERATOR' });
+        await prisma.userCapabilityOverride.create({
+            data: { userId: editor.id, capability: CAPABILITIES.CATALOGUE_WRITE, effect: 'GRANT', reason: 'Content' }
+        });
+        const cookie = (await signIn(app, editor.email)).cookie;
+        const hotel = 'rbacmissinghotel';
+        const as = (method, path, body = {}) => request(app)[method](path).set('Cookie', cookie).send(body);
+
+        // Content passes the guard (and meets the missing hotel); prices do not.
+        assert.equal((await as('patch', `/api/admin/hotels/${hotel}`, { name: 'Renamed' })).status, 404);
+
+        const currency = await as('patch', `/api/admin/hotels/${hotel}`, { currency: 'USD' });
+        assert.equal(currency.status, 403);
+        assert.deepEqual(currency.body.error.details.fields, ['currency']);
+        assert.deepEqual(currency.body.error.details.required, [CAPABILITIES.PRICING_WRITE]);
+
+        const rates = await as('put', `/api/admin/hotels/${hotel}/room-types/x/rate-plans/y/rates`, { from: '2027-01-01', to: '2027-01-02', netCents: 100 });
+        assert.equal(rates.status, 403);
+        assert.deepEqual(rates.body.error.details.required, [CAPABILITIES.PRICING_WRITE]);
+
+        const discount = await as('patch', '/api/admin/packages/rbacmissingpackage', { adjustmentKind: 'FIXED_SELL', adjustmentValue: 1 });
+        assert.equal(discount.status, 403);
+        assert.deepEqual(discount.body.error.details.fields.sort(), ['adjustmentKind', 'adjustmentValue']);
+
+        // And an admin denied the commission capability by name keeps everything else on a partner.
+        const admin = await makeAdmin(tracker, { role: 'ADMIN' });
+        await prisma.userCapabilityOverride.create({
+            data: { userId: admin.id, capability: CAPABILITIES.FINANCE_COMMISSION_WRITE, effect: 'DENY', reason: 'Sales only' }
+        });
+        const adminCookie = (await signIn(app, admin.email)).cookie;
+        const commission = await request(app).patch(`/api/admin/partners/${agency.id}`).set('Cookie', adminCookie).send({ commissionRateBps: 500 });
+        assert.equal(commission.status, 403);
+        assert.deepEqual(commission.body.error.details.fields, ['commissionRateBps']);
+        assert.equal((await request(app).patch(`/api/admin/partners/${agency.id}`).set('Cookie', adminCookie).send({ notes: 'Fine' })).status, 200);
     });
 
     it('keeps the revenue tiles from a dispatcher who reads the same list', async () => {

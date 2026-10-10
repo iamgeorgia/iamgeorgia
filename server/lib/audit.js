@@ -29,6 +29,7 @@ export const AUDIT_ENTITY = {
     partner: 'Partner',
     invitation: 'Invitation',
     user: 'User',
+    role: 'AccessRole',
     destination: 'Destination',
     hotel: 'Hotel',
     roomType: 'RoomType',

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
-import { authenticate, requireCapability, requireCapabilityByMethod } from '../middleware/auth.js';
+import { authenticate, requireCapability, requireCapabilityByMethod, requireFieldsCapability } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import { NotFoundError } from '../lib/errors.js';
 import { toPartnerSummary, toPartnerDetail, toAuditEntry, toInvitation } from '../serializers/partner.js';
@@ -38,6 +38,10 @@ export const adminPartnerRoutes = Router();
 // is what stops a new endpoint from being added without them.
 adminPartnerRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.PARTNERS_READ], write: [CAPABILITIES.PARTNERS_WRITE] }));
 
+// The commission rate is the one figure on a partner that is money, so it
+// needs the finance capability on top of `partners.write`.
+const commissionField = requireFieldsCapability(['commissionRateBps'], CAPABILITIES.FINANCE_COMMISSION_WRITE);
+
 adminPartnerRoutes.get('/', validate({ query: partnerQuerySchema }), async (req, res) => {
     const { partners, ...page } = await listPartners(req.valid.query);
 
@@ -51,7 +55,7 @@ adminPartnerRoutes.get('/', validate({ query: partnerQuerySchema }), async (req,
  * being down does not leave an admin with a partner they cannot onboard.
  * `emailSent` tells the panel whether to show the link or just confirm.
  */
-adminPartnerRoutes.post('/', validate({ body: adminCreatePartnerSchema }), async (req, res) => {
+adminPartnerRoutes.post('/', commissionField, validate({ body: adminCreatePartnerSchema }), async (req, res) => {
     const result = await adminCreatePartner(req.valid.body, req.user, req);
     const { partner, contact, token, kind, expiresAt } = result;
     const url = kind === 'invitation' ? invitationUrl(token) : activationUrl(token);
@@ -83,6 +87,7 @@ adminPartnerRoutes.get('/:id', validate({ params: idParamSchema }), async (req, 
 
 adminPartnerRoutes.patch(
     '/:id',
+    commissionField,
     validate({ params: idParamSchema, body: adminUpdatePartnerSchema }),
     async (req, res) => {
         await updatePartner(req.valid.params.id, req.valid.body, req.user, req);

@@ -1,6 +1,8 @@
 import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
+import { requireCapability } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import {
     cancellationPolicySchema,
     createRatePlanSchema,
@@ -68,8 +70,13 @@ adminRatePlanRoutes.get(
     }
 );
 
+// A rate plan is terms and a currency, a policy is money: `pricing.write`,
+// over and above the catalogue capability the router inherits.
+const pricing = requireCapability(CAPABILITIES.PRICING_WRITE);
+
 adminRatePlanRoutes.post(
     '/',
+    pricing,
     validate({ params: roomTypeScopedParamSchema, body: createRatePlanSchema }),
     async (req, res) => {
         const { hotelId, roomTypeId } = req.valid.params;
@@ -85,6 +92,7 @@ adminRatePlanRoutes.get('/:ratePlanId', validate({ params: ratePlanParamSchema }
 
 adminRatePlanRoutes.patch(
     '/:ratePlanId',
+    pricing,
     validate({ params: ratePlanParamSchema, body: updateRatePlanSchema }),
     async (req, res) => {
         const { hotelId, roomTypeId, ratePlanId } = req.valid.params;
@@ -174,6 +182,7 @@ adminPolicyRoutes.get(
 
 adminPolicyRoutes.post(
     '/cancellation',
+    pricing,
     validate({ params: hotelScopedParamSchema, body: cancellationPolicySchema }),
     async (req, res) => {
         const policy = await upsertCancellationPolicy(
@@ -196,6 +205,7 @@ adminPolicyRoutes.get('/cancellation/:policyId', validate({ params: policyParamS
 
 adminPolicyRoutes.put(
     '/cancellation/:policyId',
+    pricing,
     validate({ params: policyParamSchema, body: cancellationPolicySchema }),
     async (req, res) => {
         const { hotelId, policyId } = req.valid.params;
@@ -217,6 +227,7 @@ adminPolicyRoutes.get(
 
 adminPolicyRoutes.post(
     '/payment',
+    pricing,
     validate({ params: hotelScopedParamSchema, body: paymentPolicySchema }),
     async (req, res) => {
         const policy = await upsertPaymentPolicy(req.valid.params.hotelId, null, req.valid.body, req.user, req);
@@ -227,6 +238,7 @@ adminPolicyRoutes.post(
 
 adminPolicyRoutes.put(
     '/payment/:policyId',
+    pricing,
     validate({ params: policyParamSchema, body: paymentPolicySchema }),
     async (req, res) => {
         const { hotelId, policyId } = req.valid.params;

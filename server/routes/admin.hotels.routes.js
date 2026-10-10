@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { authenticate, requireCapability, requireCapabilityByMethod } from '../middleware/auth.js';
+import { authenticate, requireCapability, requireCapabilityByMethod, requireFieldsCapability } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
@@ -112,7 +112,12 @@ adminHotelRoutes.get('/:id', validate({ params: idParamSchema, query: hotelQuery
     });
 });
 
-adminHotelRoutes.post('/', validate({ body: createHotelSchema }), async (req, res) => {
+// Who supplies a hotel and in what currency it sells are its prices by
+// another road — the supplier sets the rates on the extranet — so the two
+// fields need `pricing.write` on top of the catalogue capability.
+const pricingFields = requireFieldsCapability(['supplierId', 'currency'], CAPABILITIES.PRICING_WRITE);
+
+adminHotelRoutes.post('/', pricingFields, validate({ body: createHotelSchema }), async (req, res) => {
     const created = await createHotel(req.valid.body, req.user, req);
     const hotel = await findHotelOr404(created.id);
 
@@ -121,6 +126,7 @@ adminHotelRoutes.post('/', validate({ body: createHotelSchema }), async (req, re
 
 adminHotelRoutes.patch(
     '/:id',
+    pricingFields,
     validate({ params: idParamSchema, body: updateHotelSchema }),
     async (req, res) => {
         await updateHotel(req.valid.params.id, req.valid.body, req.user, req);

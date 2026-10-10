@@ -4,9 +4,12 @@ import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { sendMailQuietly, activationUrl } from '../lib/mailer/index.js';
 import { lockKey } from '../lib/locks.js';
-import { ROLE_CAPABILITIES } from '../lib/permissions.js';
+import { CAPABILITIES, isPartnerCapability } from '../lib/permissions.js';
 import { STAFF_ROLES } from '../validation/user.js';
 import { issueAuthToken, revokeUserSessions } from './auth.service.js';
+import { accessInclude } from './rbac/access.js';
+import { assertDominates, assertMayManage, assertMayManageCapabilities, grantableFor, isProtected } from './rbac/grant.service.js';
+import { capabilitiesOfRoles } from './rbac/role.service.js';
 
 /**
  * Accounts other than one's own: staff, and the members of a partner's team.
@@ -23,48 +26,31 @@ import { issueAuthToken, revokeUserSessions } from './auth.service.js';
  * after the commit.
  */
 
-/** The top of each side: the roles that may manage their own equals. */
-const TOP_ROLES = new Set(['SUPER_ADMIN', 'PARTNER_OWNER']);
-
 /**
- * Who may act on whom.
- *
- * An actor may give someone a role, or touch an account that holds one, only
- * if it holds every capability that role does. Anything looser is a way up:
- * a partner admin cannot change bank details, so it must not be able to
- * invite a finance user, open the returned activation link, and change them
- * as that user. Holding every capability of a *peer* is not the same as
- * outranking it, so only the top of each side manages its equals — an owner
- * another owner, a super admin another super admin.
+ * Who may give which roles: the actor must hold every capability the roles
+ * carry, as the rows say today (`rbac/grant.service.js` has the rule and
+ * the reason). The side is checked here too, so a company's admin cannot
+ * be handed a platform role by key.
  */
-const withinCeiling = (actor, role) => {
-    // What the actor holds now, overrides included; what the role is seeded
-    // with. (A role edited in the panel is compared as seeded until the
-    // granting service reads roles from the table.)
-    const own = actor.capabilities instanceof Set ? actor.capabilities : ROLE_CAPABILITIES[actor.role];
-    const theirs = ROLE_CAPABILITIES[role];
+const assertMayAssign = async (tx, actor, roleKeys, side) => {
+    const { roles, capabilities } = await capabilitiesOfRoles(tx, roleKeys);
+    const wrongSide = roles.filter((role) => role.side !== side).map((role) => role.key);
 
-    if (!own || !theirs) {
-        return false;
+    if (wrongSide.length > 0) {
+        throw new BadRequestError('That role belongs to the other side of the platform', { reason: 'ROLE_WRONG_SIDE', roles: wrongSide });
     }
 
-    for (const capability of theirs) {
-        if (!own.has(capability)) {
-            return false;
-        }
+    // Drivers are made with their profiles, under the fleet; never here.
+    if (roles.some((role) => role.key === 'DRIVER')) {
+        throw new BadRequestError('A driver account is created from the driver profile', { reason: 'ROLE_WRONG_SIDE', roles: ['DRIVER'] });
     }
 
-    return theirs.size < own.size || TOP_ROLES.has(actor.role);
+    assertMayManageCapabilities(actor, capabilities, { what: 'role' });
+
+    return roles;
 };
 
-const assertWithinCeiling = (actor, role) => {
-    if (!withinCeiling(actor, role)) {
-        throw new ForbiddenError('That role is above what your own allows you to manage', {
-            reason: 'ROLE_ABOVE_CEILING',
-            role
-        });
-    }
-};
+const sideOfScope = (scope) => (scope.partnerId ? 'PARTNER' : 'PLATFORM');
 
 const assertNotSelf = (user, actor) => {
     if (user.id === actor.id) {
@@ -80,7 +66,7 @@ const scopeWhere = (scope) =>
 
 const actorRef = { select: { id: true, email: true, firstName: true, lastName: true } };
 
-const detailInclude = { invitedBy: actorRef, deactivatedBy: actorRef };
+const detailInclude = { invitedBy: actorRef, deactivatedBy: actorRef, ...accessInclude };
 
 const fullName = (user) => [user.firstName, user.lastName].filter(Boolean).join(' ');
 
@@ -182,7 +168,7 @@ export const listUsers = async (scope, { role, status, q, page, pageSize }) => {
  */
 export const inviteUser = (scope, { email, firstName, lastName, role, position, phone }, actor, req) =>
     prisma.$transaction(async (tx) => {
-        assertWithinCeiling(actor, role);
+        await assertMayAssign(tx, actor, [role], sideOfScope(scope));
 
         const taken = await tx.user.findUnique({ where: { email }, select: { id: true } });
 
@@ -245,7 +231,7 @@ export const resendActivation = (scope, id, actor, req) =>
             throw new ConflictError('This account has already been activated', { reason: 'ALREADY_ACTIVE' });
         }
 
-        assertWithinCeiling(actor, user.role);
+        await assertMayManage(tx, actor, user.id);
 
         const { token, authToken } = await issueAuthToken(tx, {
             userId: user.id,
@@ -270,35 +256,147 @@ export const resendActivation = (scope, id, actor, req) =>
  * session may do is read off the role on every request and the person
  * should see their new panel, not a stale one.
  */
-export const changeRole = (scope, id, { role }, actor, req) =>
+/**
+ * Sets the roles an account holds — the whole set, never a delta, so what
+ * the screen shows is what they get.
+ *
+ * The primary role (`users.role`, which a trigger keeps in step with the
+ * rows) is the first system role of the set by order; a set of panel-made
+ * roles alone has no primary and is refused until the column goes. Taking
+ * the last super admin's or owner's role away is refused like deactivating
+ * them would be. Sessions end, not for safety — the next request resolves
+ * the new set anyway — but so the person sees their new panel.
+ */
+export const setUserRoles = (scope, id, { roles: roleKeys }, actor, req) =>
     prisma.$transaction(async (tx) => {
         const user = await findInTx(tx, id, scope);
 
         assertNotSelf(user, actor);
-        assertWithinCeiling(actor, user.role);
-        assertWithinCeiling(actor, role);
+        await assertMayManage(tx, actor, user.id);
 
-        if (user.role === role) {
+        const roles = await assertMayAssign(tx, actor, roleKeys, sideOfScope(scope));
+        const primary = roles.filter((role) => role.isSystem).sort((a, b) => a.sortOrder - b.sortOrder)[0];
+
+        if (!primary) {
+            throw new ConflictError('An account needs one of the built-in roles', { reason: 'PRIMARY_ROLE_REQUIRED' });
+        }
+
+        const current = user.roles.map((held) => held.role.key).sort();
+        const next = [...roleKeys].sort();
+
+        if (current.join(',') === next.join(',')) {
             return user;
         }
 
-        await assertNotLast(tx, user);
+        if (['SUPER_ADMIN', 'PARTNER_OWNER'].includes(user.role) && !next.includes(user.role)) {
+            await assertNotLast(tx, user);
+        }
 
-        const updated = await tx.user.update({ where: { id }, data: { role }, include: detailInclude });
+        // The primary first: the trigger swaps its row. Then the rest.
+        if (user.role !== primary.key) {
+            await tx.user.update({ where: { id }, data: { role: primary.key } });
+        }
+
+        await tx.userRole.deleteMany({ where: { userId: id, role: { key: { notIn: next } } } });
+        await tx.userRole.createMany({
+            data: roles.map((role) => ({ userId: id, roleId: role.id, grantedByUserId: actor.id })),
+            skipDuplicates: true
+        });
 
         await revokeUserSessions(tx, id);
 
         await recordAudit(tx, {
-            action: 'USER_ROLE_CHANGED',
+            action: current.length === 1 && next.length === 1 ? 'USER_ROLE_CHANGED' : 'USER_ROLES_CHANGED',
             actor,
             entityType: AUDIT_ENTITY.user,
             entityId: id,
-            summary: `Changed ${user.email} from ${user.role} to ${role}`,
-            metadata: { from: user.role, to: role },
+            summary: `Changed ${user.email} from ${current.join(', ')} to ${next.join(', ')}`,
+            metadata: { from: current.length === 1 ? current[0] : current, to: next.length === 1 ? next[0] : next },
             req
         });
 
-        return updated;
+        return findInTx(tx, id, scope);
+    });
+
+/** The single-role form the older screens use: the set becomes that one role. */
+export const changeRole = (scope, id, { role }, actor, req) => setUserRoles(scope, id, { roles: [role] }, actor, req);
+
+/** What the actor may hand out in this scope, for the pickers. */
+export const grantable = (scope, actor) => grantableFor(prisma, actor, { side: sideOfScope(scope) });
+
+/**
+ * One capability granted to, or taken from, an account by name.
+ *
+ * A grant is handing out, so the actor must hold it; a denial only needs
+ * the actor to manage the account. The ones that hand out everything else
+ * are never written this way. One row per capability: writing it again
+ * replaces the reason and the last day.
+ */
+export const grantOverride = (scope, id, { capability, effect, reason, expiresAt }, actor, req) =>
+    prisma.$transaction(async (tx) => {
+        const user = await findInTx(tx, id, scope);
+
+        assertNotSelf(user, actor);
+        await assertMayManage(tx, actor, user.id);
+
+        if (isProtected(capability)) {
+            throw new ForbiddenError('That capability only ever comes with a role', { reason: 'PROTECTED_CAPABILITY', capability });
+        }
+
+        const partnerSide = Boolean(scope.partnerId);
+        const fits = partnerSide ? isPartnerCapability(capability) || capability === CAPABILITIES.NOTIFICATIONS_READ : !isPartnerCapability(capability);
+
+        if (!fits) {
+            throw new BadRequestError('That capability belongs to the other side of the platform', { reason: 'CAPABILITY_WRONG_SIDE', capability });
+        }
+
+        if (effect === 'GRANT') {
+            assertDominates(actor, [capability], { what: 'capability' });
+        }
+
+        const override = await tx.userCapabilityOverride.upsert({
+            where: { userId_capability: { userId: id, capability } },
+            update: { effect, reason, expiresAt: expiresAt ?? null, grantedByUserId: actor.id },
+            create: { userId: id, capability, effect, reason, expiresAt: expiresAt ?? null, grantedByUserId: actor.id }
+        });
+
+        await recordAudit(tx, {
+            action: 'USER_OVERRIDE_GRANTED',
+            actor,
+            entityType: AUDIT_ENTITY.user,
+            entityId: id,
+            summary: `${effect === 'GRANT' ? 'Granted' : 'Denied'} ${user.email} ${capability}`,
+            metadata: { capability, effect, reason, expiresAt: expiresAt ?? null },
+            req
+        });
+
+        return override;
+    });
+
+export const revokeOverride = (scope, id, capability, actor, req) =>
+    prisma.$transaction(async (tx) => {
+        const user = await findInTx(tx, id, scope);
+
+        assertNotSelf(user, actor);
+        await assertMayManage(tx, actor, user.id);
+
+        const override = await tx.userCapabilityOverride.findUnique({ where: { userId_capability: { userId: id, capability } } });
+
+        if (!override) {
+            throw new NotFoundError('No such override');
+        }
+
+        await tx.userCapabilityOverride.delete({ where: { id: override.id } });
+
+        await recordAudit(tx, {
+            action: 'USER_OVERRIDE_REVOKED',
+            actor,
+            entityType: AUDIT_ENTITY.user,
+            entityId: id,
+            summary: `Removed the ${override.effect === 'GRANT' ? 'grant' : 'denial'} of ${capability} from ${user.email}`,
+            metadata: { capability, effect: override.effect },
+            req
+        });
     });
 
 /**
@@ -311,7 +409,7 @@ export const deactivateUser = (scope, id, { reason } = {}, actor, req) =>
         const user = await findInTx(tx, id, scope);
 
         assertNotSelf(user, actor);
-        assertWithinCeiling(actor, user.role);
+        await assertMayManage(tx, actor, user.id);
 
         const status = statusOf(user);
 
@@ -354,7 +452,7 @@ export const reactivateUser = (scope, id, actor, req) =>
     prisma.$transaction(async (tx) => {
         const user = await findInTx(tx, id, scope);
 
-        assertWithinCeiling(actor, user.role);
+        await assertMayManage(tx, actor, user.id);
 
         if (user.isActive) {
             return user;
@@ -383,7 +481,7 @@ export const revokeSessions = (scope, id, actor, req) =>
     prisma.$transaction(async (tx) => {
         const user = await findInTx(tx, id, scope);
 
-        assertWithinCeiling(actor, user.role);
+        await assertMayManage(tx, actor, user.id);
 
         const { count } = await revokeUserSessions(tx, id);
 
@@ -413,7 +511,7 @@ export const deleteUser = (scope, id, { confirm }, actor, req) =>
         const user = await findInTx(tx, id, scope);
 
         assertNotSelf(user, actor);
-        assertWithinCeiling(actor, user.role);
+        await assertMayManage(tx, actor, user.id);
 
         if (confirm !== user.email) {
             throw new BadRequestError('Type the account email address to confirm', { reason: 'CONFIRM_MISMATCH' });
@@ -458,7 +556,7 @@ export const setPrimaryContact = (scope, id, actor, req) =>
             return user;
         }
 
-        assertWithinCeiling(actor, user.role);
+        await assertMayManage(tx, actor, user.id);
 
         const previous = await tx.user.findFirst({
             where: { partnerId: scope.partnerId, isPrimaryContact: true },
@@ -466,7 +564,7 @@ export const setPrimaryContact = (scope, id, actor, req) =>
         });
 
         if (previous) {
-            assertWithinCeiling(actor, previous.role);
+            await assertMayManage(tx, actor, previous.id);
         }
 
         await tx.user.updateMany({

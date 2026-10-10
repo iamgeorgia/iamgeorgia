@@ -1017,14 +1017,16 @@ What the platform roles reach in the admin panel:
 
 | Area | Read | Change |
 | --- | --- | --- |
-| Catalogue — destinations, amenities, hotels, tours, services, packages, transfer points/vehicles/routes | every staff role | `SUPER_ADMIN`, `ADMIN` |
+| Catalogue — destinations, amenities, hotels, tours, services, packages, transfer points/vehicles/routes | every staff role | `SUPER_ADMIN`, `ADMIN` (`catalogue.write`); tours also `TOUR_OPERATOR` (`tours.write`) |
+| Hotel prices — rates, rate plans, taxes and fees, cancellation and payment policies, child charges, a hotel's supplier and currency, a package's discount, the markup rules | as the catalogue | `pricing.write` on top of the catalogue capability: `SUPER_ADMIN`, `ADMIN`. A request that carries a priced field without it is refused (403 with `details.fields`), never quietly stripped |
 | A hotel's contracts and documents | the list: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT`; opening a file goes by its category — a contract or rate sheet needs `partners.financial.read`, a payment slip or invoice `finance.payments.read`, a driver's papers `dispatch.read`, a certificate `catalogue.read` | `SUPER_ADMIN`, `ADMIN` |
 | Bookings and orders, every company | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT` (transfers: also `DISPATCHER`) | confirm/decline and cancel: `SUPER_ADMIN`, `ADMIN`, `TOUR_OPERATOR` |
 | Fleet, drivers, dispatch | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `DISPATCHER` | `SUPER_ADMIN`, `ADMIN`, `DISPATCHER` (deleting a car or a driver: admins) |
 | Partners | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
 | A partner's bank details | `SUPER_ADMIN`, `ADMIN`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
 | Pricing rules | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
-| Payments, refunds, write-offs, payment terms | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | `SUPER_ADMIN`, `ACCOUNTANT` |
+| Payments, refunds, write-offs, payment terms | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT`; the ledger and its payments also `FINANCE_OPERATOR` | `SUPER_ADMIN`, `ACCOUNTANT`; payments also `FINANCE_OPERATOR`; terms `finance.terms.write` |
+| A partner's commission rate | as the partner | `finance.commission.write` on top of `partners.write`: `SUPER_ADMIN`, `ADMIN` (the accountant holds it for the commission screens to come) |
 | Net, markup and margin in any response | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | — |
 | A partner's history (`/admin/partners/:id/audit`) | `audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | — |
 
@@ -1070,9 +1072,13 @@ as they would a stranger, with a 404. The identity on `/auth/me` and
 `/partner/me` never carries bank details; `GET /partner/financial` and
 `GET /admin/partners/:id/financial` (`partners.financial.read`) do.
 | GET | `/admin/users?role&status&q&page&pageSize` | `status` ∈ `INVITED` `ACTIVE` `DEACTIVATED`; `role` repeatable; envelope `{ data, total, page, pageSize, totalPages }` |
-| POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `TOUR_OPERATOR` `ACCOUNTANT` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
-| GET | `/admin/users/:id` | `status` is derived: no password yet → `INVITED`; switched off → `DEACTIVATED`; else `ACTIVE`. Carries `invitedBy`, `invitedAt`, `deactivatedBy`, `deactivatedAt` |
-| PATCH | `/admin/users/:id/role` | `{ role }`, any staff role including `SUPER_ADMIN`; ends the account's sessions |
+| POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `TOUR_OPERATOR` `ACCOUNTANT` `FINANCE_OPERATOR` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
+| GET | `/admin/users/:id` | `status` is derived: no password yet → `INVITED`; switched off → `DEACTIVATED`; else `ACTIVE`. Carries `invitedBy`, `invitedAt`, `deactivatedBy`, `deactivatedAt`, every role held (`roles`), the overrides written for the account (`overrides`) and what it resolves to (`capabilities`) |
+| GET | `/admin/users/:id/grantable` | What the caller may hand out: `{ roles, capabilities }` — the roles it dominates (never `DRIVER`) and the capabilities it holds that may be written by name |
+| PUT | `/admin/users/:id/roles` | `{ roles: [key…] }`, the whole set the account holds afterwards. One must be a built-in role (409 `PRIMARY_ROLE_REQUIRED`): it becomes `role`, the primary. Every role must be on the platform side (400 `ROLE_WRONG_SIDE`) and within the caller's own capabilities (403 `ROLE_ABOVE_CEILING` with `details.missing`). Ends the account's sessions |
+| PATCH | `/admin/users/:id/role` | `{ role }`: the single-role form of the above |
+| POST | `/admin/users/:id/overrides` | `{ capability, effect: GRANT \| DENY, reason, expiresAt? }`. A grant needs the caller to hold the capability; a denial needs only that it may manage the account; the capabilities that hand out everything else (`platform.admin`, `users.staff.manage`, `roles.manage`, `settings.write`, `partner.team.manage`) are never written this way (403 `PROTECTED_CAPABILITY`). One row per capability: writing it again replaces the reason and the last day. 201 with the account |
+| DELETE | `/admin/users/:id/overrides/:capability` | Takes the override back |
 | POST | `/admin/users/:id/deactivate` | `{ reason? }`; sessions end now and every unused activation or reset link is spent. 409 `NOT_ACTIVATED` for an invitation — delete it instead |
 | POST | `/admin/users/:id/reactivate` | |
 | POST | `/admin/users/:id/sessions/revoke` | `{ user, revoked }` |
@@ -1088,11 +1094,37 @@ Nobody may change, deactivate or delete their own account through these
 partner. The same verbs as above, scoped to the session's company — another
 company's user id is **404**. Differences: invite roles are `PARTNER_ADMIN`
 `PARTNER_AGENT` `PARTNER_FINANCE`; `PATCH /partner/team/:id/role` accepts any
-partner role including `PARTNER_OWNER`; an owner manages everyone (other
-owners included) while an admin manages agents and finance users only (403
+partner role including `PARTNER_OWNER`, and `PUT /partner/team/:id/roles`
+the whole set; `GET /partner/team/grantable` says which the caller may give.
+An owner manages everyone (other owners included) while an admin manages
+agents only — a finance user can do what an admin cannot (403
 `ROLE_ABOVE_CEILING`); `PATCH /partner/team/:id/primary-contact` moves the one
 primary contact to an active member, within the same ceiling on both the
 member gaining it and the one losing it (so a partner admin cannot take it
+The rule under every grant, invitation and change above: **nobody hands out,
+or touches, more than they hold.** An actor may give a role, write an
+override, or act on an account only if it holds every capability the role
+carries or the account resolves to; holding every capability of a *peer* is
+not outranking it, so only a super admin manages super admins and only an
+owner other owners. A partner admin therefore cannot invite a finance user
+(it does not hold `partner.financial.write`), which is what stops it from
+opening the returned activation link and changing the bank details as them.
+
+### Roles — `/admin/roles`
+
+`roles.manage`, which only `SUPER_ADMIN` holds. The system roles are seeded
+and keep their key and side for good; what a super admin or a driver may do
+is fixed (409 `ROLE_LOCKED`); everything else about a role is data.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/admin/roles?side` | `{ data: [{ id, key, name, description, side, isSystem, sortOrder, capabilities, members }] }` |
+| GET | `/admin/roles/capabilities` | Every capability there is, grouped by area, and which are `protected` |
+| GET | `/admin/roles/:key` | |
+| POST | `/admin/roles` | `{ key, name, description?, side: PLATFORM \| PARTNER, capabilities }`. A key is lower case (`^[a-z][a-z0-9_]{2,40}$`), so a panel-made role can never be mistaken for a system one; a platform role carries no `partner.*` capability and a partner role only those and the bell (400 `CAPABILITY_WRONG_SIDE`); a capability goes into a role only from a caller who holds it (403 `ROLE_ABOVE_CEILING`). Audited `ROLE_CREATED` |
+| PATCH | `/admin/roles/:key` | `{ name?, description?, capabilities? }`, the whole capability set afterwards. Adding is handing out (the ceiling applies); removing is not. Audited `ROLE_UPDATED` with `{ changes: { capabilities: { added, removed } } }` |
+| DELETE | `/admin/roles/:key` | Never a system role (409 `SYSTEM_ROLE`), never one still held (409 `ROLE_IN_USE`). Audited `ROLE_DELETED` |
+
 from an owner); a team holds at most `PARTNER_TEAM_MAX`
 members, invited ones included (409 `TEAM_FULL`).
 

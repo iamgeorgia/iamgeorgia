@@ -1,6 +1,8 @@
 import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
+import { requireCapability } from '../middleware/auth.js';
+import { CAPABILITIES } from '../lib/permissions.js';
 import {
     calendarQuerySchema,
     inventoryRangeSchema,
@@ -54,8 +56,14 @@ adminInventoryRoutes.put(
 /** Rates hang off a rate plan, because a price only means anything with terms. */
 export const adminRateRoutes = Router({ mergeParams: true });
 
+// What a hotel costs and sells for is `pricing.write`, over and above the
+// catalogue capability the router inherits: a role that edits the catalogue
+// does not thereby set its prices.
+const pricing = requireCapability(CAPABILITIES.PRICING_WRITE);
+
 adminRateRoutes.put(
     '/',
+    pricing,
     validate({ params: ratePlanParamSchema, body: rateRangeSchema }),
     async (req, res) => {
         const { hotelId, roomTypeId, ratePlanId } = req.valid.params;
@@ -74,7 +82,7 @@ adminTaxFeeRoutes.get('/', validate({ params: hotelScopedParamSchema }), async (
     res.json({ data: taxFees.map(toTaxFee) });
 });
 
-adminTaxFeeRoutes.post('/', validate({ params: hotelScopedParamSchema, body: taxFeeSchema }), async (req, res) => {
+adminTaxFeeRoutes.post('/', pricing, validate({ params: hotelScopedParamSchema, body: taxFeeSchema }), async (req, res) => {
     const taxFee = await upsertTaxFee(req.valid.params.hotelId, null, req.valid.body, req.user, req);
 
     res.status(201).json(toTaxFee(taxFee));
@@ -82,6 +90,7 @@ adminTaxFeeRoutes.post('/', validate({ params: hotelScopedParamSchema, body: tax
 
 adminTaxFeeRoutes.put(
     '/:taxFeeId',
+    pricing,
     validate({ params: taxFeeParamSchema, body: taxFeeSchema }),
     async (req, res) => {
         const { hotelId, taxFeeId } = req.valid.params;
@@ -91,7 +100,7 @@ adminTaxFeeRoutes.put(
     }
 );
 
-adminTaxFeeRoutes.delete('/:taxFeeId', validate({ params: taxFeeParamSchema }), async (req, res) => {
+adminTaxFeeRoutes.delete('/:taxFeeId', pricing, validate({ params: taxFeeParamSchema }), async (req, res) => {
     const { hotelId, taxFeeId } = req.valid.params;
     await deleteTaxFee(hotelId, taxFeeId, req.user, req);
 

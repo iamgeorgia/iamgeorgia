@@ -73,7 +73,10 @@ import { toTourKosherProfile } from '../serializers/package.js';
  */
 export const adminTourRoutes = Router();
 
-adminTourRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE] }));
+// Tours are the one product with a door of their own: the tour operator
+// edits them with `tours.write` and holds no `catalogue.write`, so the
+// hotels, transfers and services stay closed to it.
+adminTourRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.CATALOGUE_READ], write: [CAPABILITIES.CATALOGUE_WRITE, CAPABILITIES.TOURS_WRITE] }));
 
 const reload = (req, locale = 'en') => findTourOr404(req.valid.params.tourId, { locale });
 

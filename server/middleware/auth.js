@@ -307,6 +307,30 @@ export const requireTransferOps = requireCapability(CAPABILITIES.DISPATCH_READ);
 const READ_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 /**
+ * Some fields on an otherwise ordinary update are a different matter from the
+ * rest: the supplier and currency on a hotel, the discount on a package, the
+ * commission on a partner. A request that carries any of them needs the
+ * capability named here as well as the router's — and is refused, never
+ * quietly stripped: a save that answers 200 with different data from what
+ * was sent is the kind of surprise that gets "fixed" by sending it again.
+ */
+export const requireFieldsCapability =
+    (fields, ...anyOf) =>
+    (req, res, next) => {
+        const present = fields.filter((field) => req.body?.[field] !== undefined);
+
+        if (present.length > 0 && !can(req.user, ...anyOf)) {
+            throw new ForbiddenError('Your role cannot change these fields', {
+                reason: 'INSUFFICIENT_CAPABILITY',
+                fields: present,
+                required: anyOf
+            });
+        }
+
+        next();
+    };
+
+/**
  * The usual shape of a back-office router: reading needs one capability,
  * changing anything needs another. Decided by HTTP method, which holds because
  * every POST, PUT, PATCH and DELETE under /admin is a change — the matrix test

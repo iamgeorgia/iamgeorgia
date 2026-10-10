@@ -1,6 +1,6 @@
 import { Router } from 'express';
 
-import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
+import { authenticate, requireCapabilityByMethod, requireFieldsCapability } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
 import {
@@ -71,7 +71,14 @@ adminPackageRoutes.get('/', validate({ query: packageQuerySchema }), async (req,
     res.json({ data: packages.map((pkg) => toPackageSummary(pkg, req.valid.query.locale, req.user)), ...page });
 });
 
-adminPackageRoutes.post('/', validate({ body: createPackageSchema }), async (req, res) => {
+// A package's discount reprices the hotel inside it: `pricing.write` on top
+// of the catalogue capability the router inherits.
+const pricingFields = requireFieldsCapability(
+    ['adjustmentKind', 'adjustmentValue', 'adjustmentAppliesTo'],
+    CAPABILITIES.PRICING_WRITE
+);
+
+adminPackageRoutes.post('/', pricingFields, validate({ body: createPackageSchema }), async (req, res) => {
     res.status(201).json(await withChecklist(await createPackage(req.valid.body, req.user, req), req.user));
 });
 
@@ -79,7 +86,7 @@ adminPackageRoutes.get('/:packageId', validate({ params: packageParamSchema }), 
     res.json(await withChecklist(await reload(req), req.user));
 });
 
-adminPackageRoutes.patch('/:packageId', validate({ params: packageParamSchema, body: updatePackageSchema }), async (req, res) => {
+adminPackageRoutes.patch('/:packageId', pricingFields, validate({ params: packageParamSchema, body: updatePackageSchema }), async (req, res) => {
     res.json(await withChecklist(await updatePackage(req.valid.params.packageId, req.valid.body, req.user, req), req.user));
 });
 

@@ -1,4 +1,5 @@
-import { capabilitiesOf } from '../lib/permissions.js';
+import { capabilitiesOf, resolveCapabilities } from '../lib/permissions.js';
+import { toOverride } from './role.js';
 
 /**
  * Shapes a user for an API response.
@@ -47,11 +48,19 @@ const actorRef = (user) =>
  */
 export const toUserSummary = (user) => ({
     ...toUser(user),
+    roles: (user.roles ?? []).map((held) => ({ key: held.role.key, name: held.role.name, isSystem: held.role.isSystem })),
     status: !user.isActive ? 'DEACTIVATED' : !user.passwordHash ? 'INVITED' : 'ACTIVE',
     invitedAt: user.invitedAt ?? null,
     invitedBy: actorRef(user.invitedBy),
     deactivatedAt: user.deactivatedAt ?? null,
     deactivatedBy: actorRef(user.deactivatedBy)
+});
+
+/** The summary plus what the account resolves to, and the overrides behind it, for its own screen. */
+export const toUserDetail = (user) => ({
+    ...toUserSummary(user),
+    overrides: (user.capabilityOverrides ?? []).map(toOverride),
+    capabilities: [...resolveCapabilities({ roles: user.roles ?? [], overrides: user.capabilityOverrides ?? [] })].sort()
 });
 
 /** The contact block the admin panel shows on a partner row. */
