@@ -3,6 +3,7 @@ import { prisma } from '../db/index.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { sendMailQuietly, activationUrl } from '../lib/mailer/index.js';
+import { lockKey } from '../lib/locks.js';
 import { ROLE_CAPABILITIES } from '../lib/permissions.js';
 import { STAFF_ROLES } from '../validation/user.js';
 import { issueAuthToken, revokeUserSessions } from './auth.service.js';
@@ -109,10 +110,8 @@ const assertNotLast = async (tx, user) => {
 
     // Serialised per company, or per platform: two owners removing each other
     // at the same moment would otherwise each count the other as cover and
-    // leave none. The lock is released with the transaction.
-    // `$executeRaw`, not `$queryRaw`: the lock function returns void, which
-    // the query path cannot deserialise.
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rbac:last:${user.partnerId ?? 'platform'}`}::text))`;
+    // leave none.
+    await lockKey(tx, `rbac:last:${user.partnerId ?? 'platform'}`);
 
     const others = await tx.user.count({
         where: {

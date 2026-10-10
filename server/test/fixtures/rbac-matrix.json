@@ -296,7 +296,7 @@
   "PATCH /api/admin/finance/partners/:id/terms": {
     "ANONYMOUS": "UNAUTHENTICATED",
     "SUPER_ADMIN": "REACHED",
-    "ADMIN": "REACHED",
+    "ADMIN": "FORBIDDEN",
     "MANAGEMENT": "FORBIDDEN",
     "RESERVATIONS": "FORBIDDEN",
     "FINANCE": "REACHED",
@@ -338,7 +338,7 @@
   "PATCH /api/admin/finance/payables/:id": {
     "ANONYMOUS": "UNAUTHENTICATED",
     "SUPER_ADMIN": "REACHED",
-    "ADMIN": "REACHED",
+    "ADMIN": "FORBIDDEN",
     "MANAGEMENT": "FORBIDDEN",
     "RESERVATIONS": "FORBIDDEN",
     "FINANCE": "REACHED",
@@ -352,7 +352,7 @@
   "POST /api/admin/finance/payables/:id/instalments/:sequence/pay": {
     "ANONYMOUS": "UNAUTHENTICATED",
     "SUPER_ADMIN": "REACHED",
-    "ADMIN": "REACHED",
+    "ADMIN": "FORBIDDEN",
     "MANAGEMENT": "FORBIDDEN",
     "RESERVATIONS": "FORBIDDEN",
     "FINANCE": "REACHED",
@@ -380,7 +380,7 @@
   "POST /api/admin/finance/payments": {
     "ANONYMOUS": "UNAUTHENTICATED",
     "SUPER_ADMIN": "REACHED",
-    "ADMIN": "REACHED",
+    "ADMIN": "FORBIDDEN",
     "MANAGEMENT": "FORBIDDEN",
     "RESERVATIONS": "FORBIDDEN",
     "FINANCE": "REACHED",
@@ -408,7 +408,7 @@
   "POST /api/admin/finance/payments/:id/allocations": {
     "ANONYMOUS": "UNAUTHENTICATED",
     "SUPER_ADMIN": "REACHED",
-    "ADMIN": "REACHED",
+    "ADMIN": "FORBIDDEN",
     "MANAGEMENT": "FORBIDDEN",
     "RESERVATIONS": "FORBIDDEN",
     "FINANCE": "REACHED",
@@ -450,7 +450,7 @@
   "PATCH /api/admin/finance/receivables/:id": {
     "ANONYMOUS": "UNAUTHENTICATED",
     "SUPER_ADMIN": "REACHED",
-    "ADMIN": "REACHED",
+    "ADMIN": "FORBIDDEN",
     "MANAGEMENT": "FORBIDDEN",
     "RESERVATIONS": "FORBIDDEN",
     "FINANCE": "REACHED",
@@ -520,7 +520,7 @@
   "PUT /api/admin/finance/terms/:kind/:id": {
     "ANONYMOUS": "UNAUTHENTICATED",
     "SUPER_ADMIN": "REACHED",
-    "ADMIN": "REACHED",
+    "ADMIN": "FORBIDDEN",
     "MANAGEMENT": "FORBIDDEN",
     "RESERVATIONS": "FORBIDDEN",
     "FINANCE": "REACHED",

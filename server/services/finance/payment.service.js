@@ -1,7 +1,7 @@
-import { Prisma } from '../../generated/prisma/client.ts';
 import { prisma } from '../../db/index.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { ConflictError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
+import { lockRows } from '../../lib/locks.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { deriveStatus } from './ledger.service.js';
 
@@ -52,14 +52,16 @@ export const paymentInclude = {
     attachmentAsset: { select: { id: true, originalFilename: true, mimeType: true } }
 };
 
-const lockRows = async (tx, table, ids) => {
-    if (ids.length === 0) return;
-    const sorted = [...new Set(ids)].sort();
-    await tx.$queryRaw`SELECT id FROM ${Prisma.raw(`"${table}"`)} WHERE id IN (${Prisma.join(sorted)}) ORDER BY id FOR UPDATE`;
-};
-
-/** Recomputes a payable from its instalments after money moved on one of them. */
+/**
+ * Recomputes a payable from its instalments after money moved on one of them.
+ *
+ * The payable row is locked first: two payments on different instalments of
+ * one payable lock only their own instalments, and without this each would
+ * sum the instalments as it saw them and the later commit would overwrite
+ * the earlier one's total with a stale one.
+ */
 const recomputePayable = async (tx, payableId) => {
+    await lockRows(tx, 'supplier_payables', [payableId]);
     const payable = await tx.supplierPayable.findUnique({ where: { id: payableId }, include: { instalments: true } });
     const paidCents = payable.instalments.reduce((sum, i) => sum + i.paidCents, 0);
     const status = deriveStatus({ amountCents: payable.amountCents, paidCents, current: payable.status });
@@ -126,6 +128,15 @@ const planAllocations = async (tx, input, target) => {
     }
 
     const ids = requested.map(idOf);
+
+    // One line per target. The schema refuses a request that names the same
+    // item twice; this is the net beneath it, because two lines for one row
+    // would each be checked against the same snapshot and the second update
+    // would overwrite the first.
+    if (new Set(ids).size !== ids.length) {
+        throw new UnprocessableEntityError('An item may be named once per payment', { reason: 'DUPLICATE_TARGET' });
+    }
+
     await lockRows(tx, target === 'RECEIVABLE' ? 'receivables' : 'payable_instalments', ids);
     const rows = new Map((await loadTargets(tx, target, ids)).map((row) => [row.id, row]));
 
@@ -146,6 +157,19 @@ const planAllocations = async (tx, input, target) => {
                 reason: 'CURRENCY_MISMATCH',
                 id: row.id,
                 expected: currency
+            });
+        }
+
+        // Money from one party settles that party's items. When the caller
+        // names the payer or payee, every explicit target must belong to it;
+        // a guest's receivable has no partner and so matches none.
+        const party = target === 'RECEIVABLE' ? row.debtorPartnerId : row.payable.supplierPartnerId;
+
+        if (explicit.length > 0 && input.counterpartyPartnerId && party !== input.counterpartyPartnerId) {
+            throw new UnprocessableEntityError('That item belongs to a different party than the payment names', {
+                reason: 'COUNTERPARTY_MISMATCH',
+                id: row.id,
+                partnerId: party ?? null
             });
         }
 
@@ -222,6 +246,29 @@ const applyPlan = async (tx, input, target, payment, plan) => {
     }
 };
 
+/**
+ * The slip attached to a payment is a payment slip.
+ *
+ * Any file id would otherwise do, and the payment's response names the file
+ * it points at — so a contract or a driver's licence attached here would
+ * leak its name and type to whoever reads payments.
+ */
+const assertAttachment = async (tx, attachmentAssetId) => {
+    if (!attachmentAssetId) return;
+
+    const asset = await tx.fileAsset.findFirst({
+        where: { id: attachmentAssetId, deletedAt: null },
+        select: { category: true, status: true }
+    });
+
+    if (!asset || asset.category !== 'PAYMENT_ATTACHMENT' || asset.status !== 'READY') {
+        throw new UnprocessableEntityError('The attachment must be an uploaded payment slip', {
+            reason: 'ATTACHMENT_INVALID',
+            field: 'attachmentAssetId'
+        });
+    }
+};
+
 /** Who the money came from or went to, when the caller did not say: the first target's party. */
 const counterpartyFrom = (input, target, plan) => {
     if (input.counterpartyPartnerId || input.counterpartyName || input.counterpartyEmail) {
@@ -278,6 +325,8 @@ export const recordPayment = async (input, actor, req) => {
 
     try {
         const payment = await prisma.$transaction(async (tx) => {
+            await assertAttachment(tx, input.attachmentAssetId);
+
             const plan = await planAllocations(tx, input, target);
             const party = counterpartyFrom(input, target, plan);
 

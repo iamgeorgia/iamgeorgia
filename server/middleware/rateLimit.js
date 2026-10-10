@@ -213,22 +213,6 @@ export const authLimiter = rateLimit({
 });
 
 /**
- * Read here rather than in config.js only for now: that file is mid-change
- * on another branch of work, and these two keys move there with the next
- * finance commit. Same shape as config's `numberEnv`: the suite gets a
- * ceiling it will not hit unless a test lowers it on purpose.
- */
-const envLimit = (key, fallback) => {
-    const raw = process.env[key];
-
-    if (raw !== undefined && raw !== '') {
-        return Number(raw);
-    }
-
-    return process.env.NODE_ENV === 'test' ? 10_000 : fallback;
-};
-
-/**
  * The two halves the pair-keyed limiter above leaves open.
  *
  * Keyed on the pair, one address gets a fresh budget for every account it
@@ -242,7 +226,7 @@ const envLimit = (key, fallback) => {
 export const authIpLimiter = rateLimit({
     ...base,
     store: store('login-ip'),
-    limit: envLimit('AUTH_LOGIN_IP_LIMIT', 30),
+    limit: config.auth.loginIpLimit,
     keyGenerator: (req) => ipKeyGenerator(req.ip),
     skipSuccessfulRequests: true,
     handler: handler('Too many sign-in attempts. Try again later.')
@@ -251,7 +235,7 @@ export const authIpLimiter = rateLimit({
 export const authAccountLimiter = rateLimit({
     ...base,
     store: store('login-account'),
-    limit: envLimit('AUTH_LOGIN_ACCOUNT_LIMIT', 50),
+    limit: config.auth.loginAccountLimit,
     keyGenerator: (req) => String(req.body?.email ?? '').trim().toLowerCase() || ipKeyGenerator(req.ip),
     skipSuccessfulRequests: true,
     handler: handler('Too many sign-in attempts. Try again later.')

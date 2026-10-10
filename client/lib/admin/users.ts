@@ -23,7 +23,7 @@ export const staffRoleLabels: Record<StaffRole, string> = {
 /** One line per role, for the invite form and the role picker. */
 export const staffRoleDescriptions: Record<StaffRole, string> = {
   SUPER_ADMIN: "Everything, including the staff accounts and the audit log.",
-  ADMIN: "Runs everything except the staff accounts.",
+  ADMIN: "Runs everything except the staff accounts and the books: reads every figure, records no payments.",
   MANAGEMENT: "Reads everything, margins included, and changes nothing.",
   RESERVATIONS: "Works the bookings — confirm, decline, cancel — without seeing margins.",
   FINANCE: "Reads bookings, partners, bank details and margins.",

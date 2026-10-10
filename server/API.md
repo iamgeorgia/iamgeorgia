@@ -1036,6 +1036,7 @@ Drivers are not here; they are managed with their profiles under
 `/admin/transfers/drivers`.
 
 | Method | Path | Notes |
+| Payments, refunds, write-offs, payment terms | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | `SUPER_ADMIN`, `FINANCE` |
 | --- | --- | --- |
 | A partner's history (`/admin/partners/:id/audit`) | `audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | — |
 
@@ -1122,8 +1123,12 @@ Statuses: `OPEN`, `PARTIAL`, `PAID`, `VOID` (nothing owed, nothing paid),
 All under `/api/admin/finance`. Reading needs `finance.payables.read`,
 `finance.receivables.read`, `finance.payments.read` or `finance.reports.read`
 (super admin, admin, management, finance); changing needs
-`finance.payments.write` or `finance.terms.write` (super admin, admin,
-finance); a CSV export needs `finance.export` as well.
+`finance.payments.write` or `finance.terms.write` (super admin and finance:
+an admin runs the company and reads every figure, and keeping the books is
+the finance desk's); a CSV export needs `finance.export` as well. A payment
+names each item once, its payer or payee must own every item it settles
+(422 `COUNTERPARTY_MISMATCH`), and its attachment must be an uploaded
+`PAYMENT_ATTACHMENT` (422 `ATTACHMENT_INVALID`).
 
 | Method | Path | Notes |
 | --- | --- | --- |

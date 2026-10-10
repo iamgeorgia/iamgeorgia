@@ -11,6 +11,7 @@ import {
     databaseAvailable,
     futureDate,
     makeAdmin,
+    makeFileAsset,
     makePartner,
     makePartnerUser,
     makeTransferBooking,
@@ -41,7 +42,7 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
     let to;
 
     before(async () => {
-        for (const role of ['FINANCE', 'MANAGEMENT', 'RESERVATIONS']) {
+        for (const role of ['FINANCE', 'MANAGEMENT', 'RESERVATIONS', 'ADMIN']) {
             cookies[role] = (await signIn(app, (await makeAdmin(tracker, { role })).email)).cookie;
         }
 
@@ -332,12 +333,76 @@ describe('finance payments', { skip: dbAvailable ? false : 'Postgres is not reac
         assert.match(csv.text.split('\r\n')[0], /^Product,Currency,Bookings,Revenue,Cost,Margin,Margin %$/);
     });
 
-    it('keeps money changes to finance; management reads, reservations is kept out', async () => {
+    it('refuses an item named twice, a payer that does not own the item, and a slip that is not one', async () => {
+        const one = await booked();
+        const line = (amountCents) => ({ receivableId: one.receivable.id, amountCents });
+
+        const twice = await pay({ direction: 'IN', amountCents: 20_000, allocations: [line(15_000), line(5_000)] });
+        assert.equal(twice.status, 400);
+
+        const stranger = await pay({ direction: 'IN', amountCents: 100, counterpartyPartnerId: otherAgency.id, allocations: [line(100)] });
+        assert.equal(stranger.status, 422);
+        assert.equal(stranger.body.error.details.reason, 'COUNTERPARTY_MISMATCH');
+
+        const photo = await makeFileAsset(tracker);
+        const notASlip = await pay({ direction: 'IN', amountCents: 100, attachmentAssetId: photo.id, allocations: [line(100)] });
+        assert.equal(notASlip.status, 422);
+        assert.equal(notASlip.body.error.details.reason, 'ATTACHMENT_INVALID');
+
+        assert.equal((await prisma.receivable.findUnique({ where: { id: one.receivable.id } })).paidCents, 0, 'nothing moved');
+
+        const slip = await makeFileAsset(tracker, {
+            category: 'PAYMENT_ATTACHMENT',
+            visibility: 'PRIVATE',
+            mimeType: 'application/pdf',
+            originalFilename: 'slip.pdf'
+        });
+        const ok = await pay({ direction: 'IN', amountCents: 100, counterpartyPartnerId: agency.id, attachmentAssetId: slip.id, allocations: [line(100)] });
+        assert.equal(ok.status, 201, JSON.stringify(ok.body));
+        assert.equal(ok.body.payment.attachment.id, slip.id);
+    });
+
+    it('keeps a payable right when two of its instalments are paid at the same moment', async () => {
+        await prisma.supplierPaymentTerms.upsert({
+            where: { transferProviderId: provider.id },
+            update: { milestones: [{ kind: 'DEPOSIT', basis: 'PERCENT', value: 3000, anchor: 'CONFIRMATION', offsetDays: 3 }, { kind: 'BALANCE', anchor: 'ARRIVAL', offsetDays: -1 }] },
+            create: { transferProviderId: provider.id, milestones: [{ kind: 'DEPOSIT', basis: 'PERCENT', value: 3000, anchor: 'CONFIRMATION', offsetDays: 3 }, { kind: 'BALANCE', anchor: 'ARRIVAL', offsetDays: -1 }] }
+        });
+        const one = await booked();
+        const payInstalment = (sequence) =>
+            request(app)
+                .post(`/api/admin/finance/payables/${one.payable.id}/instalments/${sequence}/pay`)
+                .set('Cookie', cookies.FINANCE)
+                .send({ method: 'BANK_TRANSFER', paidAt: new Date().toISOString(), reference: `OUT-${sequence}` });
+
+        // Each locks only its own instalment; the payable's total is summed
+        // under the payable's own lock, so neither overwrites the other's.
+        const results = await Promise.all([payInstalment(1), payInstalment(2)]);
+        assert.deepEqual(results.map((res) => res.status), [201, 201]);
+
+        const payable = await request(app).get(`/api/admin/finance/payables/${one.payable.id}`).set('Cookie', cookies.FINANCE);
+        assert.equal(payable.body.status, 'PAID');
+        assert.equal(payable.body.paidCents, 17_000);
+        assert.deepEqual(payable.body.instalments.map((i) => i.status), ['PAID', 'PAID']);
+    });
+
+    it('keeps money changes to finance; admins and management read, reservations is kept out', async () => {
         const one = await booked();
 
         assert.equal((await request(app).get('/api/admin/finance/payables').set('Cookie', cookies.MANAGEMENT)).status, 200);
         assert.equal(
             (await pay({ direction: 'IN', amountCents: 100, allocations: [{ receivableId: one.receivable.id, amountCents: 100 }] }, cookies.MANAGEMENT)).status,
+            403
+        );
+
+        // An admin runs the company and reads every figure; the books are the finance desk's.
+        assert.equal((await request(app).get('/api/admin/finance/payments').set('Cookie', cookies.ADMIN)).status, 200);
+        assert.equal(
+            (await pay({ direction: 'IN', amountCents: 100, allocations: [{ receivableId: one.receivable.id, amountCents: 100 }] }, cookies.ADMIN)).status,
+            403
+        );
+        assert.equal(
+            (await request(app).patch(`/api/admin/finance/receivables/${one.receivable.id}`).set('Cookie', cookies.ADMIN).send({ waive: true, reason: 'No' })).status,
             403
         );
         assert.equal((await request(app).get('/api/admin/finance/receivables').set('Cookie', cookies.RESERVATIONS)).status, 403);

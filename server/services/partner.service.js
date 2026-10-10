@@ -3,6 +3,7 @@ import { prisma } from '../db/index.js';
 import { recordAudit, AUDIT_ENTITY } from '../lib/audit.js';
 import { nextPartnerReference } from '../lib/reference.js';
 import { NotFoundError, ConflictError, BadRequestError } from '../lib/errors.js';
+import { lockKey } from '../lib/locks.js';
 import { canViewFinancial } from '../serializers/partner.js';
 import { companyFullSchema } from '../validation/partner.js';
 import { issueAuthToken, revokePartnerSessions, revokeUserSessions } from './auth.service.js';
@@ -371,7 +372,7 @@ export const transitionPartner = async (id, action, input, admin, req) => {
         // check above ran outside the transaction, and an approve and a
         // reject arriving together must not both succeed with the last write
         // winning.
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`partner:${id}`}::text))`;
+        await lockKey(tx, `partner:${id}`);
 
         const current = await tx.partner.findUnique({ where: { id }, select: { status: true } });
 

@@ -70,6 +70,15 @@ const allocationSchema = z
         message: 'Each allocation names a receivable or an instalment, not both'
     });
 
+/** One line per item: a second line for the same row would be checked against the same snapshot and lose money. */
+const uniqueTargets = (rows) => new Set(rows.map((row) => row.receivableId ?? row.payableInstalmentId)).size === rows.length;
+
+const allocationsField = z
+    .array(allocationSchema)
+    .min(1)
+    .max(100)
+    .refine(uniqueTargets, { message: 'An item may be named once per payment' });
+
 /**
  * A payment. `allocations` names what it settles; `allocate` asks for one
  * partner's oldest open items first; with neither the money is recorded
@@ -91,7 +100,7 @@ export const recordPaymentSchema = z
         counterpartyEmail: emailField.optional(),
         attachmentAssetId: idField.optional(),
         idempotencyKey: z.string().trim().min(8).max(200).optional(),
-        allocations: z.array(allocationSchema).min(1).max(100).optional(),
+        allocations: allocationsField.optional(),
         allocate: z.object({ mode: z.literal('OLDEST_DUE'), partnerId: idField }).strict().optional()
     })
     .strict()
@@ -108,7 +117,7 @@ export const recordPaymentSchema = z
         path: ['allocations']
     });
 
-export const allocatePaymentSchema = z.object({ allocations: z.array(allocationSchema).min(1).max(100) }).strict();
+export const allocatePaymentSchema = z.object({ allocations: allocationsField }).strict();
 
 export const payInstalmentSchema = z
     .object({

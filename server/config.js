@@ -197,6 +197,11 @@ export const config = {
         // way under test, where hundreds of requests share one in-process
         // counter, and lowered again by the suite that exercises the 429 path.
         loginLimit: numberEnv('AUTH_LOGIN_LIMIT', (nodeEnv === 'test' ? 10_000 : 10)),
+        // The two halves the pair-keyed limit leaves open: one address trying
+        // many accounts, and many addresses trying one. Both wider than the
+        // pair's so neither trips before it does under honest use.
+        loginIpLimit: numberEnv('AUTH_LOGIN_IP_LIMIT', (nodeEnv === 'test' ? 10_000 : 30)),
+        loginAccountLimit: numberEnv('AUTH_LOGIN_ACCOUNT_LIMIT', (nodeEnv === 'test' ? 10_000 : 50)),
         registrationLimit: numberEnv('AUTH_REGISTRATION_LIMIT', (nodeEnv === 'test' ? 10_000 : 5)),
         tokenLookupLimit: numberEnv('AUTH_TOKEN_LOOKUP_LIMIT', (nodeEnv === 'test' ? 10_000 : 30)),
 

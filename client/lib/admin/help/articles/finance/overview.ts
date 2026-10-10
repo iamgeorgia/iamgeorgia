@@ -38,7 +38,7 @@ export const article = {
     { type: "heading", id: "who-sees-finance", text: "Who sees Finance" },
     {
       type: "paragraph",
-      text: "Super admins, administrators, management and finance. Management can read every finance screen but cannot record a payment or change an amount; finance and the admins can. Reservations and dispatchers do not see the Finance group in the sidebar, and the server refuses them if they type the address.",
+      text: "Super admins, administrators, management and finance. Administrators and management can read every finance screen but cannot record a payment or change an amount; finance and super admins can — running the company and keeping its books are two jobs on purpose. Reservations and dispatchers do not see the Finance group in the sidebar, and the server refuses them if they type the address.",
     },
     { type: "heading", id: "per-currency", text: "One row per currency" },
     {

@@ -85,7 +85,14 @@ const FINANCE_READ = [
 
 const FINANCE_WRITE = [C.FINANCE_PAYMENTS_WRITE, C.FINANCE_TERMS_WRITE, C.INVOICES_WRITE];
 
-/** Everything an ADMIN does: the whole operation, short of managing staff and settings. */
+/**
+ * Everything an ADMIN does: the whole operation, short of managing staff and
+ * settings — and short of moving money. An admin reads every figure, sets
+ * prices and commission, approves partners and edits their bank details;
+ * recording a payment or a refund, writing a debt off and setting payment
+ * terms is the finance desk's, and comes to an admin only by being given it.
+ * Running the company and keeping its books are two jobs on purpose.
+ */
 const ADMIN = [
     C.PLATFORM_ADMIN,
     C.AUDIT_READ,
@@ -96,8 +103,7 @@ const ADMIN = [
     C.BOOKINGS_CANCEL,
     C.DISPATCH_WRITE,
     C.PARTNERS_WRITE,
-    ...FINANCE_READ,
-    ...FINANCE_WRITE
+    ...FINANCE_READ
 ];
 
 const PARTNER_MEMBER = [C.NOTIFICATIONS_READ, C.PARTNER_BOOKINGS_READ];
@@ -108,7 +114,7 @@ const PARTNER_MEMBER = [C.NOTIFICATIONS_READ, C.PARTNER_BOOKINGS_READ];
  * base it was not meant to be in.
  */
 const ROLE_LISTS = {
-    SUPER_ADMIN: [...ADMIN, C.USERS_STAFF_MANAGE, C.SETTINGS_WRITE],
+    SUPER_ADMIN: [...ADMIN, ...FINANCE_WRITE, C.USERS_STAFF_MANAGE, C.SETTINGS_WRITE],
     ADMIN,
     /** Reads everything, margins included; writes nothing. */
     MANAGEMENT: [C.AUDIT_READ, ...PLATFORM_READ, ...FINANCE_READ.filter((cap) => cap !== C.PARTNERS_FINANCIAL_READ)],
