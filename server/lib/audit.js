@@ -66,5 +66,6 @@ export const AUDIT_ENTITY = {
     supplierPayable: 'SupplierPayable',
     payableInstalment: 'PayableInstalment',
     receivable: 'Receivable',
-    paymentRecord: 'PaymentRecord'
+    paymentRecord: 'PaymentRecord',
+    outboxEvent: 'OutboxEvent'
 };

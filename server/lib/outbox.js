@@ -51,7 +51,15 @@ export const TOPICS = Object.freeze({
     // whether it was sold on its own or inside a package. `payload.product`
     // says which table `bookingId` points into.
     SUPPLIER_BOOKING_RECEIVED: 'supplier.booking.received',
-    SUPPLIER_BOOKING_CANCELLED: 'supplier.booking.cancelled'
+    SUPPLIER_BOOKING_CANCELLED: 'supplier.booking.cancelled',
+
+    // Finance. The first three are written by the reminder sweeper
+    // (`services/finance/reminder.service.js`) on the clock; the last by
+    // `recordPayment`, in the transaction that recorded the money.
+    PAYABLE_INSTALMENT_DUE: 'finance.payable.instalment_due',
+    PAYABLE_INSTALMENT_OVERDUE: 'finance.payable.instalment_overdue',
+    RECEIVABLE_OVERDUE: 'finance.receivable.overdue',
+    PAYMENT_RECORDED: 'finance.payment.recorded'
 });
 
 /** Writes one event on the given client — a transaction handle, in practice. */

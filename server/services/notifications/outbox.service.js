@@ -3,8 +3,24 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { config } from '../../config.js';
 import { prisma } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
-import { bookingManageUrl, driverPanelUrl, portalUrl, ratingUrl, sendMail } from '../../lib/mailer/index.js';
+import {
+    adminPayableUrl,
+    adminReceivableUrl,
+    bookingManageUrl,
+    driverPanelUrl,
+    formatLocal,
+    formatMoney,
+    portalFinanceUrl,
+    portalUrl,
+    ratingUrl,
+    relativeDays,
+    sendMail
+} from '../../lib/mailer/index.js';
 import { TOPICS } from '../../lib/outbox.js';
+import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
+import { ConflictError, NotFoundError } from '../../lib/errors.js';
+import { CAPABILITIES, ROLE_CAPABILITIES, ROLES } from '../../lib/permissions.js';
+import { daysBetween, todayInTimezone } from '../../lib/time.js';
 import { issueRatingToken } from '../../lib/transfer/ratingToken.js';
 import { TRANSFER_OPS_ROLES } from '../../middleware/auth.js';
 import { contactRevealed } from '../../serializers/dispatch.js';
@@ -79,6 +95,31 @@ const opsUserIds = async () =>
     (
         await prisma.user.findMany({
             where: { role: { in: TRANSFER_OPS_ROLES }, isActive: true },
+            select: { id: true }
+        })
+    ).map((row) => row.id);
+
+/** The roles whose capability table includes one capability. */
+const rolesWith = (capability) => ROLES.filter((role) => ROLE_CAPABILITIES[role].has(capability));
+
+/**
+ * Who hears about money owed to suppliers: every active member of staff
+ * whose role reads payables — the finance desk, management and the admins —
+ * and by construction never a dispatcher or the reservations desk.
+ */
+const financeUserIds = async () =>
+    (
+        await prisma.user.findMany({
+            where: { role: { in: rolesWith(CAPABILITIES.FINANCE_PAYABLES_READ) }, isActive: true },
+            select: { id: true }
+        })
+    ).map((row) => row.id);
+
+/** A partner company's people who read its statement: the owner, its admins and its finance role. */
+const partnerFinanceUserIds = async (partnerId) =>
+    (
+        await prisma.user.findMany({
+            where: { partnerId, role: { in: rolesWith(CAPABILITIES.PARTNER_STATEMENT_READ) }, isActive: true },
             select: { id: true }
         })
     ).map((row) => row.id);
@@ -689,8 +730,235 @@ const handlers = {
             template: 'supplierBookingCancelled',
             data: { ...view.data, reason: reason ?? view.data.reason ?? null, partnerName: to.name, url: portalUrl() }
         });
+    },
+
+    // --- finance ----------------------------------------------------------------
+    //
+    // Each handler re-reads the row and says nothing when the money is no
+    // longer owed: the sweep claimed the reminder a moment before a payment
+    // landed, or Finance voided the payable. The claim is never undone, so
+    // a row that is re-opened later does not resend the offsets it passed.
+
+    [TOPICS.PAYABLE_INSTALMENT_DUE]: async ({ instalmentId }) => {
+        const instalment = await loadInstalmentForMail(instalmentId);
+        if (!instalment || !instalmentOwed(instalment)) return;
+
+        const data = instalmentMailData(instalment);
+        if (data.daysUntil < 0) return; // overdue by now: the overdue alert covers it
+
+        await notify(await financeUserIds(), {
+            kind: 'FINANCE_PAYABLE_DUE',
+            title: `${data.who}: ${data.instalmentLabel} (${formatMoney(data.amountCents, data.currency)}) due ${relativeDays(data.daysUntil)}`,
+            body: `${data.bookingReference} · due ${formatLocal(data.dueAt, data.timezone)}`,
+            payload: { payableId: data.payableId, instalmentId, bookingReference: data.bookingReference, daysUntil: data.daysUntil },
+            entityType: 'SupplierPayable',
+            entityId: data.payableId
+        });
+
+        if (config.finance.opsEmail) {
+            await sendMail({ to: config.finance.opsEmail, template: 'financePayableDue', data });
+        }
+    },
+
+    [TOPICS.PAYABLE_INSTALMENT_OVERDUE]: async ({ instalmentId }) => {
+        const instalment = await loadInstalmentForMail(instalmentId);
+        if (!instalment || !instalmentOwed(instalment) || instalment.dueAt >= new Date()) return;
+
+        const data = instalmentMailData(instalment);
+
+        await notify(await financeUserIds(), {
+            kind: 'FINANCE_PAYABLE_OVERDUE',
+            title: `${data.who}: ${data.instalmentLabel} (${formatMoney(data.amountCents, data.currency)}) overdue`,
+            body: `${data.bookingReference} · was due ${formatLocal(data.dueAt, data.timezone)}`,
+            payload: { payableId: data.payableId, instalmentId, bookingReference: data.bookingReference, daysOverdue: data.daysOverdue },
+            entityType: 'SupplierPayable',
+            entityId: data.payableId
+        });
+
+        if (config.finance.opsEmail) {
+            await sendMail({ to: config.finance.opsEmail, template: 'financePayableOverdue', data });
+        }
+    },
+
+    [TOPICS.RECEIVABLE_OVERDUE]: async ({ receivableId }) => {
+        const receivable = await prisma.receivable.findUnique({
+            where: { id: receivableId },
+            include: { debtorPartner: { select: { id: true, name: true, email: true } } }
+        });
+        if (!receivable || !SETTLEABLE.has(receivable.status) || !receivable.dueAt || receivable.dueAt >= new Date()) return;
+
+        const timezone = config.finance.defaultTimezone;
+        const amountCents = Math.max(0, receivable.amountCents - receivable.paidCents);
+        const daysOverdue = daysBetween(todayInTimezone(timezone, receivable.dueAt), todayInTimezone(timezone));
+        const base = { reference: receivable.reference, amountCents, currency: receivable.currency, dueAt: receivable.dueAt, timezone, daysOverdue };
+
+        await notify(await financeUserIds(), {
+            kind: 'FINANCE_RECEIVABLE_OVERDUE',
+            title: `${receivable.debtorName} owes ${formatMoney(amountCents, receivable.currency)} for ${receivable.reference} — overdue`,
+            body: `Was due ${formatLocal(receivable.dueAt, timezone)}`,
+            payload: { receivableId, reference: receivable.reference, daysOverdue },
+            entityType: 'Receivable',
+            entityId: receivableId
+        });
+
+        if (config.finance.opsEmail) {
+            await sendMail({
+                to: config.finance.opsEmail,
+                template: 'financeReceivableOverdue',
+                data: { ...base, debtorName: receivable.debtorName, url: adminReceivableUrl(receivableId) }
+            });
+        }
+
+        // The debtor is nudged only when it is a company with a portal to
+        // pay from. A guest's receivable is settled at the property or by
+        // hand, and an automated chaser with nowhere to pay would be noise.
+        if (!receivable.debtorPartnerId) return;
+
+        await notify(await partnerFinanceUserIds(receivable.debtorPartnerId), {
+            kind: 'FINANCE_RECEIVABLE_OVERDUE',
+            title: `Payment overdue: ${formatMoney(amountCents, receivable.currency)} for ${receivable.reference}`,
+            body: `Was due ${formatLocal(receivable.dueAt, timezone)} · please settle it at your earliest convenience`,
+            payload: { receivableId, reference: receivable.reference, daysOverdue },
+            entityType: 'Receivable',
+            entityId: receivableId
+        });
+
+        const to = receivable.debtorEmail || receivable.debtorPartner?.email;
+
+        if (to) {
+            await sendMail({
+                to,
+                template: 'receivableOverdue',
+                data: { ...base, debtorName: receivable.debtorPartner?.name ?? receivable.debtorName, url: portalFinanceUrl() }
+            });
+        }
+    },
+
+    /** A receipt to the agency whose money arrived. Nothing for the other directions: Finance recorded those itself. */
+    [TOPICS.PAYMENT_RECORDED]: async ({ paymentId }) => {
+        const payment = await prisma.paymentRecord.findUnique({
+            where: { id: paymentId },
+            include: {
+                counterpartyPartner: { select: { id: true, name: true, email: true } },
+                allocations: { include: { receivable: { select: { reference: true } } }, orderBy: { createdAt: 'asc' } }
+            }
+        });
+        if (!payment || payment.direction !== 'IN' || payment.kind !== 'PAYMENT' || !payment.counterpartyPartnerId) return;
+
+        const allocations = payment.allocations
+            .filter((entry) => entry.receivable)
+            .map((entry) => ({ reference: entry.receivable.reference, amountCents: entry.amountCents }));
+        const allocatedCents = payment.allocations.reduce((sum, entry) => sum + Math.abs(entry.amountCents), 0);
+        const data = {
+            partnerName: payment.counterpartyPartner.name,
+            amountCents: payment.amountCents,
+            currency: payment.currency,
+            paidAt: payment.paidAt,
+            method: payment.method,
+            reference: payment.reference ?? null,
+            allocations,
+            unallocatedCents: Math.max(0, payment.amountCents - allocatedCents),
+            url: portalFinanceUrl()
+        };
+
+        await notify(await partnerFinanceUserIds(payment.counterpartyPartnerId), {
+            kind: 'FINANCE_PAYMENT_RECEIVED',
+            title: `Payment received: ${formatMoney(payment.amountCents, payment.currency)}`,
+            body: allocations.length > 0 ? `Applied to ${allocations.map((entry) => entry.reference).join(', ')}` : 'Held on your account for your next open item',
+            payload: { paymentId, reference: payment.reference ?? null },
+            entityType: 'PaymentRecord',
+            entityId: paymentId
+        });
+
+        const to = payment.counterpartyPartner.email || (await partnerContactEmail(payment.counterpartyPartnerId));
+
+        if (to) {
+            await sendMail({ to, template: 'paymentReceipt', data });
+        }
     }
 };
+
+// --- Finance lookups ------------------------------------------------------------
+
+const SETTLEABLE = new Set(['OPEN', 'PARTIAL']);
+
+const loadInstalmentForMail = (id) =>
+    prisma.payableInstalment.findUnique({
+        where: { id },
+        include: {
+            payable: {
+                include: {
+                    supplierPartner: { select: { id: true, name: true } },
+                    hotelBooking: { select: { hotelSnapshot: true, hotel: { select: { name: true } } } },
+                    tourBooking: { select: { tourSnapshot: true, tour: { select: { title: true } } } },
+                    serviceBooking: { select: { serviceSnapshot: true, service: { select: { name: true } } } }
+                }
+            }
+        }
+    });
+
+const instalmentOwed = (instalment) =>
+    Boolean(instalment.dueAt) && SETTLEABLE.has(instalment.status) && SETTLEABLE.has(instalment.payable.status);
+
+/** The property, tour or service the money is for — what a person calls the booking. */
+const payableSubject = (payable) => {
+    switch (payable.product) {
+        case 'HOTEL':
+            return payable.hotelBooking?.hotelSnapshot?.name ?? payable.hotelBooking?.hotel?.name ?? null;
+        case 'TOUR':
+            return payable.tourBooking?.tourSnapshot?.title ?? payable.tourBooking?.tour?.title ?? null;
+        case 'SERVICE':
+            return payable.serviceBooking?.serviceSnapshot?.name ?? payable.serviceBooking?.service?.name ?? null;
+        default:
+            return null;
+    }
+};
+
+/** "30% deposit", "70% balance", or just "balance" when it is the whole amount. */
+const instalmentLabel = (instalment, payable) => {
+    const kind = instalment.kind === 'DEPOSIT' ? 'deposit' : 'balance';
+    const share = payable.originalAmountCents > 0 ? Math.round((instalment.originalAmountCents * 100) / payable.originalAmountCents) : 100;
+
+    return share < 100 ? `${share}% ${kind}` : kind;
+};
+
+/** What the reminder emails and notices read, for an instalment with its payable loaded. */
+const instalmentMailData = (instalment, now = new Date()) => {
+    const { payable } = instalment;
+    const timezone = payable.timezone;
+    const today = todayInTimezone(timezone, now);
+    const dueDay = todayInTimezone(timezone, instalment.dueAt);
+    const supplierName = payable.supplierPartner?.name ?? 'Platform';
+    const subjectName = payableSubject(payable);
+
+    return {
+        payableId: payable.id,
+        supplierName,
+        subjectName,
+        who: subjectName ?? supplierName,
+        product: payable.product,
+        bookingReference: payable.bookingReference,
+        instalmentLabel: instalmentLabel(instalment, payable),
+        sequence: instalment.sequence,
+        amountCents: Math.max(0, instalment.amountCents - instalment.paidCents),
+        currency: payable.currency,
+        dueAt: instalment.dueAt,
+        timezone,
+        daysUntil: daysBetween(today, dueDay),
+        daysOverdue: daysBetween(dueDay, today),
+        url: adminPayableUrl(payable.id)
+    };
+};
+
+/** A partner company's primary contact's address, when the company itself has none on file. */
+const partnerContactEmail = async (partnerId) =>
+    (
+        await prisma.user.findFirst({
+            where: { partnerId, isActive: true },
+            orderBy: [{ isPrimaryContact: 'desc' }, { createdAt: 'asc' }],
+            select: { email: true }
+        })
+    )?.email ?? null;
 
 // --- Standalone booking lookups ------------------------------------------------
 
@@ -981,7 +1249,9 @@ export const processEvent = async (event) => {
             logger.warn({ topic: event.topic }, 'No handler for outbox topic');
         }
 
-        await prisma.outboxEvent.update({ where: { id: event.id }, data: { processedAt: new Date() } });
+        // A cleared error is how a delivered event is told apart from one
+        // that gave up: both are processed, both may carry attempts.
+        await prisma.outboxEvent.update({ where: { id: event.id }, data: { processedAt: new Date(), lastError: null } });
 
         return true;
     } catch (err) {
@@ -1025,3 +1295,58 @@ export const drainOutbox = async ({ limit = 50 } = {}) => {
 
     return { processed, failed, remaining: events.length === limit };
 };
+
+// --- Dead letters ------------------------------------------------------------------
+
+export { MAX_ATTEMPTS };
+
+/** The events that exhausted their attempts: processed, but with the error still on them. */
+const FAILED = { processedAt: { not: null }, attempts: { gte: MAX_ATTEMPTS }, lastError: { not: null } };
+
+export const listFailedEvents = async ({ page = 1, pageSize = 25 } = {}) => {
+    const [total, events] = await Promise.all([
+        prisma.outboxEvent.count({ where: FAILED }),
+        prisma.outboxEvent.findMany({ where: FAILED, orderBy: { createdAt: 'desc' }, skip: (page - 1) * pageSize, take: pageSize })
+    ]);
+
+    return { events, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+};
+
+/**
+ * Puts a failed event back in the queue for one more attempt.
+ *
+ * The attempt count is kept, not reset: the handler's in-app dedupe keys on
+ * it to avoid telling someone twice, and a retry that fails again should
+ * give up at once rather than start another eight-attempt climb. An event
+ * that was delivered is refused — running it again would send the email
+ * twice — and so is one that never failed.
+ */
+export const retryEvent = (id, actor, req) =>
+    prisma.$transaction(async (tx) => {
+        const event = await tx.outboxEvent.findUnique({ where: { id } });
+
+        if (!event) {
+            throw new NotFoundError('That outbox event does not exist');
+        }
+
+        if (event.attempts === 0 || (event.processedAt && !event.lastError)) {
+            throw new ConflictError('That event has not failed', { reason: 'NOT_FAILED' });
+        }
+
+        const updated = await tx.outboxEvent.update({
+            where: { id },
+            data: { processedAt: null, nextAttemptAt: new Date() }
+        });
+
+        await recordAudit(tx, {
+            action: 'OUTBOX_EVENT_RETRIED',
+            actor,
+            entityType: AUDIT_ENTITY.outboxEvent,
+            entityId: id,
+            summary: `Re-queued ${event.topic} after ${event.attempts} failed attempt${event.attempts === 1 ? '' : 's'}`,
+            metadata: { topic: event.topic, attempts: event.attempts, lastError: event.lastError, entityType: event.entityType, entityId: event.entityId },
+            req
+        });
+
+        return updated;
+    });

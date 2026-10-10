@@ -27,6 +27,11 @@ export const ratingUrl = (token) => link(`/transfers/rate/${token}`);
 export const bookingManageUrl = (reference, email) =>
     link(`/booking/manage/${encodeURIComponent(reference)}?email=${encodeURIComponent(email)}`);
 
+/** The finance desk's screens, and the partner's own statement. */
+export const adminPayableUrl = (id) => link(`/admin/finance/payables/${encodeURIComponent(id)}`);
+export const adminReceivableUrl = (id) => link(`/admin/finance/receivables/${encodeURIComponent(id)}`);
+export const portalFinanceUrl = () => link('/portal/finance');
+
 const formatDate = (date) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format(date);
 
@@ -40,15 +45,23 @@ const hello = (name) => (name ? `Hello ${name},` : 'Hello,');
 const helloHtml = (name) => (name ? `Hello ${escapeHtml(name)},` : 'Hello,');
 const plural = (count, one, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
 
-/** The same, read as a wall clock somewhere in particular. */
-const formatLocal = (date, timeZone) =>
+/** The same, read as a wall clock somewhere in particular. Exported for the in-app notices, which say the same thing. */
+export const formatLocal = (date, timeZone) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone }).format(
         date instanceof Date ? date : new Date(date)
     );
 
 /** Minor units back into something a person reads. */
-const formatMoney = (cents, currency) =>
+export const formatMoney = (cents, currency) =>
     new Intl.NumberFormat('en-GB', { style: 'currency', currency }).format(cents / 100);
+
+/** "in 3 days", "today", "tomorrow", "yesterday", "5 days ago" — for a count of calendar days from today. */
+export const relativeDays = (days) => {
+    if (days === 0) return 'today';
+    if (days === 1) return 'tomorrow';
+    if (days === -1) return 'yesterday';
+    return days > 0 ? `in ${days} days` : `${-days} days ago`;
+};
 
 /**
  * The brand, as email clients allow it: the site's palette (`client/app/globals.css`)
@@ -1191,6 +1204,166 @@ export const templates = {
                     reason ? { label: 'Reason given', value: reason } : null
                 ],
                 cta: { label: 'Open in the portal', url }
+            })
+        };
+    },
+
+    // --- Finance ---------------------------------------------------------------------
+    //
+    // Reminders to the finance mailbox, a nudge to a debtor, and a receipt.
+    // Amounts are what is still outstanding, never the original, and nothing
+    // here carries bank details: the money moves outside the platform.
+
+    /** A supplier instalment is due in `daysUntil` calendar days (0 = today). To the finance mailbox. */
+    financePayableDue: ({ supplierName, subjectName, bookingReference, instalmentLabel, amountCents, currency, dueAt, timezone, daysUntil, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const who = subjectName && subjectName !== supplierName ? `${subjectName} (${supplierName})` : subjectName ?? supplierName;
+        const when = relativeDays(daysUntil);
+
+        return {
+            subject: `Supplier payment due ${when}: ${who}, ${amount}`,
+            text: plain([
+                `The ${instalmentLabel} of ${amount} owed to ${who} for booking ${bookingReference} is due ${when}, on ${formatLocal(dueAt, timezone)} (${timezone}).`,
+                `Record the payment once it has been sent, which stops further reminders:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: `Supplier payment · ${bookingReference}`,
+                heading: `Payment due ${when}`,
+                preheader: `${who}: ${instalmentLabel} of ${amount} due ${when}`,
+                paragraphs: [`The <strong>${escapeHtml(instalmentLabel)}</strong> owed to ${escapeHtml(who)} for booking <strong>${escapeHtml(bookingReference)}</strong> is due ${escapeHtml(when)}.`],
+                facts: [
+                    { label: 'Amount', value: amount, strong: true },
+                    { label: 'Due', value: `${formatLocal(dueAt, timezone)} (${timezone})` },
+                    { label: 'Supplier', value: who },
+                    { label: 'Booking', value: bookingReference }
+                ],
+                cta: { label: 'Open the payable', url },
+                footer: 'Recording the payment stops further reminders for this instalment.'
+            })
+        };
+    },
+
+    /** A supplier instalment has passed its due time, `daysOverdue` calendar days ago. To the finance mailbox. */
+    financePayableOverdue: ({ supplierName, subjectName, bookingReference, instalmentLabel, amountCents, currency, dueAt, timezone, daysOverdue, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const who = subjectName && subjectName !== supplierName ? `${subjectName} (${supplierName})` : subjectName ?? supplierName;
+        const since = daysOverdue === 0 ? 'today' : `${plural(daysOverdue, 'day')} ago`;
+
+        return {
+            subject: `Overdue supplier payment: ${who}, ${amount}`,
+            text: plain([
+                `The ${instalmentLabel} of ${amount} owed to ${who} for booking ${bookingReference} was due ${since}, on ${formatLocal(dueAt, timezone)} (${timezone}), and is still outstanding.`,
+                `Record the payment, or adjust the payable if the amount is wrong:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: `Overdue · ${bookingReference}`,
+                heading: 'A supplier payment is overdue',
+                preheader: `${who}: ${instalmentLabel} of ${amount} was due ${since}`,
+                paragraphs: [`The <strong>${escapeHtml(instalmentLabel)}</strong> owed to ${escapeHtml(who)} for booking <strong>${escapeHtml(bookingReference)}</strong> was due ${escapeHtml(since)} and is still outstanding.`],
+                facts: [
+                    { label: 'Amount', value: amount, strong: true },
+                    { label: 'Was due', value: `${formatLocal(dueAt, timezone)} (${timezone})` },
+                    { label: 'Supplier', value: who },
+                    { label: 'Booking', value: bookingReference }
+                ],
+                cta: { label: 'Open the payable', url },
+                footer: 'This alert repeats daily while the instalment is open.'
+            })
+        };
+    },
+
+    /** A buyer has not paid by the due date. To the finance mailbox. */
+    financeReceivableOverdue: ({ debtorName, reference, amountCents, currency, dueAt, timezone, daysOverdue, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const since = daysOverdue === 0 ? 'today' : `${plural(daysOverdue, 'day')} ago`;
+
+        return {
+            subject: `Overdue from ${debtorName}: ${amount} for ${reference}`,
+            text: plain([
+                `${debtorName} owes ${amount} for ${reference}. It was due ${since}, on ${formatLocal(dueAt, timezone)} (${timezone}), and has not been paid.`,
+                `Record the payment when it arrives, or move the due date:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: `Overdue · ${reference}`,
+                heading: 'A payment to us is overdue',
+                preheader: `${debtorName} owes ${amount} for ${reference}, due ${since}`,
+                paragraphs: [`<strong>${escapeHtml(debtorName)}</strong> owes <strong>${escapeHtml(amount)}</strong> for <strong>${escapeHtml(reference)}</strong>. It was due ${escapeHtml(since)} and has not been paid.`],
+                facts: [
+                    { label: 'Amount', value: amount, strong: true },
+                    { label: 'Was due', value: `${formatLocal(dueAt, timezone)} (${timezone})` },
+                    { label: 'Debtor', value: debtorName },
+                    { label: 'Reference', value: reference }
+                ],
+                cta: { label: 'Open the receivable', url }
+            })
+        };
+    },
+
+    /** The nudge to the agency itself. Courteous: a late payment is usually an oversight. */
+    receivableOverdue: ({ debtorName, reference, amountCents, currency, dueAt, timezone, daysOverdue, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const since = daysOverdue === 0 ? 'today' : `${plural(daysOverdue, 'day')} ago`;
+
+        return {
+            subject: `Payment reminder: ${amount} for ${reference}`,
+            text: plain([
+                hello(debtorName),
+                `A friendly reminder that ${amount} for ${reference} was due ${since}, on ${formatLocal(dueAt, timezone)} (${timezone}), and we have not yet received it.`,
+                'If it has already been sent, thank you — please disregard this message. Otherwise we would be grateful if you could settle it at your earliest convenience.',
+                `Your statement, with every open item:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: `Payment reminder · ${reference}`,
+                heading: 'A payment is overdue',
+                preheader: `${amount} for ${reference} was due ${since}`,
+                paragraphs: [
+                    helloHtml(debtorName),
+                    `A friendly reminder that <strong>${escapeHtml(amount)}</strong> for <strong>${escapeHtml(reference)}</strong> was due ${escapeHtml(since)}, and we have not yet received it.`,
+                    'If it has already been sent, thank you &mdash; please disregard this message. Otherwise we would be grateful if you could settle it at your earliest convenience.'
+                ],
+                facts: [
+                    { label: 'Amount', value: amount, strong: true },
+                    { label: 'Was due', value: `${formatLocal(dueAt, timezone)} (${timezone})` },
+                    { label: 'Reference', value: reference }
+                ],
+                cta: { label: 'View your statement', url },
+                footer: 'Questions about this amount? Reply to this email and a person will answer.'
+            })
+        };
+    },
+
+    /** We received a buyer's money and applied it. To the agency. */
+    paymentReceipt: ({ partnerName, amountCents, currency, paidAt, method, reference, allocations, unallocatedCents, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const methodLabel = { BANK_TRANSFER: 'bank transfer', CASH: 'cash', CARD: 'card', OTHER: 'other' }[method] ?? 'payment';
+        const applied = allocations.map((entry) => `${entry.reference}: ${formatMoney(entry.amountCents, currency)}`);
+
+        return {
+            subject: `Payment received: ${amount}${reference ? ` (${reference})` : ''}`,
+            text: plain([
+                hello(partnerName),
+                `We have received your ${methodLabel} of ${amount} on ${formatDay(paidAt)}${reference ? `, reference ${reference}` : ''}. Thank you.`,
+                applied.length > 0 ? `Applied to:\n${applied.join('\n')}` : null,
+                unallocatedCents > 0 ? `${formatMoney(unallocatedCents, currency)} is held on your account and will be applied to your next open item.` : null,
+                `Your statement:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: 'Receipt',
+                heading: 'Payment received',
+                preheader: `${amount} received on ${formatDay(paidAt)}`,
+                paragraphs: [
+                    helloHtml(partnerName),
+                    `We have received your ${escapeHtml(methodLabel)} of <strong>${escapeHtml(amount)}</strong> on ${escapeHtml(formatDay(paidAt))}${reference ? `, reference <strong>${escapeHtml(reference)}</strong>` : ''}. Thank you.`,
+                    unallocatedCents > 0 ? `${escapeHtml(formatMoney(unallocatedCents, currency))} is held on your account and will be applied to your next open item.` : null
+                ],
+                facts: [
+                    { label: 'Amount', value: amount, strong: true },
+                    { label: 'Received', value: formatDay(paidAt) },
+                    { label: 'Method', value: methodLabel },
+                    reference ? { label: 'Your reference', value: reference } : null,
+                    applied.length > 0 ? { label: 'Applied to', value: applied.join('\n'), html: applied.map(escapeHtml).join('<br>') } : null
+                ],
+                cta: { label: 'View your statement', url }
             })
         };
     }

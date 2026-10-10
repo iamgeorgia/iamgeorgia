@@ -7,6 +7,7 @@ import { auditSweep, sweepExpiredHolds } from './services/hotel/availability.ser
 import { sweepExpiringCertifications } from './services/hotel/kosher.service.js';
 import { drainOutbox } from './services/notifications/outbox.service.js';
 import { sweepReminders } from './services/transfer/reminder.service.js';
+import { sweepFinanceReminders } from './services/finance/reminder.service.js';
 import { auditTourSweep, sweepExpiredTourHolds } from './services/tour/availability.service.js';
 import { sweepCompletedTourBookings, sweepOverdueTourRequests } from './services/tour/booking.service.js';
 import { sweepCompletedHotelBookings } from './services/hotel/booking.service.js';
@@ -94,6 +95,24 @@ const start = async () => {
 
     reminderSweeper.unref();
 
+    /**
+     * Supplier payment reminders and overdue alerts. Every instance may run
+     * it: the claims are unique rows, so even two sweeps without the lock
+     * would remind once. Logged when it did something, because a finance
+     * desk asking "why was I not reminded" is answered from the log.
+     */
+    const financeReminderSweeper = setInterval(() => {
+        sweepFinanceReminders()
+            .then(({ skipped, events, overdue, receivablesOverdue }) => {
+                if (!skipped && events + overdue + receivablesOverdue > 0) {
+                    logger.info({ events, overdue, receivablesOverdue }, 'Finance reminders queued');
+                }
+            })
+            .catch((err) => logger.error({ err }, 'Finance reminder sweep failed'));
+    }, config.finance.reminderSweepIntervalMs);
+
+    financeReminderSweeper.unref();
+
     /** Tour holds: the same counter-and-sweeper discipline as room holds. */
     const tourHoldSweeper = setInterval(() => {
         sweepExpiredTourHolds()
@@ -167,6 +186,7 @@ const start = async () => {
         clearInterval(certificationSweeper);
         clearInterval(outboxDrainer);
         clearInterval(reminderSweeper);
+        clearInterval(financeReminderSweeper);
         clearInterval(tourHoldSweeper);
         clearInterval(tourCompletionSweeper);
         clearInterval(tourRequestSweeper);

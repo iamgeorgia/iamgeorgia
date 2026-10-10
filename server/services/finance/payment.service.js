@@ -2,6 +2,7 @@ import { Prisma } from '../../generated/prisma/client.ts';
 import { prisma } from '../../db/index.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { ConflictError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
+import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { deriveStatus } from './ledger.service.js';
 
 /**
@@ -319,6 +320,15 @@ export const recordPayment = async (input, actor, req) => {
                     targets: plan.map(({ row, cents }) => ({ id: row.id, cents }))
                 },
                 req
+            });
+
+            // The receipt to the payer, written with the payment so that a
+            // dead mail server cannot turn a recorded payment into a 500.
+            await enqueueEvent(tx, {
+                topic: TOPICS.PAYMENT_RECORDED,
+                payload: { paymentId: created.id },
+                entityType: AUDIT_ENTITY.paymentRecord,
+                entityId: created.id
             });
 
             return tx.paymentRecord.findUnique({ where: { id: created.id }, include: paymentInclude });

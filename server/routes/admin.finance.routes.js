@@ -3,7 +3,7 @@ import { Router } from 'express';
 import { config } from '../config.js';
 import { validate } from '../middleware/validate.js';
 import { authenticate, requireCapability } from '../middleware/auth.js';
-import { CAPABILITIES } from '../lib/permissions.js';
+import { CAPABILITIES, can } from '../lib/permissions.js';
 import { idempotencyKeyFrom } from '../lib/idempotency.js';
 import { addDays, todayInTimezone, zonedTimeToInstant } from '../lib/time.js';
 import { NotFoundError } from '../lib/errors.js';
@@ -19,13 +19,15 @@ import {
     summaryQuerySchema,
     marginQuerySchema,
     ageingQuerySchema,
+    dueQuerySchema,
     supplierTermsSchema,
     partnerTermsSchema,
     financeIdParamSchema,
     instalmentParamSchema,
     termsParamSchema
 } from '../validation/finance.js';
-import { toPayable, toReceivable, toPayment, toSupplierTerms } from '../serializers/finance.js';
+import { toPayable, toReceivable, toPayment, toSupplierTerms, toDueInstalment } from '../serializers/finance.js';
+import { listDue } from '../services/finance/reminder.service.js';
 import {
     listPayables,
     findPayableOr404,
@@ -202,6 +204,55 @@ adminFinanceRoutes.post(
     validate({ params: financeIdParamSchema, body: allocatePaymentSchema }),
     async (req, res) => {
         res.json(toPayment(await allocatePayment(req.valid.params.id, req.valid.body, req.user, req)));
+    }
+);
+
+// --- Payments due ----------------------------------------------------------------------
+
+/**
+ * The queue the reminders are about: what is overdue, and what falls due
+ * within `days`. Each side is shown to a viewer who may read it and left
+ * null for one who may not, so management (payables and receivables) and a
+ * role with one of the two see the same shape.
+ */
+adminFinanceRoutes.get(
+    '/due',
+    requireCapability(C.FINANCE_PAYABLES_READ, C.FINANCE_RECEIVABLES_READ),
+    validate({ query: dueQuerySchema }),
+    async (req, res) => {
+        const now = new Date();
+        const { instalments, receivables, horizon, days } = await listDue({
+            days: req.valid.query.days,
+            now,
+            instalments: can(req.user, C.FINANCE_PAYABLES_READ),
+            receivables: can(req.user, C.FINANCE_RECEIVABLES_READ)
+        });
+
+        const overdueCount = (rows) => rows.filter((row) => row.dueAt < now).length;
+        const byCurrency = (rows) =>
+            rows.reduce((totals, row) => {
+                totals[row.currency] = (totals[row.currency] ?? 0) + row.outstandingCents;
+                return totals;
+            }, {});
+
+        const dueInstalments = instalments ? instalments.map(toDueInstalment) : null;
+        const dueReceivables = receivables ? receivables.map(toReceivable) : null;
+
+        res.json({
+            days,
+            asOf: now,
+            horizon,
+            instalments: dueInstalments,
+            receivables: dueReceivables,
+            totals: {
+                instalments: dueInstalments
+                    ? { overdue: overdueCount(dueInstalments), due: dueInstalments.length - overdueCount(dueInstalments), outstandingByCurrency: byCurrency(dueInstalments) }
+                    : null,
+                receivables: dueReceivables
+                    ? { overdue: overdueCount(dueReceivables), due: dueReceivables.length - overdueCount(dueReceivables), outstandingByCurrency: byCurrency(dueReceivables) }
+                    : null
+            }
+        });
     }
 );
 

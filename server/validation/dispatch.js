@@ -145,15 +145,7 @@ export const legParamSchema = z.object({ legId: idField });
 export const assignmentParamSchema = z.object({ id: idField });
 export const blockParamSchema = z.object({ id: idField });
 
-export const notificationQuerySchema = z
-    .object({
-        unread: z
-            .enum(['true', 'false'])
-            .transform((value) => value === 'true')
-            .optional(),
-        page: z.coerce.number().int().min(1).default(1),
-        pageSize: z.coerce.number().int().min(1).max(100).default(25)
-    })
-    .strict();
-
-export const notificationParamSchema = z.object({ id: idField });
+// The bell's schemas moved to validation/notification.js when the admin
+// panel and the portal grew bells of their own; re-exported so the driver
+// router keeps importing them from here.
+export { notificationQuerySchema, notificationParamSchema } from './notification.js';

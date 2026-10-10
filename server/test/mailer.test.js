@@ -13,7 +13,10 @@ import {
     clearOutbox,
     invitationUrl,
     activationUrl,
-    passwordResetUrl
+    passwordResetUrl,
+    adminPayableUrl,
+    adminReceivableUrl,
+    portalFinanceUrl
 } from '../lib/mailer/index.js';
 import { createTracker, makeAdmin, makePartner, signIn, databaseAvailable } from './support/factories.js';
 
@@ -21,6 +24,29 @@ const app = createApp();
 const dbAvailable = await databaseAvailable();
 
 const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+/** The client's scenario: a 70% balance owed to a hotel, in the hotel's own time. */
+const payableSample = {
+    supplierName: 'Vera Hospitality LLC',
+    subjectName: 'Hotel Vera',
+    product: 'HOTEL',
+    bookingReference: 'BKG-000321',
+    instalmentLabel: '70% balance',
+    amountCents: 33_600,
+    currency: 'GEL',
+    dueAt: new Date('2026-12-13T06:00:00Z'),
+    timezone: 'Asia/Tbilisi'
+};
+
+const receivableSample = {
+    debtorName: 'Caucasus Travel',
+    reference: 'ORD-000045',
+    amountCents: 120_000,
+    currency: 'GEL',
+    dueAt: new Date('2026-10-07T19:59:00Z'),
+    timezone: 'Asia/Tbilisi',
+    daysOverdue: 2
+};
 
 const sampleData = {
     partnerInvitation: { companyName: 'Rooms Hotel', url: invitationUrl('tok'), expiresAt, invitedByName: 'Tamar' },
@@ -30,7 +56,33 @@ const sampleData = {
     accountActivation: { contactName: 'Nino', companyName: 'Rooms Hotel', url: activationUrl('tok'), expiresAt },
     invitationReissued: { companyName: 'Rooms Hotel', url: invitationUrl('tok2'), expiresAt },
     passwordReset: { url: passwordResetUrl('tok3'), expiresAt },
-    staffAccountActivation: { contactName: 'Tamar', roleLabel: 'Finance', url: activationUrl('tok4'), expiresAt }
+    staffAccountActivation: { contactName: 'Tamar', roleLabel: 'Finance', url: activationUrl('tok4'), expiresAt },
+    financePayableDue: {
+        ...payableSample,
+        daysUntil: 3,
+        url: adminPayableUrl('pay1')
+    },
+    financePayableOverdue: {
+        ...payableSample,
+        daysOverdue: 2,
+        url: adminPayableUrl('pay1')
+    },
+    financeReceivableOverdue: { ...receivableSample, url: adminReceivableUrl('rec1') },
+    receivableOverdue: { ...receivableSample, url: portalFinanceUrl() },
+    paymentReceipt: {
+        partnerName: 'Caucasus Travel',
+        amountCents: 30_000,
+        currency: 'GEL',
+        paidAt: new Date('2026-10-09T00:00:00Z'),
+        method: 'BANK_TRANSFER',
+        reference: 'TBC-88213',
+        allocations: [
+            { reference: 'TRF-000123', amountCents: 20_000 },
+            { reference: 'TRF-000124', amountCents: 5_000 }
+        ],
+        unallocatedCents: 5_000,
+        url: portalFinanceUrl()
+    }
 };
 
 describe('email templates', () => {

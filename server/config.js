@@ -84,6 +84,24 @@ const numberEnv = (key, fallback) => {
     return value;
 };
 
+/**
+ * A comma-separated list of whole, non-negative days — "7,3,1,0" — read into
+ * a sorted, de-duplicated array, largest first. Refuses anything else at boot
+ * for the same reason `numberEnv` does: a reminder schedule that silently
+ * became the default is one nobody would notice until a supplier chased.
+ */
+const parseOffsetDays = (key, fallback) => {
+    const raw = process.env[key];
+    const text = raw === undefined || raw.trim() === '' ? fallback : raw;
+    const days = text.split(',').map((part) => part.trim()).filter(Boolean).map(Number);
+
+    if (days.length === 0 || days.some((day) => !Number.isInteger(day) || day < 0 || day > 365)) {
+        throw new Error(`${key} must be whole days between 0 and 365, comma-separated, got "${raw}"`);
+    }
+
+    return [...new Set(days)].sort((a, b) => b - a);
+};
+
 // The names lib/mailer/index.js dispatches on. Checked here rather than at
 // first send, because a mistyped MAIL_TRANSPORT on a deploy used to fall back
 // to `log` — every email quietly printed instead of sent, discovered only when
@@ -208,7 +226,21 @@ export const config = {
         receivableCutoffTime: '23:59',
         // A guest without an account pays at booking; a partner has its own
         // days (Partner.paymentDueDays, D5).
-        guestDueDays: numberEnv('FINANCE_GUEST_DUE_DAYS', 0)
+        guestDueDays: numberEnv('FINANCE_GUEST_DUE_DAYS', 0),
+
+        // Supplier payment reminders (owner decision D7). Each offset is a
+        // calendar day before an instalment's due day, in the supplier's own
+        // timezone: "7" fires on the morning seven days before, "0" on the
+        // due day itself. Each fires once per instalment; the overdue alert
+        // fires when the due time passes and again every `overdueRepeatDays`
+        // while the money is still owed (0 = once only).
+        reminderOffsetDays: parseOffsetDays('FINANCE_REMINDER_OFFSET_DAYS', '7,3,1,0'),
+        reminderSweepIntervalMs: numberEnv('FINANCE_REMINDER_SWEEP_INTERVAL_MS', 10 * 60 * 1000),
+        overdueRepeatDays: numberEnv('FINANCE_OVERDUE_REPEAT_DAYS', 1),
+
+        // The shared finance mailbox every reminder is also emailed to, beside
+        // the in-app notices. Unset, reminders are in-app only.
+        opsEmail: process.env.FINANCE_OPS_EMAIL || null
     },
 
     partners: {
@@ -564,7 +596,28 @@ const assertMediaConfig = () => {
     }
 };
 
+/**
+ * The reminder cadence is validated when it is read (see `parseOffsetDays`);
+ * what is checked here is the mailbox, which a production deploy almost
+ * certainly wants and which nothing else would complain about if it were
+ * missing — reminders would simply stay in-app, unread over a weekend.
+ */
+const assertFinanceConfig = () => {
+    if (config.finance.overdueRepeatDays < 0 || !Number.isInteger(config.finance.overdueRepeatDays)) {
+        throw new Error(`FINANCE_OVERDUE_REPEAT_DAYS must be a whole number of days (0 = alert once), got "${config.finance.overdueRepeatDays}"`);
+    }
+
+    if (config.finance.opsEmail && !config.finance.opsEmail.includes('@')) {
+        throw new Error(`FINANCE_OPS_EMAIL is not an email address: "${config.finance.opsEmail}"`);
+    }
+
+    if (isDeployed && !config.finance.opsEmail) {
+        console.warn('FINANCE_OPS_EMAIL is not set: supplier payment reminders will be in-app only');
+    }
+};
+
 assertMailConfig();
 assertMediaConfig();
+assertFinanceConfig();
 
 export default config;

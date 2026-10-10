@@ -77,6 +77,21 @@ export const toInstalment = (instalment) => ({
     ...(instalment.allocations ? { allocations: instalment.allocations.map(toAllocation) } : {})
 });
 
+/** An instalment in the "payments due" queue: the instalment, with enough of its payable to say whose money it is. */
+export const toDueInstalment = (instalment) => ({
+    ...toInstalment(instalment),
+    currency: instalment.payable.currency,
+    payable: {
+        id: instalment.payable.id,
+        product: instalment.payable.product,
+        bookingReference: instalment.payable.bookingReference,
+        supplier: partnerRef(instalment.payable.supplierPartner),
+        currency: instalment.payable.currency,
+        timezone: instalment.payable.timezone,
+        status: instalment.payable.status
+    }
+});
+
 export const toPayable = (payable) => ({
     id: payable.id,
     product: payable.product,

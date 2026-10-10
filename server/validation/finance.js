@@ -179,6 +179,9 @@ export const partnerTermsSchema = z
     .strict()
     .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to change' });
 
+/** The "payments due" view: everything overdue, plus what falls due within `days`. */
+export const dueQuerySchema = z.object({ days: z.coerce.number().int().min(0).max(90).default(7) });
+
 export const financeIdParamSchema = z.object({ id: idField });
 export const instalmentParamSchema = z.object({ id: idField, sequence: z.coerce.number().int().min(1).max(10) });
 export const termsParamSchema = z.object({ id: idField });

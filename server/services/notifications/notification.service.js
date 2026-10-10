@@ -40,6 +40,9 @@ export const markNotificationRead = async (userId, id) => {
     return { notification, changed: count > 0 };
 };
 
+/** The number on the bell. */
+export const countUnreadNotifications = (userId) => prisma.notification.count({ where: { recipientUserId: userId, readAt: null } });
+
 export const markAllNotificationsRead = (userId) =>
     prisma.notification.updateMany({ where: { recipientUserId: userId, readAt: null }, data: { readAt: new Date() } });
 
@@ -49,6 +52,8 @@ export const toNotification = (notification) => ({
     title: notification.title,
     body: notification.body,
     payload: notification.payload ?? {},
+    entityType: notification.entityType ?? null,
+    entityId: notification.entityId ?? null,
     readAt: notification.readAt,
     createdAt: notification.createdAt
 });
