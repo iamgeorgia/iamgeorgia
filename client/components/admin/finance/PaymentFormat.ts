@@ -117,6 +117,7 @@ const reasonMessages: Record<string, string> = {
   WRONG_TARGET: "Money in from a buyer settles receivables; money out to a supplier settles supplier instalments.",
   NOT_SETTLEABLE: "That item is no longer open — it may have been paid or written off meanwhile. Reload the page.",
   IDEMPOTENCY_KEY_REUSED: "This form was already used to record a different payment. Close it and open it again.",
+  APPROVAL_REQUIRED: "This needs a second person to approve it. Close this and use Ask for approval instead.",
   COUNTERPARTY_REQUIRED: "Say who the money came from or went to: choose a partner, or enter a name.",
 };
 

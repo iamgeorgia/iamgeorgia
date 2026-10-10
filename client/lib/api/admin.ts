@@ -17,6 +17,9 @@ interface BadgesResponse {
   unassignedLegs: number | null;
   pendingTourRequests: number | null;
   pendingOrders: number | null;
+  paymentsDue: number | null;
+  pendingApprovals: number | null;
+  unreadNotifications: number;
 }
 
 export interface CurrencyTotal {
@@ -44,6 +47,9 @@ export const NO_BADGES: AdminBadges = {
   unassignedLegs: 0,
   pendingTourRequests: 0,
   pendingOrders: 0,
+  paymentsDue: 0,
+  pendingApprovals: 0,
+  unreadNotifications: 0,
 };
 
 /** The sidebar's queue counts. A figure the viewer may not see reads as zero. */
@@ -56,6 +62,9 @@ export const getAdminBadges = async (): Promise<AdminBadges> => {
     unassignedLegs: badges.unassignedLegs ?? 0,
     pendingTourRequests: badges.pendingTourRequests ?? 0,
     pendingOrders: badges.pendingOrders ?? 0,
+    paymentsDue: badges.paymentsDue ?? 0,
+    pendingApprovals: badges.pendingApprovals ?? 0,
+    unreadNotifications: badges.unreadNotifications ?? 0,
   };
 };
 

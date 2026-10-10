@@ -28,7 +28,17 @@ const secondary =
  * are), write off what is left, or keep a note. Every change but a payment
  * asks for a reason, which the server keeps in the audit log.
  */
-export function ReceivableActions({ receivable }: { receivable: Receivable }) {
+export function ReceivableActions({
+  receivable,
+  refundWithoutApproval = true,
+  adjustWithoutApproval = true,
+}: {
+  receivable: Receivable;
+  /** False for someone who must ask for approval to refund. */
+  refundWithoutApproval?: boolean;
+  /** False for someone who must ask for approval to move a due date or write off. */
+  adjustWithoutApproval?: boolean;
+}) {
   const [dialog, setDialog] = useState<Dialog>(null);
   const open = receivable.status === "OPEN" || receivable.status === "PARTIAL";
   const label = `${receivable.reference} · ${receivableDebtorName(receivable)}`;
@@ -55,7 +65,7 @@ export function ReceivableActions({ receivable }: { receivable: Receivable }) {
           />
         )}
 
-        {receivable.refundDueCents > 0 && (
+        {refundWithoutApproval && receivable.refundDueCents > 0 && (
           <RecordPaymentButton
             variant="secondary"
             label={`Refund ${formatMoney(receivable.refundDueCents, receivable.currency)}`}
@@ -71,7 +81,7 @@ export function ReceivableActions({ receivable }: { receivable: Receivable }) {
           />
         )}
 
-        {open && (
+        {adjustWithoutApproval && open && (
           <button type="button" onClick={() => setDialog("due")} className={secondary}>
             <CalendarClock size={15} aria-hidden />
             Change due date
@@ -83,7 +93,7 @@ export function ReceivableActions({ receivable }: { receivable: Receivable }) {
           {receivable.notes ? "Edit note" : "Add a note"}
         </button>
 
-        {open && receivable.outstandingCents > 0 && (
+        {adjustWithoutApproval && open && receivable.outstandingCents > 0 && (
           <button
             type="button"
             onClick={() => setDialog("waive")}

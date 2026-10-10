@@ -55,7 +55,13 @@ export type AdminBadgeKey =
   | "pendingPartners"
   | "unassignedLegs"
   | "pendingTourRequests"
-  | "pendingOrders";
+  | "pendingOrders"
+  /** Supplier instalments overdue or due within the week — Finance → Payables. */
+  | "paymentsDue"
+  /** Money changes waiting for a second person to approve them — Finance → Approvals. */
+  | "pendingApprovals"
+  /** The viewer's own unread notices: the bell, not a sidebar pill. */
+  | "unreadNotifications";
 
 export type AdminBadges = Record<AdminBadgeKey, number>;
 
@@ -283,9 +289,25 @@ export const adminNavigation: AdminNavGroup[] = [
     title: "Finance",
     entries: [
       { label: "Finance overview", href: "/admin/finance", icon: Landmark, capability: "finance.payables.read" },
-      { label: "Payables", href: "/admin/finance/payables", icon: ArrowUpRight, capability: "finance.payables.read" },
+      // Badged with instalments late or due this week: the queue the
+      // payment reminders are about, and the one a finance desk opens first.
+      {
+        label: "Payables",
+        href: "/admin/finance/payables",
+        icon: ArrowUpRight,
+        badgeKey: "paymentsDue",
+        capability: "finance.payables.read",
+      },
       { label: "Receivables", href: "/admin/finance/receivables", icon: ArrowDownLeft, capability: "finance.receivables.read" },
       { label: "Payments", href: "/admin/finance/payments", icon: Banknote, capability: "finance.payments.read" },
+      // Refunds and write-offs that need a second person; badged with those still waiting.
+      {
+        label: "Approvals",
+        href: "/admin/finance/approvals",
+        icon: ClipboardCheck,
+        badgeKey: "pendingApprovals",
+        capability: ["finance.refunds.request", "finance.adjustments.request", "finance.refunds.approve", "finance.adjustments.approve"],
+      },
       { label: "Reports", href: "/admin/finance/reports", icon: ChartColumn, capability: "finance.reports.read" },
     ],
   },
@@ -296,6 +318,7 @@ export const adminNavigation: AdminNavGroup[] = [
     title: "People",
     entries: [
       { label: "Staff", href: "/admin/users", icon: UsersRound, capability: "users.staff.manage" },
+      { label: "Roles", href: "/admin/roles", icon: ShieldCheck, capability: "roles.manage" },
       { label: "Audit log", href: "/admin/audit", icon: ScrollText, capability: "audit.read" },
     ],
   },
@@ -308,7 +331,6 @@ export const adminNavigation: AdminNavGroup[] = [
 ];
 
 /**
-      { label: "Roles", href: "/admin/roles", icon: ShieldCheck, capability: "roles.manage" },
  * Marks a nav item active, including its detail pages, so opening one booking
  * keeps "Hotel bookings" highlighted. `/admin` only matches exactly — otherwise
  * the overview would stay lit on every screen.

@@ -11,6 +11,7 @@ import {
   AdminPanel,
 } from "@/components/admin/AdminPage";
 import { Cell, DataTable, Row, type Column } from "@/components/admin/DataTable";
+import { PayableApprovalRequests } from "@/components/admin/finance/ApprovalRequestActions";
 import { PayableActions } from "@/components/admin/finance/PayableActions";
 import { formatPayableDate } from "@/components/admin/finance/PayableFormat";
 import { PayableStatusBadge } from "@/components/admin/finance/PayableStatusBadge";
@@ -93,6 +94,9 @@ export default async function AdminPayablePage({ params }: PageProps<"/[locale]/
   }
 
   const canWrite = can(session, "finance.payments.write") && payable.status !== "WAIVED";
+  const canAdjustWithoutApproval = can(session, "finance.adjustments.execute");
+  const canAskForApproval =
+    !canAdjustWithoutApproval && can(session, "finance.adjustments.request") && payable.status !== "WAIVED";
   const money = (cents: number) => formatMoney(cents, payable.currency);
   const bookingHref = subjectHref(payable.booking);
   const date = (value: string | null) => formatPayableDate(value, payable.timezone);
@@ -340,7 +344,8 @@ export default async function AdminPayablePage({ params }: PageProps<"/[locale]/
         </div>
 
         <div className="min-w-0 space-y-6">
-          {canWrite && <PayableActions payable={payable} />}
+          {canWrite && <PayableActions payable={payable} adjustWithoutApproval={canAdjustWithoutApproval} />}
+          {canAskForApproval && <PayableApprovalRequests payable={payable} />}
 
           <AdminPanel title="Booking">
             <AdminDefinitionList

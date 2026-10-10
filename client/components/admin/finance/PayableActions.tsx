@@ -26,7 +26,10 @@ const danger =
 const cancelButton =
   "inline-flex h-10 items-center rounded-sm border border-line bg-surface px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink/40 hover:text-ink disabled:opacity-60";
 
-const supplierOf = (payable: Payable) => payable.supplier?.name ?? "the supplier";
+/** What paying an instalment needs to know about its payable — the detail page passes the whole record, the overview a slice. */
+export type PayablePayFields = Pick<Payable, "id" | "currency" | "bookingReference" | "timezone" | "supplier">;
+
+const supplierOf = (payable: Pick<Payable, "supplier">) => payable.supplier?.name ?? "the supplier";
 
 /**
  * What Finance can do to one payable: pay an instalment, set the amount owed
@@ -39,7 +42,14 @@ const supplierOf = (payable: Payable) => payable.supplier?.name ?? "the supplier
  * success the page is refreshed rather than patched, so the figures on screen
  * are always the server's.
  */
-export function PayableActions({ payable }: { payable: Payable }) {
+/** `adjustWithoutApproval` is false for someone who must ask for approval instead of overriding or writing off. */
+export function PayableActions({
+  payable,
+  adjustWithoutApproval = true,
+}: {
+  payable: Payable;
+  adjustWithoutApproval?: boolean;
+}) {
   const router = useRouter();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -91,6 +101,7 @@ export function PayableActions({ payable }: { payable: Payable }) {
         )}
 
         <div className="space-y-2.5 border-t border-line pt-4">
+          {adjustWithoutApproval && (
           <button
             type="button"
             onClick={() => {
@@ -102,6 +113,7 @@ export function PayableActions({ payable }: { payable: Payable }) {
             <PenLine size={15} aria-hidden />
             Set the amount owed by hand
           </button>
+          )}
 
           <button
             type="button"
@@ -115,7 +127,7 @@ export function PayableActions({ payable }: { payable: Payable }) {
             {payable.notes ? "Edit notes" : "Add a note"}
           </button>
 
-          {payable.outstandingCents > 0 && (
+          {adjustWithoutApproval && payable.outstandingCents > 0 && (
             <button
               type="button"
               onClick={() => {
@@ -176,7 +188,12 @@ function CancelButton({ onClose, busy }: { onClose: () => void; busy: boolean })
  * payment the server did record answers with that record instead of paying
  * the supplier twice. Closing and reopening the dialog is a new payment.
  */
-function PayForm({ payable, instalment, onClose, onDone }: FormProps & { instalment: Instalment }) {
+export function PayForm({
+  payable,
+  instalment,
+  onClose,
+  onDone,
+}: Omit<FormProps, "payable"> & { payable: PayablePayFields; instalment: Instalment }) {
   const [idempotencyKey] = useState(() => newIdempotencyKey());
   const today = todayInTbilisi();
 

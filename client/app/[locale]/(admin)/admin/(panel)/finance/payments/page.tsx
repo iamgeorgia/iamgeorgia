@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { calendarDay, endOfDay, startOfDay } from "@/components/admin/finance/PaymentFormat";
+import { RefundApprovalRequestButton } from "@/components/admin/finance/ApprovalRequestActions";
 import { PaymentsBrowser } from "@/components/admin/finance/PaymentsBrowser";
 import { RecordPaymentButton } from "@/components/admin/finance/RecordPaymentModal";
 import { listPayments, type PaymentQuery } from "@/lib/api/finance";
@@ -68,7 +69,14 @@ export default async function AdminPaymentsPage({ searchParams }: PageProps<"/[l
       <AdminPageHeader
         title="Payments"
         description="Money in from buyers and out to suppliers, refunds both ways, and what each payment settled."
-        actions={can(session, "finance.payments.write") ? <RecordPaymentButton /> : undefined}
+        actions={
+          <div className="flex flex-wrap items-start gap-2">
+            {can(session, "finance.payments.write") && <RecordPaymentButton />}
+            {!can(session, "finance.refunds.execute") && can(session, "finance.refunds.request") && (
+              <RefundApprovalRequestButton />
+            )}
+          </div>
+        }
       />
 
       <PaymentsBrowser

@@ -16,6 +16,7 @@ import {
   receivableDebtorName,
   receivableSubjectLine,
 } from "@/components/admin/finance/PaymentFormat";
+import { ReceivableApprovalRequests } from "@/components/admin/finance/ApprovalRequestActions";
 import { ReceivableActions } from "@/components/admin/finance/ReceivableActions";
 import { SettlementStatusBadge } from "@/components/admin/finance/SettlementStatusBadge";
 import { dueInWords, paymentKindLabel, paymentMethodLabels, subjectHref } from "@/lib/admin/finance";
@@ -83,6 +84,8 @@ export default async function AdminReceivablePage({
 
   const canWrite = can(session, "finance.payments.write");
   const canReadPayments = can(session, "finance.payments.read");
+  const canRefundWithoutApproval = can(session, "finance.refunds.execute");
+  const canAdjustWithoutApproval = can(session, "finance.adjustments.execute");
   const money = (cents: number) => formatMoney(cents, receivable.currency);
   const isOpen = receivable.status === "OPEN" || receivable.status === "PARTIAL";
   const late = receivable.overdue && isOpen;
@@ -295,7 +298,18 @@ export default async function AdminReceivablePage({
             </p>
           </AdminPanel>
 
-          {canWrite && <ReceivableActions receivable={receivable} />}
+          {canWrite && (
+            <ReceivableActions
+              receivable={receivable}
+              refundWithoutApproval={canRefundWithoutApproval}
+              adjustWithoutApproval={canAdjustWithoutApproval}
+            />
+          )}
+          <ReceivableApprovalRequests
+            receivable={receivable}
+            askForRefund={!canRefundWithoutApproval && can(session, "finance.refunds.request")}
+            askForAdjustments={!canAdjustWithoutApproval && can(session, "finance.adjustments.request")}
+          />
 
           <AdminPanel title="Note">
             {receivable.notes ? (
