@@ -13,6 +13,7 @@ import type {
   PayInstalmentInput,
   Payable,
   Payment,
+  PaymentsDue,
   PaymentDirection,
   PaymentKind,
   PaymentMethod,
@@ -89,6 +90,9 @@ export const listPayables = (query: PayableQuery = {}) =>
   serverFetch<Paginated<Payable>>(`${base}/payables${toQueryString(query)}`);
 
 export const getPayable = (id: string) => serverFetch<Payable>(`${base}/payables/${id}`);
+
+/** What is overdue and what falls due within `days` — the queue the reminders are about. */
+export const getPaymentsDue = (days = 7) => serverFetch<PaymentsDue>(`${base}/due?days=${days}`);
 
 export const listReceivables = (query: ReceivableQuery = {}) =>
   serverFetch<Paginated<Receivable>>(`${base}/receivables${toQueryString(query)}`);

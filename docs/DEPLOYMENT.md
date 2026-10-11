@@ -98,6 +98,8 @@ Region is `frankfurt` in the file — the closest to Georgia. Change it in
 | `MAIL_REPLY_TO` | The mailbox humans reply to |
 | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` | From the email provider |
 | `TRANSFER_OPS_EMAIL` | Where "leg still has no driver" alerts go |
+| `FINANCE_OPS_EMAIL` | The shared finance mailbox: supplier payment reminders, overdue alerts and overdue bills are emailed there beside the in-app notices. Unset, reminders are in-app only (the API warns at boot). The schedule itself (`FINANCE_REMINDER_OFFSET_DAYS=7,3,1,0`, `FINANCE_OVERDUE_REPEAT_DAYS=1`) has defaults and is only set to change it |
+| `API_CLIENT_TOKEN` | A long random string, set **identically** on this service and on the Vercel project. The web app's server renders send it with the visitor's address so the API's per-IP rate limits count visitors rather than the one Vercel/Render address they all arrive from. Unset, every visitor shares one bucket of 30 dated searches a minute (`RATE_LIMIT_SEARCH`) and 100 requests a minute (`RATE_LIMIT_GLOBAL`) |
 | `MEDIA_S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
 | `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY` | The R2 API token |
 | `MEDIA_PUBLIC_BUCKET`, `MEDIA_PRIVATE_BUCKET` | Bucket **names**, never URLs |

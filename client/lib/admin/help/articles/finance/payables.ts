@@ -30,7 +30,7 @@ export const article = {
     "refund due",
     "needs review",
   ],
-  related: ["fn-terms", "fn-payments", "fn-receivables"],
+  related: ["fn-terms", "fn-payments", "fn-receivables", "fn-reminders"],
   blocks: [
     { type: "where", path: ["Sidebar", "Finance", "Payables"] },
     {

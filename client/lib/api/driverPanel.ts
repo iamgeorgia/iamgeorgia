@@ -1,4 +1,5 @@
 import { apiFetch, serverFetch } from "./client";
+import { listNotifications, type NotificationQuery } from "./notifications";
 import { toQueryString } from "./query";
 import type { Paginated } from "@/types/partner";
 import type { TransferLegStatus } from "@/types/transfer";
@@ -44,22 +45,8 @@ export const updateAssignmentStatus = (
 ) => apiFetch<DriverAssignment>(`${base}/assignments/${encodeURIComponent(id)}/status`, { method: "POST", body });
 
 // --- The bell ---------------------------------------------------------------
+//
+// Shared with the admin panel and the portal: `lib/api/notifications.ts`
+// with scope "driver". Kept here under its old name for the Today page.
 
-export interface DriverNotification {
-  id: string;
-  kind: string;
-  title: string;
-  body: string;
-  payload: { assignmentId?: string; legId?: string; bookingReference?: string; score?: number };
-  readAt: string | null;
-  createdAt: string;
-}
-
-export const listDriverNotifications = (query: { unread?: "true" | "false"; page?: number; pageSize?: number } = {}) =>
-  serverFetch<Paginated<DriverNotification> & { unreadCount: number }>(`${base}/notifications${toQueryString(query)}`);
-
-export const markNotificationRead = (id: string) =>
-  apiFetch<DriverNotification>(`${base}/notifications/${encodeURIComponent(id)}/read`, { method: "POST" });
-
-export const markAllNotificationsRead = () =>
-  apiFetch<{ count: number }>(`${base}/notifications/read-all`, { method: "POST" });
+export const listDriverNotifications = (query: NotificationQuery = {}) => listNotifications("driver", query);

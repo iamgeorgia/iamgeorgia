@@ -1,12 +1,12 @@
 import type { Metadata } from "next";
 
-import { NotificationList } from "@/components/driver/NotificationList";
-import { listDriverNotifications } from "@/lib/api/driverPanel";
+import { NotificationList } from "@/components/notifications/NotificationList";
+import { listNotifications } from "@/lib/api/notifications";
 
 export const metadata: Metadata = { title: "Notifications" };
 
 export default async function DriverNotificationsPage() {
-  const result = await listDriverNotifications({ pageSize: 50 });
+  const result = await listNotifications("driver", { pageSize: 50 });
 
   return (
     <section aria-labelledby="driver-notifications">
@@ -14,7 +14,7 @@ export default async function DriverNotificationsPage() {
         Notifications
       </h1>
       <div className="mt-3">
-        <NotificationList notifications={result.data} unreadCount={result.unreadCount} />
+        <NotificationList scope="driver" notifications={result.data} unreadCount={result.unreadCount} />
       </div>
     </section>
   );

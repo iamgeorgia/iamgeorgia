@@ -1,6 +1,7 @@
 import type { HelpArticle } from "../../types";
 
 import { article as accounts } from "./accounts";
+import { article as notifications } from "./notifications";
 import { article as overview } from "./overview";
 import { article as quickStartAdmin } from "./quick-start-admin";
 import { article as quickStartDispatcher } from "./quick-start-dispatcher";
@@ -15,6 +16,7 @@ export const articles: HelpArticle[] = [
   signingIn,
   roles,
   sidebarAndTopBar,
+  notifications,
   accounts,
   overview,
   quickStartAdmin,

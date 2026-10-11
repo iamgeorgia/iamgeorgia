@@ -3,14 +3,15 @@ import { ArrowRight } from "lucide-react";
 
 import { AdminPanel } from "@/components/admin/AdminPage";
 import { formatAuditTime } from "@/lib/admin/audit";
-import { dueInWords, paymentKindLabel, productLabels } from "@/lib/admin/finance";
+import { dueInWords, paymentKindLabel } from "@/lib/admin/finance";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
-import type { Payable, Payment, Receivable } from "@/types/finance";
+import type { Payment, Receivable } from "@/types/finance";
 
 /**
- * The three short lists under the finance overview's cards: what we must pay
- * soon, what buyers should already have paid, and the latest money moved.
+ * Two of the short lists under the finance overview's cards: what buyers
+ * should already have paid, and the latest money moved. The third — what we
+ * must pay soon — is `PaymentsDuePanel`, which can also record the payment.
  *
  * Server components. Rows link with `prefetch={false}` — each detail page reads
  * its record, and prefetching eight of them per panel would spend the panel's
@@ -61,67 +62,6 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 }
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
-
-const SETTLEABLE = new Set(["OPEN", "PARTIAL"]);
-
-/**
- * What falls due on the payable's next date. The list is filtered on the
- * payable's `nextDueAt`, so the instalment on that date is the one being
- * asked for; the payable's whole outstanding is the fallback.
- */
-const dueNow = (payable: Payable) =>
-  payable.instalments.find(
-    (instalment) => SETTLEABLE.has(instalment.status) && instalment.dueAt === payable.nextDueAt,
-  )?.outstandingCents ?? payable.outstandingCents;
-
-export function FinanceOverviewPayables({
-  payables,
-  total,
-  now,
-  path,
-}: {
-  payables: Payable[];
-  total: number;
-  now: Date;
-  path: PathFn;
-}) {
-  return (
-    <AdminPanel
-      title="Supplier payments due"
-      description={
-        payables.length > 0
-          ? `${plural(total, "payment", "payments")} late or due in the next 7 days, earliest date first.`
-          : "Nothing due to suppliers in the next 7 days."
-      }
-      action={<ViewAll href={path("/admin/finance/payables")} />}
-      bodyClassName="p-0"
-    >
-      {payables.length === 0 ? (
-        <EmptyNote>Nothing late, nothing due this week.</EmptyNote>
-      ) : (
-        <ul className="divide-y divide-line">
-          {payables.map((payable) => (
-            <li key={payable.id}>
-              <Link href={path(`/admin/finance/payables/${payable.id}`)} prefetch={false} className={rowClass}>
-                <span className="min-w-0">
-                  <span className="block text-[0.875rem] font-medium text-ink">{payable.bookingReference}</span>
-                  <span className="block truncate text-[0.75rem] text-muted">
-                    {payable.supplier?.name ?? "Our own inventory"} · {productLabels[payable.product]}
-                  </span>
-                </span>
-                <AmountAndDue
-                  amount={formatMoney(dueNow(payable), payable.currency)}
-                  due={dueInWords(payable.nextDueAt, now)}
-                  late={Boolean(payable.nextDueAt) && new Date(payable.nextDueAt!).getTime() < now.getTime()}
-                />
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </AdminPanel>
-  );
-}
 
 export function FinanceOverviewReceivables({
   receivables,

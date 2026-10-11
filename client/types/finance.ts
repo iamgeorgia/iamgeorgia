@@ -120,6 +120,37 @@ export interface Receivable {
   allocations?: Allocation[];
 }
 
+/** An instalment in the "payments due" queue, with enough of its payable to say whose money it is. */
+export interface DueInstalment extends Instalment {
+  currency: string;
+  payable: {
+    id: string;
+    product: FinanceProduct;
+    bookingReference: string;
+    supplier: PartnerRef | null;
+    currency: string;
+    timezone: string;
+    status: SettlementStatus;
+  };
+}
+
+export interface DueTotals {
+  overdue: number;
+  due: number;
+  /** Outstanding per currency, in minor units. Never summed across currencies. */
+  outstandingByCurrency: Record<string, number>;
+}
+
+/** `GET /admin/finance/due`: what is overdue and what falls due within `days`. A side the viewer may not read is null. */
+export interface PaymentsDue {
+  days: number;
+  asOf: string;
+  horizon: string;
+  instalments: DueInstalment[] | null;
+  receivables: Receivable[] | null;
+  totals: { instalments: DueTotals | null; receivables: DueTotals | null };
+}
+
 export interface Payment {
   id: string;
   direction: PaymentDirection;

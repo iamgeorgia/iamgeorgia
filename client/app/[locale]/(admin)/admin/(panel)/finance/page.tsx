@@ -3,12 +3,9 @@ import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { FinanceOverviewCurrency } from "@/components/admin/finance/FinanceOverviewCurrency";
-import {
-  FinanceOverviewPayables,
-  FinanceOverviewPayments,
-  FinanceOverviewReceivables,
-} from "@/components/admin/finance/FinanceOverviewPanels";
-import { getFinanceSummary, listPayables, listPayments, listReceivables } from "@/lib/api/finance";
+import { FinanceOverviewPayments, FinanceOverviewReceivables } from "@/components/admin/finance/FinanceOverviewPanels";
+import { PaymentsDuePanel } from "@/components/admin/finance/PaymentsDuePanel";
+import { getFinanceSummary, getPaymentsDue, listPayments, listReceivables } from "@/lib/api/finance";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
@@ -16,13 +13,8 @@ import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Finance overview" };
 
-const WEEK_MS = 7 * 86_400_000;
-
-/** The moment this request is rendered, and a week after it. */
-const requestWindow = () => {
-  const now = new Date();
-  return { now, inWeek: new Date(now.getTime() + WEEK_MS) };
-};
+/** How far ahead "due soon" looks — the same week the reminders and the sidebar badge count. */
+const DUE_DAYS = 7;
 
 /**
  * Who owes whom, right now.
@@ -44,11 +36,13 @@ export default async function AdminFinanceOverviewPage() {
   }
 
   const { path } = await getI18n();
-  const { now, inWeek } = requestWindow();
+  const now = new Date();
 
-  const [summary, payables, receivables, payments] = await Promise.all([
+  // The due queue is instalment by instalment — the rows the reminders are
+  // about — rather than the payable list filtered on its next date.
+  const [summary, due, receivables, payments] = await Promise.all([
     can(session, "finance.reports.read") ? getFinanceSummary() : null,
-    listPayables({ status: ["OPEN", "PARTIAL"], dueBefore: inWeek.toISOString(), pageSize: 8 }),
+    getPaymentsDue(DUE_DAYS),
     can(session, "finance.receivables.read") ? listReceivables({ overdue: "true", pageSize: 8 }) : null,
     can(session, "finance.payments.read") ? listPayments({ pageSize: 5 }) : null,
   ]);
@@ -79,7 +73,13 @@ export default async function AdminFinanceOverviewPage() {
       )}
 
       <div className="mt-8 grid gap-6 xl:grid-cols-3">
-        <FinanceOverviewPayables payables={payables.data} total={payables.total} now={now} path={path} />
+        <PaymentsDuePanel
+          instalments={due.instalments ?? []}
+          totals={due.totals.instalments ?? { overdue: 0, due: 0, outstandingByCurrency: {} }}
+          days={due.days}
+          now={now.toISOString()}
+          canPay={can(session, "finance.payments.write")}
+        />
         {receivables && (
           <FinanceOverviewReceivables
             receivables={receivables.data}

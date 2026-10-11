@@ -90,6 +90,11 @@ services:
         generateValue: true
       - key: TRANSFER_RATING_TOKEN_SECRET
         generateValue: true
+      # Shared with the Vercel project (same name): set the same long random
+      # value in both places, or the client's server renders share one
+      # rate-limit bucket for every visitor.
+      - key: API_CLIENT_TOKEN
+        sync: false
 
       # Mail
       - key: MAIL_TRANSPORT
@@ -109,6 +114,9 @@ services:
       - key: SMTP_PASS
         sync: false
       - key: TRANSFER_OPS_EMAIL
+        sync: false
+      # The finance mailbox for supplier payment reminders and overdue alerts.
+      - key: FINANCE_OPS_EMAIL
         sync: false
 
       # Media on Cloudflare R2

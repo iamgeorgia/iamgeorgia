@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowRight, CalendarCheck, CheckCircle2, Handshake, Wallet } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CalendarCheck, CheckCircle2, Handshake, Wallet } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader, AdminPanel } from "@/components/admin/AdminPage";
 import { Cell, DataTable, EmptyRow, Row } from "@/components/admin/DataTable";
@@ -15,6 +15,7 @@ import { APPLICATION_STATUSES, formatPartnerDate, partnerKindLabels } from "@/li
 import { formatStay, formatStayDate } from "@/lib/admin/bookings";
 import { formatCompactMoney, recentBookings, upcomingArrivals } from "@/lib/admin/metrics";
 import { getBookingSummary } from "@/lib/api/admin";
+import { getPaymentsDue } from "@/lib/api/finance";
 import { formatMoney } from "@/lib/money";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
@@ -41,13 +42,17 @@ export default async function AdminOverviewPage() {
 
   const { path } = await getI18n();
 
-  const [applications, approved, summary, arrivals, recent] = await Promise.all([
+  const [applications, approved, summary, arrivals, recent, due] = await Promise.all([
     listPartners({ status: APPLICATION_STATUSES, pageSize: 4 }),
     listPartners({ status: "APPROVED", pageSize: 1 }),
     getBookingSummary(30),
     upcomingArrivals(5),
     recentBookings(6),
+    // Supplier payments late or due this week, for the roles that pay them.
+    can(session, "finance.payables.read") ? getPaymentsDue(7) : null,
   ]);
+
+  const paymentsDue = due?.totals.instalments ?? null;
 
   // The API sums per currency, largest first. The tile shows the leading one
   // and says so when there is more than one, rather than adding lari to
@@ -72,7 +77,7 @@ export default async function AdminOverviewPage() {
         <QuickStartCard role="ADMIN" steps={quickStartFor("ADMIN")} dismissable />
       </div>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className={`mt-8 grid gap-4 sm:grid-cols-2 ${paymentsDue ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
         <StatCard
           label="Active bookings"
           value={String(summary.activeCount)}
@@ -97,6 +102,18 @@ export default async function AdminOverviewPage() {
           icon={Handshake}
           hint={`${approved.total} partners approved`}
         />
+        {paymentsDue && (
+          <StatCard
+            label="Supplier payments due"
+            value={String(paymentsDue.overdue + paymentsDue.due)}
+            icon={ArrowUpRight}
+            hint={
+              paymentsDue.overdue > 0
+                ? `${paymentsDue.overdue} late · ${paymentsDue.due} due this week`
+                : "Due in the next 7 days; none late"
+            }
+          />
+        )}
       </div>
 
       <div className="mt-6 grid gap-6 xl:grid-cols-3">

@@ -150,6 +150,7 @@ report, or `--folder "03 · Hotel search & booking"` to run one folder.
 | **06m · Admin — Packages** | A package template with a hotel slot: validation of slots, kosher profile and override, translations, gallery, publish, retire, delete |
 | **06n · Admin — Staff, team & audit** | Staff accounts (super admins: invite → role change → resend → delete; anyone else is asserted to get 403), a partner's own team (needs `partnerEmail`), and the audit log with its filters |
 | **06o · Admin — Finance** | Reports per currency (and CSV), payables, receivables and payments lists, supplier terms, the refusals a payment or adjustment must give, and a partner's own statement. Read-only plus refusals: it never records a real payment |
+| **06p · Admin — Notifications & reminders** | The admin and portal bells (list, unread count, read marks), the payments-due queue behind the supplier payment reminders, the `paymentsDue` and `unreadNotifications` badges, and the outbox's failed-event list. The reminders themselves come from the server's clock, so the folder reads what the sweeper produced |
 | **07 · Kosher** | Kosher services and certification on a hotel, the kosher search filters, a requirement the hotel cannot meet |
 | **08 · Security & error contract** | Requests that are *supposed* to fail: 401, 403, 404, 400, 413, 429, and the cross-site write check |
 

@@ -2,20 +2,20 @@
 
 Approved 2026-10-08; Phases 0–2 implemented (see Status below). Line numbers refer to the working tree at commit `499657d` (branch `main`, 2026-10-08) and have drifted.
 
-## Status (updated 2026-10-09)
+## Status (updated 2026-10-10)
 
 | Phase | State | Commits (branch `feat/b2b-phase-0-hardening`) |
 | --- | --- | --- |
 | 0 — Security hardening and critical fixes | **Done** | `fee5cdc` (client), `78a9f3b` (server) |
 | 1 — Employee accounts and RBAC | **Done** | `78a9f3b` (server), `f260fa4` (client) |
 | 2 — Operational finance | **Done** | `86baf34` |
-| 3 — Supplier payment reminders | Not started — needs D7 (who is reminded) | |
+| 3 — Supplier payment reminders | **Done** | `568c1aa` (server); client + docs follow |
 | 4 — InvoiceOcean | Not started — needs D1–D4 | |
 | 5 — Maps hotel search for transfers | Not started — needs the owner's Google keys and Map ID (T0.7 ops) | |
 
 Also shipped on the way: `c651fab` (a hotel booking's `totalCents` now includes the tax already in the rate, matching checkout — fixed the long-standing Postman "03 Confirm the booking" failure) and `08f2930` (browser-extension attributes on `<html>` no longer reported as hydration mismatches).
 
-**Decided by the owner:** D5 (days to pay set per partner, and Finance may move one booking's due date), D6 (what a supplier is owed after a cancellation is a setting on each supplier's terms: same share of the net — the default —, nothing unless non-refundable, or by hand), D8 (reports per currency, no conversion), D11 (confirmed as proposed).
+**Decided by the owner:** D5 (days to pay set per partner, and Finance may move one booking's due date), D6 (what a supplier is owed after a cancellation is a setting on each supplier's terms: same share of the net — the default —, nothing unless non-refundable, or by hand), D8 (reports per currency, no conversion), D11 (confirmed as proposed). D7 was applied as the plan's default on 2026-10-10 (finance-capable staff in-app plus `FINANCE_OPS_EMAIL`; 7, 3, 1, 0 days before; overdue daily) — every part is an environment setting, so the owner can change it without code.
 
 **Where it differs from the plan as written:**
 - Partner-side booking changes are refused for a role without `partner.bookings.write`/`cancel` inside `rejectUnapprovedPartner`; there is no separate middleware.
@@ -23,6 +23,9 @@ Also shipped on the way: `c651fab` (a hotel booking's `totalCents` now includes 
 - Supplier terms live at `/api/admin/finance/terms/:kind/:id` rather than under each product router, because those routers require `catalogue.write` for every change and Finance holds `finance.terms.write`.
 - The ledger is written as idempotent *sync* functions (`services/finance/ledger.service.js`) called after every status change, and reused by `scripts/backfill-finance.js`.
 - A dispatcher keeps the sidebar it had: the catalogue screens are listed for `catalogue.write` or `bookings.read`, though the server grants dispatchers `catalogue.read`.
+- Phase 3: "days before" are **calendar days in the payable's timezone**, not instants — the plan's instant comparison could never fire the 0-day reminder; "due today" now arrives after midnight on the due day and "overdue" once the cutoff passes. Overdue alerts repeat daily (`FINANCE_OVERDUE_REPEAT_DAYS`, 0 = once). An overdue receivable nudges a **partner** debtor only (email + portal notice), never a guest, who has no portal to pay from. `PAYMENT_RECORDED` sends the paying agency a receipt (email + portal notice) and tells Finance nothing — Finance recorded it. A retried dead letter gets one more attempt, not another climb. Notification kinds `FINANCE_PAYMENT_RECEIVED` and audit action `OUTBOX_EVENT_RETRIED` were added; `FINANCE_INVOICE_ISSUED` / `FINANCE_INVOICE_SYNC_FAILED` are reserved for Phase 4. The migration is `20261010100000_…` (dated the day it was written). No failed-outbox screen in the client yet: the API is there (`/admin/outbox/failed`, retry), the screen is a follow-up.
+
+**Verified on 2026-10-10 (Phase 3):** server suite 1,097/1,097 (15 new in `finance.reminders` and `notifications.admin`); RBAC matrix regenerated — 14 new routes, no existing row changed; client typecheck, lint (0 errors), 22 tests (help registry included) and production build; a live run on the dev database with the demo accounts: a booking as the demo agency, the hotel balance dated two days out, the transfer balance and the agency's bill backdated — the sweeper and drain produced "Abanotubani Residence: 70% balance (GEL 337.40) due in 2 days", the overdue alert and the overdue bill for Finance and Management, the nudge and (after a recorded payment) the receipt for the agency owner, and the four emails to the finance mailbox in the log; a browser walk as Finance (overview tile, bell dropdown, notifications page, finance overview panel with **Mark paid**, Payables badge) and as the agency owner (portal bell and page). Note: the test suite notifies every finance-capable user on the database it runs on, so demo finance accounts on the dev DB accumulate test notices (138 unread at the time of the walk).
 
 **Verified on 2026-10-09:** server suite 1,082/1,082; client typecheck, lint (0 errors), tests and production build; an end-to-end scenario of 32 checks across Phases 0–2 on the dev database with `scripts/seed-b2b-demo.js` accounts; a browser walk as every demo role; the full Postman collection (749 requests). Its remaining failures are older or setup-dependent: transfer cancellation quote reads `refundCents` where the API sends `refundableCents`, tours dated search 500, and folders 05 and 07 expect an unapproved partner and kosher fixtures.
 
@@ -1033,7 +1036,7 @@ Phase 0 Hardening ──┬──> Phase 1 Accounts & RBAC ──> Phase 2 Opera
 | D4 | Tax treatment of transfers/tours/services on invoices (VAT rate per product type; exempt supplies) | Phase 4 | Same 18% included for all; FINANCE can override per line |
 | D5 | Partner payment terms (due days after confirmation) default and per-partner overrides | Phase 2 | **Decided 2026-10-09:** due days set per partner (no fixed platform rule; 14 only as the starting value for a new partner), and Finance may override the due date on a single receivable (`PATCH /admin/finance/receivables/:id` `dueAt`, audited) |
 | D6 | Supplier payment terms per hotel contract (the 30%/3 days and 70%/−7 days example); whether a supplier is owed anything on cancellation | Phase 2/3 | **Decided 2026-10-09: depends on the supplier.** `SupplierPaymentTerms.cancellationLiability` ∈ `PROPORTIONAL` (owed the same share of net as the charge taken: 50% charged → 50% of net), `NONE_UNLESS_NON_REFUNDABLE`, `MANUAL` (payable flagged for Finance to set). Default `PROPORTIONAL` when a supplier has no terms. Finance can always adjust a single payable (audited, reason required). Replaces the `nonRefundable` boolean as the cancellation switch in `applyCancellationInTx` |
-| D7 | Who receives payment reminders (FINANCE role users + a finance mailbox?) and at which offsets | Phase 3 | FINANCE and ADMIN in-app; `FINANCE_OPS_EMAIL`; offsets 7, 3, 1, 0 days and daily overdue |
+| D7 | Who receives payment reminders (FINANCE role users + a finance mailbox?) and at which offsets | Phase 3 | **Applied as the default 2026-10-10 (owner to confirm):** every active user whose role reads payables (Finance, Management, Admin, Super admin) in-app; `FINANCE_OPS_EMAIL` by email; `FINANCE_REMINDER_OFFSET_DAYS=7,3,1,0` calendar days before the due day in the supplier's timezone; overdue once, then every `FINANCE_OVERDUE_REPEAT_DAYS=1`. Partner debtors are nudged about overdue bills; guests are not |
 | D8 | Reporting currency and whether to convert (no FX today) | Phase 2 | **Decided 2026-10-09:** report per currency, no conversion; NBG-rate conversion may be added later |
 | D9 | Accounting software that receives exports (format) | Phase 2 optional | Generic CSV |
 | D10 | Whether admin-verified catalogue coordinates count as platform data under Google's 30-day Places cache rule | Phase 5 | Refresh Places-sourced points monthly until legal confirms |
@@ -1223,7 +1226,7 @@ Work strictly in this order; after each checkpoint run the listed gates and stop
 10. ✅ T2.5 → T2.6 (hooks; whole suite must stay green). **Checkpoint 2b.**
 11. ✅ T2.7 → T2.8 → T2.9 → T2.10 → T2.11 (routes, terms, reports, statement, backfill). **Checkpoint 2c.**
 12. ✅ T2.12 → T2.13 → T2.14 → T2.15 (client + docs). Demo: confirm → records → pay → report. **Checkpoint 2 complete.** Run backfill on dev (done 2026-10-09).
-13. T3.1 → T3.2 → T3.3 → T3.4 → T3.5 (server). **Checkpoint 3a.** T3.6 → T3.7 (client, docs). Demo: client scenario reminders. **Checkpoint 3 complete.**
+13. ✅ T3.1 → T3.2 → T3.3 → T3.4 → T3.5 (server). **Checkpoint 3a** (`568c1aa`). ✅ T3.6 → T3.7 (client, docs). Demo: client scenario reminders (done 2026-10-10 on the dev DB with the demo accounts). **Checkpoint 3 complete.**
 14. T4.1 → T4.2 → T4.3 → T4.4 → T4.5 → T4.6 (server; stub-server tests). **Checkpoint 4a.** T4.7 → T4.8 (client, docs, sandbox run with the client's InvoiceOcean test account). **Checkpoint 4 complete.**
 15. Final: full Newman run; `docs/plans/b2b-enterprise-implementation-plan.md` updated with "done" marks; audit artifact refreshed.
 

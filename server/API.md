@@ -331,7 +331,7 @@ hard constraint, not a filter.
 | POST | `/transfers/bookings` | `{ quoteToken, leadPassenger, flightNumber?, pickupAddress?, dropoffAddress?, pickupPlace?, dropoffPlace?, specialRequests?, preferredDriverId?, preferredFleetVehicleId? }`. Send `Idempotency-Key`. `pickupPlace`/`dropoffPlace` are searched doors — `{ latitude, longitude, place: PlaceRef | null }` — for the driver to navigate to; the address strings stay the text they read |
 | GET | `/transfers/bookings/:reference` | Travellers must add `?email=` |
 | PATCH | `/transfers/bookings/:reference` | Paperwork only |
-| GET | `/transfers/bookings/:reference/cancellation-quote` | |
+| GET | `/transfers/bookings/:reference/cancellation-quote` | `{ chargeCents, refundCents, currency, freeUntil, asAt }` — the same shape as hotels and tours. `refundableCents` is still sent as a deprecated alias for one release. |
 | POST | `/transfers/bookings/:reference/cancel` | `{ reason?, email? }` |
 | GET | `/partner/transfers/bookings` | Own bookings. `?status&from&to&search&page&pageSize` |
 
@@ -632,8 +632,30 @@ driver's reminder two hours before pick-up, the passenger's driver details at
 `TRANSFER_DISPATCH_CONTACT_REVEAL_HOURS`, and the "still no driver" alert for
 a confirmed leg within a day (also emailed to `TRANSFER_OPS_EMAIL`). Each is
 stamped on the leg in the statement that selects it, so it fires once.
-Drivers read theirs at `GET /api/driver/notifications` (`unread=true`) and
-mark them with `POST /api/driver/notifications/:id/read` or `…/read-all`.
+
+Every panel has a bell, each reading the same `Notification` rows through its
+own router and always scoped to the session — a notice is one person's, and
+somebody else's answers 404 whatever id is asked for:
+
+| Panel | Base | Who |
+| --- | --- | --- |
+| Driver | `/api/driver/notifications` | a linked driver |
+| Admin | `/api/admin/notifications` | staff with `notifications.read` (every staff role) |
+| Portal | `/api/partner/notifications` | an approved partner's users |
+
+Under each base: `GET ?unread=true&page&pageSize` (`{ data, unreadCount, … }`),
+`GET /unread-count`, `POST /:id/read`, `POST /read-all`. Each row carries
+`kind`, `title`, `body`, `payload` (ids and references to deep-link with),
+`entityType`/`entityId`, `readAt`.
+
+**Dead letters.** A handler that fails every attempt (8, with backoff to an
+hour) is marked processed with its error kept so the queue never blocks
+behind it. `GET /api/admin/outbox/failed?page&pageSize` (`audit.read` or
+`settings.write`) lists those events; `POST /api/admin/outbox/:id/retry`
+(`platform.admin` or `settings.write`, audited `OUTBOX_EVENT_RETRIED`) puts
+one back for a single further attempt — the count is kept, so a second
+failure gives up at once rather than climbing again. A delivered event, or
+one that never failed, is 409 `NOT_FAILED`.
 
 ## Tours
 
@@ -734,7 +756,7 @@ Basis: `PER_PERSON` (units = pax), `PER_GROUP` (1), `PER_DAY` (days), `PER_PERSO
 | Method | Path | Notes |
 | --- | --- | --- |
 | GET / POST | `/admin/services` | Register and create a DRAFT. `category`, `basis`, `netCents`, `sellCents?` (fixed sell), `currency`, `cancellationPolicyId` (percent-of-total template), `noticeHours`, `confirmationMode`, `isKosher`, `kosherAuthority?`, `supplierId?`, `destinationId?`. |
-| GET / PATCH / DELETE | `/admin/services/:serviceId` | Detail with `publishChecklist`; delete refuses 409 `HAS_BOOKINGS` / `IN_PACKAGE`. |
+| GET / PATCH / DELETE | `/admin/services/:serviceId` | Detail with `publishChecklist`; a PATCH whose fixed `sellCents` would sit below the (stored or sent) `netCents` is 422 `SELL_BELOW_NET` with both figures; delete refuses 409 `HAS_BOOKINGS` / `IN_PACKAGE`. |
 | POST | `…/publish` · `/unpublish` · `/archive` | Publish answers 422 with `details.missing` until the checklist is clear. |
 | GET / PUT | `…/translations`, `…/translations/:locale` | Prose only. |
 | GET | `/admin/services/bookings` · `/:reference` · `…/cancellation-quote` | Every service booking. |
@@ -946,6 +968,11 @@ Detaching is a 409 while a verified certificate points at it.
 
 **Anything omitted keeps its existing value.** Returns `{ nights, days }`.
 409 with `details.conflicts[{ date, committed }]` if a reduction would oversell.
+A fixed `sellCents` replaces the markup entirely, so it may never sit below
+`netCents`: 400 when one request carries both, 422 `SELL_BELOW_NET` (with the
+`netCents` or `sellCents` already on those nights) when a half-update would get
+a night there, and the table's `rates_sell_gte_net` CHECK beneath both. The
+same rule applies to a service's `netCents`/`sellCents`.
 
 **Calendar response**
 
@@ -968,11 +995,6 @@ Detaching is a 409 while a verified certificate points at it.
 | GET/PATCH/DELETE | `/admin/destinations/:id` — `latitude`/`longitude` as a pair or neither; on PATCH an explicit `null` pair takes the pin off the map and clears `place`. `place?` is what Google Places said when the pin was set: `{ placeId, name, formattedAddress, city, region, countryCode, types }`, every field but `placeId` nullable, accepted only alongside a pair, and answered as `place` (null for pins placed by hand) on destinations, hotels and pick-up points alike |
 | PUT | `/admin/destinations/:id/translations/:locale` |
 | GET/POST | `/admin/amenities`, `GET/PATCH /admin/amenities/:id` |
-A fixed `sellCents` replaces the markup entirely, so it may never sit below
-`netCents`: 400 when one request carries both, 422 `SELL_BELOW_NET` (with the
-`netCents` or `sellCents` already on those nights) when a half-update would get
-a night there, and the table's `rates_sell_gte_net` CHECK beneath both. The
-same rule applies to a service's `netCents`/`sellCents`.
 | GET/POST | `/admin/media` (multipart: `file`, `category`, `altText?`) |
 | GET/DELETE | `/admin/media/:id`, `GET /admin/media/:id/url` (signed, private only) |
 | GET | `/admin/bookings`, `/admin/bookings/:reference` |
@@ -1023,7 +1045,7 @@ What the platform roles reach in the admin panel:
 | Hotel prices — rates, rate plans, taxes and fees, cancellation and payment policies, child charges, a hotel's supplier and currency, a package's discount, the markup rules | as the catalogue | `pricing.write` on top of the catalogue capability: `SUPER_ADMIN`, `ADMIN`. A request that carries a priced field without it is refused (403 with `details.fields`), never quietly stripped |
 | A hotel's contracts and documents | the list: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT`; opening a file goes by its category — a contract or rate sheet needs `partners.financial.read`, a payment slip or invoice `finance.payments.read`, a driver's papers `dispatch.read`, a certificate `catalogue.read` | `SUPER_ADMIN`, `ADMIN` |
 | Bookings and orders, every company | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT` (transfers: also `DISPATCHER`) | confirm/decline and cancel: `SUPER_ADMIN`, `ADMIN`, `TOUR_OPERATOR` |
-| Fleet, drivers, dispatch | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `DISPATCHER` | `SUPER_ADMIN`, `ADMIN`, `DISPATCHER` (deleting a car or a driver: admins) |
+| Fleet, drivers, dispatch | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `DISPATCHER` | `SUPER_ADMIN`, `ADMIN`, `TOUR_OPERATOR`, `DISPATCHER` (deleting a car or a driver: admins) |
 | Partners | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `TOUR_OPERATOR`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
 | A partner's bank details | `SUPER_ADMIN`, `ADMIN`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
 | Pricing rules | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `ACCOUNTANT` | `SUPER_ADMIN`, `ADMIN` |
@@ -1061,18 +1083,7 @@ Drivers are not here; they are managed with their profiles under
 `/admin/transfers/drivers`.
 
 | Method | Path | Notes |
-| Payments, refunds, write-offs, payment terms | `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | `SUPER_ADMIN`, `FINANCE` |
 | --- | --- | --- |
-| A partner's history (`/admin/partners/:id/audit`) | `audit.read`: `SUPER_ADMIN`, `ADMIN`, `MANAGEMENT`, `FINANCE` | — |
-
-Reading every booking is not changing one. On the public booking routes
-(`/bookings`, `/tours/bookings`, `/transfers/bookings`, `/orders`) a staff
-session is refused at the router unless it holds `bookings.write` or
-`bookings.cancel` (403 `INSUFFICIENT_CAPABILITY`), and beneath that the
-services answer a desk that reads but may not change — management, finance —
-as they would a stranger, with a 404. The identity on `/auth/me` and
-`/partner/me` never carries bank details; `GET /partner/financial` and
-`GET /admin/partners/:id/financial` (`partners.financial.read`) do.
 | GET | `/admin/users?role&status&q&page&pageSize` | `status` ∈ `INVITED` `ACTIVE` `DEACTIVATED`; `role` repeatable; envelope `{ data, total, page, pageSize, totalPages }` |
 | POST | `/admin/users` | `{ email, firstName, lastName, role, position?, phone? }`, `role` ∈ `ADMIN` `MANAGEMENT` `TOUR_OPERATOR` `ACCOUNTANT` `FINANCE_OPERATOR` `DISPATCHER`. 201 `{ user, link: { kind: "activation", url, expiresAt }, email, emailSent }` — the link is returned as well as emailed, as for partners and drivers. 409 `{ field: "email" }` when taken |
 | GET | `/admin/users/:id` | `status` is derived: no password yet → `INVITED`; switched off → `DEACTIVATED`; else `ACTIVE`. Carries `invitedBy`, `invitedAt`, `deactivatedBy`, `deactivatedAt`, every role held (`roles`), the overrides written for the account (`overrides`) and what it resolves to (`capabilities`) |
@@ -1090,19 +1101,6 @@ as they would a stranger, with a 404. The identity on `/auth/me` and
 Nobody may change, deactivate or delete their own account through these
 (400 `SELF`). Invitations are limited per inviter (`AUTH_INVITE_LIMIT`).
 
-### A partner's team — `/partner/team`
-
-`partner.team.manage`: `PARTNER_OWNER` and `PARTNER_ADMIN`, on an approved
-partner. The same verbs as above, scoped to the session's company — another
-company's user id is **404**. Differences: invite roles are `PARTNER_ADMIN`
-`PARTNER_AGENT` `PARTNER_FINANCE`; `PATCH /partner/team/:id/role` accepts any
-partner role including `PARTNER_OWNER`, and `PUT /partner/team/:id/roles`
-the whole set; `GET /partner/team/grantable` says which the caller may give.
-An owner manages everyone (other owners included) while an admin manages
-agents only — a finance user can do what an admin cannot (403
-`ROLE_ABOVE_CEILING`); `PATCH /partner/team/:id/primary-contact` moves the one
-primary contact to an active member, within the same ceiling on both the
-member gaining it and the one losing it (so a partner admin cannot take it
 The rule under every grant, invitation and change above: **nobody hands out,
 or touches, more than they hold.** An actor may give a role, write an
 override, or act on an account only if it holds every capability the role
@@ -1125,6 +1123,8 @@ is fixed (409 `ROLE_LOCKED`); everything else about a role is data.
 | GET | `/admin/roles/:key` | |
 | POST | `/admin/roles` | `{ key, name, description?, side: PLATFORM \| PARTNER, capabilities }`. A key is lower case (`^[a-z][a-z0-9_]{2,40}$`), so a panel-made role can never be mistaken for a system one; a platform role carries no `partner.*` capability and a partner role only those and the bell (400 `CAPABILITY_WRONG_SIDE`); a capability goes into a role only from a caller who holds it (403 `ROLE_ABOVE_CEILING`). Audited `ROLE_CREATED` |
 | PATCH | `/admin/roles/:key` | `{ name?, description?, capabilities? }`, the whole capability set afterwards. Adding is handing out (the ceiling applies); removing is not. Audited `ROLE_UPDATED` with `{ changes: { capabilities: { added, removed } } }` |
+| DELETE | `/admin/roles/:key` | Never a system role (409 `SYSTEM_ROLE`), never one still held (409 `ROLE_IN_USE`). Audited `ROLE_DELETED` |
+
 ### Contract, terms and the end of a partnership
 
 A company trades on the platform under a signed agreement and the platform
@@ -1184,8 +1184,6 @@ agents only — a finance user can do what an admin cannot (403
 `ROLE_ABOVE_CEILING`); `PATCH /partner/team/:id/primary-contact` moves the one
 primary contact to an active member, within the same ceiling on both the
 member gaining it and the one losing it (so a partner admin cannot take it
-| DELETE | `/admin/roles/:key` | Never a system role (409 `SYSTEM_ROLE`), never one still held (409 `ROLE_IN_USE`). Audited `ROLE_DELETED` |
-
 from an owner); a team holds at most `PARTNER_TEAM_MAX`
 members, invited ones included (409 `TEAM_FULL`).
 
@@ -1195,7 +1193,9 @@ members, invited ones included (409 `TEAM_FULL`).
 `GET /admin/audit?entityType&entityId&actorUserId&action&q&from&to&page&pageSize`
 answers the whole trail newest first, each entry `{ id, action, entityType,
 entityId, summary, metadata, actor, actorEmail, createdAt }`. `action` must be a
-known audit action (400 otherwise); `from`/`to` are ISO instants. Successful
+known audit action (400 otherwise); `from`/`to` are ISO instants. The query is
+strict: a parameter the list does not name (`search=` for `q=`, say) is a 400,
+never silently the whole trail. Successful
 sign-ins (`USER_LOGIN_SUCCEEDED`, with the user agent) and sign-outs
 (`USER_LOGGED_OUT`) are on the trail beside the failures.
 
@@ -1244,17 +1244,6 @@ names each item once, its payer or payee must own every item it settles
 (422 `COUNTERPARTY_MISMATCH`), and its attachment must be an uploaded
 `PAYMENT_ATTACHMENT` (422 `ATTACHMENT_INVALID`).
 
-| Method | Path | Notes |
-| --- | --- | --- |
-| GET | `/payables?status&supplierPartnerId&product&currency&dueBefore&needsReview&q&page&pageSize` | `status` repeatable; `supplierPartnerId=PLATFORM` for platform-owned inventory. Each row: `booking { kind, id, reference, status }`, `supplier`, amounts (`original`, `amount`, `paid`, `outstanding`, `refundDue`), `status`, `nextDueAt`, `needsReview`/`reviewReason`, `instalments[]` |
-| GET | `/payables/:id` | Instalments carry their `allocations[]` with the payment each came from |
-| PATCH | `/payables/:id` | `{ amountOverrideCents?: int or null, waive?: true, notes?, reason }` — `reason` always required. An override is what the supplier is owed from then on, kept through every later recalculation (null hands it back to the rules); 422 `ABOVE_ORIGINAL` past the booked net. `waive` writes off what is left |
-| POST | `/payables/:id/instalments/:sequence/pay` | `{ method, paidAt, amountCents?, reference?, note? }` — an OUT payment of the instalment's outstanding amount (or `amountCents`). 201 `{ payment, replayed }` |
-| GET | `/receivables?status&debtorPartnerId&currency&dueBefore&overdue&q&page&pageSize` | `debtorPartnerId=GUEST` for guests without an account. Each row: `subject { kind: HOTEL, TRANSFER, TOUR, SERVICE or ORDER, id, reference, status }`, `debtor { partner, name, email }`, amounts, `dueAt`, `overdue` |
-| GET | `/receivables/:id` | With `allocations[]` |
-| PATCH | `/receivables/:id` | `{ dueAt?: ISO or null, waive?: true, notes?, reason }` — moving the due date is audited as `RECEIVABLE_DUE_DATE_CHANGED`; a later date re-arms the overdue alert |
-| GET | `/payments?direction&kind&method&currency&counterpartyPartnerId&from&to&q&page&pageSize` | |
-| GET | `/payments/:id` | |
 **A second person for money going out or written off.** A refund
 (`POST /payments` with `kind: REFUND`), a supplier amount override or
 write-off (`PATCH /payables/:id` with `amountOverrideCents` or `waive`) and
@@ -1322,6 +1311,7 @@ and order), which is what the commission report reads.
 | GET | `/payments/:id` | |
 | POST | `/payments` | See below. `Idempotency-Key` header (8–200 chars): a retry answers 200 with the original and `replayed: true`; the same key for a different amount, currency or direction is 409 `IDEMPOTENCY_KEY_REUSED` |
 | POST | `/payments/:id/allocations` | `{ allocations: [...] }` — spreads what an earlier payment left unallocated |
+| GET | `/due?days=7` | The payments-due queue (0–90 days): `instalments[]` overdue or due within `days`, earliest first, each with its `payable { id, product, bookingReference, supplier, currency, timezone }`; `receivables[]` the same; `totals.{instalments,receivables}.{overdue, due, outstandingByCurrency}`. A side the viewer may not read is `null`. Needs `finance.payables.read` or `finance.receivables.read` |
 | GET | `/reports/summary?currency&from&to&format` | Per currency: receivables open / overdue / refund due, payables open / overdue / due within 7 days / needing review, and cash in and out in the period (`from`/`to` are dates, Tbilisi days, last 30 by default) |
 | GET | `/reports/margin?currency&from&to&groupBy&format` | Bookings confirmed in the period, grouped by `product`, `supplier` or `partner`: `bookings`, `revenueCents` (what the buyer owes for them now), `costCents` (what suppliers are owed now), `marginCents`, `marginBps`. A package line counts at its own product's price |
 | GET | `/reports/ageing?side&currency&format` | `side=receivables` or `payables`: open money per counterparty in `current` (not yet due or undated), `d1_30`, `d31_60`, `d61_90`, `d90_plus` |
@@ -1352,6 +1342,40 @@ due first; with neither, the payment is recorded unallocated. 422 reasons:
 `ALLOCATION_EXCEEDS_OUTSTANDING`, `ALLOCATIONS_EXCEED_PAYMENT`,
 `CURRENCY_MISMATCH`, `WRONG_TARGET`; 409 `NOT_SETTLEABLE` for a closed item.
 The payer or payee is taken from what is settled when not given.
+
+### Supplier payment reminders
+
+A sweeper (`FINANCE_REMINDER_SWEEP_INTERVAL_MS`, default 10 min) watches
+every open instalment's `dueAt` and writes outbox events on the clock:
+
+- `finance.payable.instalment_due` — at each of `FINANCE_REMINDER_OFFSET_DAYS`
+  (default `7,3,1,0`) **calendar days before the due day in the payable's
+  timezone**: an instalment due 10:00 on the 17th is "due today" from
+  midnight on the 17th in Tbilisi. Each (instalment, offset) is claimed once
+  by a unique `payable_reminders` row, so it fires once however many servers
+  sweep; several offsets claimed in one sweep (a payable backfilled four days
+  before its due day) collapse to one event carrying the nearest.
+- `finance.payable.instalment_overdue` — once the due time passes
+  (`overdue_alert_at` stamped in the selecting statement), and again every
+  `FINANCE_OVERDUE_REPEAT_DAYS` (default 1; 0 = once) while still owed.
+- `finance.receivable.overdue` — the same for a buyer's bill.
+- `finance.payment.recorded` — written by `POST /payments` in the payment's
+  own transaction.
+
+The handlers re-read the row and say nothing when it is no longer `OPEN` or
+`PARTIAL`: recording the payment is what stops reminders, including one
+already claimed. Who hears:
+
+| Event | In-app (`NotificationKind`) | Email |
+| --- | --- | --- |
+| instalment due / overdue | every active user whose role has `finance.payables.read` (`FINANCE_PAYABLE_DUE`, `FINANCE_PAYABLE_OVERDUE`), linking to the payable | `FINANCE_OPS_EMAIL` when set (`financePayableDue`, `financePayableOverdue`) |
+| receivable overdue | the same staff (`FINANCE_RECEIVABLE_OVERDUE`); and, for a partner debtor, its users with `partner.statement.read` | `FINANCE_OPS_EMAIL` (`financeReceivableOverdue`); the partner's address (`receivableOverdue`). A guest is not chased automatically |
+| payment recorded | for an `IN` payment from a partner: its statement readers (`FINANCE_PAYMENT_RECEIVED`) | the partner (`paymentReceipt`: amount, date, what it settled, anything left on account). Nothing for `OUT` payments or refunds |
+
+Emails carry amounts, references and supplier names, never bank details. On
+first run against a database with older payables, everything inside the
+window is reminded about at once; the Finance → Payables badge (`paymentsDue`
+on `GET /api/admin/badges`) and `GET /due` show the same rows.
 
 ### A partner's own money — `/partner/finance`
 

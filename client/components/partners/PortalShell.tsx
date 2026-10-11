@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { CalendarCheck, LayoutDashboard, LogOut, Settings, UsersRound, Wallet } from "lucide-react";
 
+import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { signOut } from "@/lib/api/partners";
 import { forgetViewer } from "@/lib/auth/useViewer";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -35,9 +36,12 @@ const NAV: { label: string; href: string; icon: typeof Settings; capability?: st
  */
 export function PortalShell({
   session,
+  unreadCount = 0,
   children,
 }: {
   session: Session | null;
+  /** The bell's number, read by the layout with the page. */
+  unreadCount?: number;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -105,6 +109,9 @@ export function PortalShell({
 
           {session && (
             <div className="ms-auto flex shrink-0 items-center gap-4">
+              {approved && can(session, "notifications.read") && (
+                <NotificationBell scope="partner" unreadCount={unreadCount} />
+              )}
               <span className="hidden text-end lg:block">
                 <span className="block text-[0.8125rem] font-medium text-ink">
                   {session.user.fullName}
