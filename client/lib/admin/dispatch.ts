@@ -1,5 +1,6 @@
 import type { DispatchQuery } from "@/lib/api/dispatch";
 import type { TransferAssignmentStatus, TransferBookingStatus, TransferLegStatus } from "@/types/transfer";
+import { dateTimeFormat } from "@/lib/intl";
 
 /**
  * Labels and URL parsing for the dispatch board and the driver panel.
@@ -124,12 +125,12 @@ export const blockReasonLabels = {
 
 /** A pick-up instant in the pick-up point's own clock. */
 export const formatPickup = (iso: string, timeZone: string, locale = "en-GB") =>
-  new Intl.DateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone }).format(
+  dateTimeFormat(locale, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone }).format(
     new Date(iso),
   );
 
 export const formatTime = (iso: string, timeZone: string, locale = "en-GB") =>
-  new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(iso));
+  dateTimeFormat(locale, { hour: "2-digit", minute: "2-digit", timeZone }).format(new Date(iso));
 
 /** Today and N days ahead, as calendar dates — the default window for a board or a diary. */
 export const defaultWindow = (days: number) => ({

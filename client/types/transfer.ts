@@ -372,7 +372,9 @@ export interface TransferBookingSummary {
 }
 
 export interface TransferCancellationQuote {
-  refundableCents: number;
+  refundCents: number;
+  /** @deprecated Older API builds named the field this way; prefer `refundCents`. */
+  refundableCents?: number;
   chargeCents: number;
   currency: string;
   /** The last moment cancelling is still free. Null when it never was. */

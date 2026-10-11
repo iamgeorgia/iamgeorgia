@@ -315,7 +315,9 @@ export const toTransferBooking = (booking, viewer) => ({
 });
 
 export const toCancellationQuote = (quote) => ({
-    refundableCents: quote.refundableCents,
+    refundCents: quote.refundCents,
+    /** @deprecated Hotels, tours and orders say `refundCents`; this alias goes after one release. */
+    refundableCents: quote.refundCents,
     chargeCents: quote.chargeCents,
     currency: quote.currency,
     freeUntil: quote.freeUntil,

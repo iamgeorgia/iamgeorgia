@@ -1,3 +1,6 @@
+import { timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
+
 import { rateLimit, ipKeyGenerator } from 'express-rate-limit';
 import { RedisStore } from 'rate-limit-redis';
 import { createClient } from 'redis';
@@ -308,6 +311,30 @@ export const tokenLookupLimiter = rateLimit({
 });
 
 /**
+ * Whom a request counts against.
+ *
+ * Normally the address it came from. The Next.js server renders search and the
+ * catalogue on behalf of every visitor, so from here all of its calls share one
+ * address, and a per-IP limit became a per-site limit: the thirty-first dated
+ * search in a minute, from anyone, failed for everyone behind a single egress.
+ * When `API_CLIENT_TOKEN` is configured, a relay that presents it may name the
+ * visitor it is working for in `x-visitor-address`, and that visitor is who is
+ * counted. The token is compared in constant time, the header must be a bare
+ * IP address, and without both the request falls back to its own address — so
+ * nothing a browser can send changes whose bucket it draws from.
+ */
+export const visitorKey = (req) => {
+    const token = config.clientForwardToken;
+    if (token) {
+        const presented = String(req.get('x-client-token') ?? '');
+        const visitor = String(req.get('x-visitor-address') ?? '').trim();
+        const same = presented.length === token.length && timingSafeEqual(Buffer.from(presented), Buffer.from(token));
+        if (same && isIP(visitor)) return ipKeyGenerator(visitor);
+    }
+    return ipKeyGenerator(req.ip);
+};
+
+/**
  * The blanket per-IP limit applied to every request.
  *
  * Shares the `handler` above deliberately: the library's own rejection is
@@ -321,6 +348,7 @@ export const globalLimiter = rateLimit({
     limit: config.globalRateLimit,
     // Uptime monitors poll far more often than a browser would.
     skip: (req) => req.path.startsWith('/health'),
+    keyGenerator: visitorKey,
     handler: handler('Too many requests. Try again shortly.')
 });
 
@@ -340,7 +368,8 @@ export const searchLimiter = rateLimit({
     ...base,
     store: store('search'),
     windowMs: 60 * 1000,
-    limit: config.isTest ? 10_000 : 30,
+    limit: config.searchRateLimit,
+    keyGenerator: visitorKey,
     handler: handler('Too many searches. Try again shortly.')
 });
 

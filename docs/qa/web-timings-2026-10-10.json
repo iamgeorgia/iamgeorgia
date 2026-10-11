@@ -1,0 +1,108 @@
+[
+  {
+    "page": "/",
+    "ttfb": 9,
+    "dcl": 29,
+    "load": 120,
+    "lcp": 132,
+    "cls": 0,
+    "requests": 44,
+    "jsKB": 207,
+    "imgKB": 514,
+    "totalKB": 867,
+    "apiCalls": 1
+  },
+  {
+    "page": "/hotels",
+    "ttfb": 9,
+    "dcl": 74,
+    "load": 105,
+    "lcp": 88,
+    "cls": 0,
+    "requests": 47,
+    "jsKB": 218,
+    "imgKB": 110,
+    "totalKB": 475,
+    "apiCalls": 1
+  },
+  {
+    "page": "/hotels/vera-house-tbilisi",
+    "ttfb": 32,
+    "dcl": 131,
+    "load": 188,
+    "lcp": 108,
+    "cls": 0,
+    "requests": 49,
+    "jsKB": 223,
+    "imgKB": 2,
+    "totalKB": 569,
+    "apiCalls": 1
+  },
+  {
+    "page": "/tours",
+    "ttfb": 8,
+    "dcl": 27,
+    "load": 94,
+    "lcp": 92,
+    "cls": 0,
+    "requests": 46,
+    "jsKB": 212,
+    "imgKB": 295,
+    "totalKB": 655,
+    "apiCalls": 1
+  },
+  {
+    "page": "/transfers/search",
+    "ttfb": 7,
+    "dcl": 59,
+    "load": 88,
+    "lcp": 72,
+    "cls": 0,
+    "requests": 48,
+    "jsKB": 215,
+    "imgKB": 0,
+    "totalKB": 367,
+    "apiCalls": 1
+  },
+  {
+    "page": "/packages/kakheti-wine-weekend",
+    "ttfb": 13,
+    "dcl": 31,
+    "load": 80,
+    "lcp": 84,
+    "cls": 0,
+    "requests": 43,
+    "jsKB": 218,
+    "imgKB": 0,
+    "totalKB": 364,
+    "apiCalls": 1
+  },
+  {
+    "page": "/admin",
+    "ttfb": 11,
+    "load": 91,
+    "js": 218,
+    "req": 71
+  },
+  {
+    "page": "/admin/bookings",
+    "ttfb": 15,
+    "load": 61,
+    "js": 12,
+    "req": 67
+  },
+  {
+    "page": "/admin/finance",
+    "ttfb": 11,
+    "load": 47,
+    "js": 13,
+    "req": 52
+  },
+  {
+    "page": "/admin/hotels",
+    "ttfb": 13,
+    "load": 366,
+    "js": 9,
+    "req": 77
+  }
+]

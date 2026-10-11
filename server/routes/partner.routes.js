@@ -153,7 +153,16 @@ partnerRoutes.patch(
         const id = ownPartnerId(req);
 
         await prisma.$transaction(async (tx) => {
-            await tx.partner.update({ where: { id }, data: req.valid.body });
+            // Only what actually moves is written and audited: a form that
+            // re-submits its current values must not leave a row on the trail
+            // claiming the company profile changed.
+            const current = await tx.partner.findUniqueOrThrow({ where: { id } });
+            const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+            const changed = Object.keys(req.valid.body).filter((key) => !same(req.valid.body[key], current[key]));
+
+            if (changed.length === 0) return;
+
+            await tx.partner.update({ where: { id }, data: Object.fromEntries(changed.map((key) => [key, req.valid.body[key]])) });
 
             await recordAudit(tx, {
                 action: 'PARTNER_UPDATED',
@@ -161,7 +170,7 @@ partnerRoutes.patch(
                 entityType: AUDIT_ENTITY.partner,
                 entityId: id,
                 summary: `${req.user.email} updated their company profile`,
-                metadata: { fields: Object.keys(req.valid.body), self: true },
+                metadata: { fields: changed, self: true },
                 req
             });
         });

@@ -271,8 +271,10 @@ describe('orders', { skip: dbAvailable ? false : 'Postgres is not reachable' }, 
         assert.ok(held.body.expiresAt);
         assert.equal((await inventoryOf(tour)).heldUnits, 2);
 
+        const key = `ord-held-${Date.now()}`;
         const created = await request(app)
             .post('/api/orders')
+            .set('Idempotency-Key', key)
             .send({ packageToken: quote.token, holdTokens: held.body.holdTokens, leadGuest: lead });
         assert.equal(created.status, 201, JSON.stringify(created.body));
 
@@ -283,6 +285,16 @@ describe('orders', { skip: dbAvailable ? false : 'Postgres is not reachable' }, 
         assert.equal(night.heldUnits, 0);
         assert.equal(night.bookedUnits, 1);
         assert.deepEqual((await reconcileInventory({ roomTypeIds: [hotel.roomType.id] })).drift ?? [], []);
+
+        // Regression: a retry after a timeout carries the same key and the same, now spent,
+        // hold tokens. It must get its order back, not a 409 UNAVAILABLE from re-preparing.
+        const replay = await request(app)
+            .post('/api/orders')
+            .set('Idempotency-Key', key)
+            .send({ packageToken: quote.token, holdTokens: held.body.holdTokens, leadGuest: lead });
+        assert.equal(replay.status, 200, JSON.stringify(replay.body));
+        assert.equal(replay.body.reference, created.body.reference);
+        assert.equal((await inventoryOf(tour)).bookedUnits, 2);
     });
 
     it('lets the database refuse an item that points at two children', async () => {

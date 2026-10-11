@@ -156,6 +156,19 @@ export const config = {
     // that exercises fifty fixtures is not an attack.
     globalRateLimit: numberEnv('RATE_LIMIT_GLOBAL', (nodeEnv === 'test' ? 100_000 : 100)),
 
+    // Dated search per minute per visitor — the most expensive read, with its
+    // own budget so one scraper cannot spend the global allowance on it.
+    searchRateLimit: numberEnv('RATE_LIMIT_SEARCH', (nodeEnv === 'test' ? 10_000 : 30)),
+
+    // The Next.js server renders search and the catalogue on a visitor's
+    // behalf, so every one of its calls arrives from the same address. When
+    // this is set, a request that presents the value in `x-client-token` may
+    // name that visitor in `x-visitor-address`, and the per-IP limiters count
+    // the visitor rather than the server relaying for them. Unset, nothing is
+    // trusted and the relay shares one bucket — fine on a laptop, not behind a
+    // single egress address in production.
+    clientForwardToken: process.env.API_CLIENT_TOKEN || null,
+
     // Where the rate limiters keep their counters. Unset, they count in this
     // process's memory, which is correct for one instance and wrong for two:
     // a pair behind a load balancer each allow the full limit, and a restart

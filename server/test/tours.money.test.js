@@ -68,6 +68,22 @@ describe('tour money and inventory', { skip: dbAvailable ? false : 'Postgres is 
         return offer;
     };
 
+    it('prices a dated search for a tour whose net exceeds the int4 × basis-points range', async () => {
+        // Regression: the candidate SQL multiplied int4 net cents by (10000 + markup) in int4, which
+        // overflowed above ~186,000 cents and failed the whole dated search with "integer out of range".
+        const { tour } = await sellable({ adultNetCents: 1_150_200, groupNetCents: 1_150_200 });
+
+        const response = await request(app).get(`/api/search/tours?date=${DATE}&adults=2`);
+
+        assert.equal(response.status, 200, JSON.stringify(response.body).slice(0, 300));
+        const card = response.body.data?.find((row) => row.tour?.id === tour.id || row.tour?.slug === tour.slug || row.id === tour.id || row.slug === tour.slug);
+        assert.ok(card, `tour missing from dated search: ${JSON.stringify(response.body).slice(0, 300)}`);
+
+        const perTour = await offerFor(tour);
+        const total = card.cheapest?.quote?.totals?.totalCents ?? card.cheapestOffer?.quote?.totals?.totalCents ?? card.priceFrom?.totalCents;
+        assert.equal(total, perTour.quote.totals.totalCents);
+    });
+
     it('claims a departure once when the same request arrives twice at the same moment', async () => {
         const { tour, option } = await sellable({ totalUnits: 10 });
         const offer = await offerFor(tour, { adults: 2 });

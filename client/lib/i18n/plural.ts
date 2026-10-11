@@ -32,7 +32,11 @@ const rules = new Map<string, Intl.PluralRules>();
 function rulesFor(intlLocale: string): Intl.PluralRules {
   let cached = rules.get(intlLocale);
   if (!cached) {
-    cached = new Intl.PluralRules(intlLocale);
+    // Chromium has no Georgian locale data, so `ka-GE` there is the root rule
+    // ("other" for everything) while the server, with full ICU, says "one"
+    // for 1. Georgian's categories are English's (one / other), so English
+    // rules give every runtime the same answer — and the same hydration.
+    cached = new Intl.PluralRules(/^ka(-|$)/i.test(intlLocale) ? "en" : intlLocale);
     rules.set(intlLocale, cached);
   }
   return cached;

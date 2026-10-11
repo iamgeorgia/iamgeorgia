@@ -74,6 +74,10 @@ export const auditQuerySchema = z
         page: z.coerce.number().int().min(1).default(1),
         pageSize: z.coerce.number().int().min(1).max(100).default(50)
     })
+    // Strict, so a mistyped filter (`search=` for `q=`) is a 400 rather than
+    // silently the whole log: a reader who asked for one booking's trail must
+    // not be handed every row and think the answer is "everything".
+    .strict()
     .refine((query) => !query.from || !query.to || query.from <= query.to, {
         message: 'from must not be after to',
         path: ['to']

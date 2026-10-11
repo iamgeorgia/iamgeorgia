@@ -145,7 +145,8 @@ export default async function RootLayout(props: LayoutProps<"/[locale]">) {
       */}
       <body className="flex min-h-full flex-col">
         <LocaleProvider locale={locale}>{props.children}</LocaleProvider>
-        <SpeedInsights />
+        {/* The script only exists on Vercel; anywhere else it is a 404 on every page. */}
+        {process.env.VERCEL ? <SpeedInsights /> : null}
       </body>
     </html>
   );

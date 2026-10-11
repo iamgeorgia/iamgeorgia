@@ -8,6 +8,7 @@ import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
 import { featureLabel, groupFeatures, kosherExpiryNote } from "@/lib/hotels/kosher";
 import type { KosherProfile, NearbyPlace } from "@/types/catalogue";
+import { dateTimeFormat } from "@/lib/intl";
 
 /**
  * The kosher block on a hotel page.
@@ -40,7 +41,7 @@ export function KosherPanel({ kosher, nearby = [], isTrade = false }: KosherPane
   if (!kosher.offersKosher) return null;
 
   const formatDate = (iso: string) =>
-    new Intl.DateTimeFormat(intlLocale, { day: "numeric", month: "long", year: "numeric" }).format(
+    dateTimeFormat(intlLocale, { day: "numeric", month: "long", year: "numeric" }).format(
       new Date(`${iso}T00:00:00Z`),
     );
 

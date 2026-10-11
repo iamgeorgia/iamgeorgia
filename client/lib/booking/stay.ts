@@ -145,21 +145,12 @@ export const partySize = (stay: StayQuery): number => stay.adults + (stay.childA
 
 // --- display ----------------------------------------------------------------
 
-const dateFormatters = new Map<string, Intl.DateTimeFormat>();
-
-const formatterFor = (intlLocale: string, options: Intl.DateTimeFormatOptions) => {
-  const key = `${intlLocale}:${JSON.stringify(options)}`;
-  let cached = dateFormatters.get(key);
-
-  if (!cached) {
-    // timeZone: UTC for the same reason the parsing is — these are calendar
-    // dates, and a formatter in the reader's zone would shift them.
-    cached = new Intl.DateTimeFormat(intlLocale, { ...options, timeZone: "UTC" });
-    dateFormatters.set(key, cached);
-  }
-
-  return cached;
-};
+// timeZone: UTC for the same reason the parsing is — these are calendar
+// dates, and a formatter in the reader's zone would shift them. The shared
+// helper caches, and keeps Georgian identical on the server and in browsers
+// that have no `ka` locale data.
+const formatterFor = (intlLocale: string, options: Intl.DateTimeFormatOptions) =>
+  dateTimeFormat(intlLocale, { ...options, timeZone: "UTC" });
 
 /** "4 Jun 2027" in the reader's language. */
 export const formatStayDate = (dateOnly: string, intlLocale = "en-GB"): string =>

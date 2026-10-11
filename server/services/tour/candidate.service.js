@@ -135,21 +135,21 @@ export const findTourCandidates = async ({
               SELECT CASE
                        WHEN o.pricing_basis = 'PER_GROUP' THEN
                            COALESCE(tier.group_sell_cents,
-                                    round(tier.group_net_cents * (10000 + ${markupBps}::int) / 10000.0))
+                                    round(tier.group_net_cents::bigint * (10000 + ${markupBps}::int) / 10000.0))
                        ELSE
                            COALESCE(tier.adult_sell_cents,
-                                    round(tier.adult_net_cents * (10000 + ${markupBps}::int) / 10000.0)) * p.adults
+                                    round(tier.adult_net_cents::bigint * (10000 + ${markupBps}::int) / 10000.0)) * p.adults
                          + CASE
                                WHEN tier.child_net_cents IS NOT NULL THEN
                                    COALESCE(tier.child_sell_cents,
-                                            round(tier.child_net_cents * (10000 + ${markupBps}::int) / 10000.0))
+                                            round(tier.child_net_cents::bigint * (10000 + ${markupBps}::int) / 10000.0))
                                ELSE
                                    COALESCE(tier.adult_sell_cents,
-                                            round(tier.adult_net_cents * (10000 + ${markupBps}::int) / 10000.0))
+                                            round(tier.adult_net_cents::bigint * (10000 + ${markupBps}::int) / 10000.0))
                            END * p.children
                          + CASE
                                WHEN tier.infant_net_cents = 0 THEN 0
-                               ELSE round(tier.infant_net_cents * (10000 + ${markupBps}::int) / 10000.0)
+                               ELSE round(tier.infant_net_cents::bigint * (10000 + ${markupBps}::int) / 10000.0)
                            END * p.infants
                      END AS sell_cents
           ) total

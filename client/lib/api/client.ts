@@ -115,6 +115,16 @@ export interface RequestOptions extends Omit<RequestInit, "body"> {
   rawBody?: BodyInit;
   /** Forwarded cookie header, for calls made during a server render. */
   cookie?: string;
+  /**
+   * The visitor a server render is working for, as an IP address.
+   *
+   * Every call this server makes reaches the API from the same address, so
+   * without this the API's per-IP limits would count the whole site as one
+   * client. Sent as `x-visitor-address` alongside `x-client-token`
+   * (API_CLIENT_TOKEN, shared with the API); the API ignores both unless the
+   * token matches.
+   */
+  visitor?: string;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -122,6 +132,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     body,
     rawBody,
     cookie,
+    visitor,
     headers,
     signal,
     timeoutMs = DEFAULT_TIMEOUT_MS,
@@ -158,6 +169,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       headers: {
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...(cookie ? { cookie } : {}),
+        ...(visitor && process.env.API_CLIENT_TOKEN
+          ? { "x-visitor-address": visitor, "x-client-token": process.env.API_CLIENT_TOKEN }
+          : {}),
         ...headers,
       },
       body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
@@ -231,10 +245,20 @@ export const cachedFor = (seconds: number): RequestOptions => ({
  * Client Components, which is what lets `apiFetch` and the types live together.
  */
 export async function serverFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { cookies } = await import("next/headers");
-  const jar = await cookies();
+  const { cookies, headers } = await import("next/headers");
+  const [jar, incoming] = await Promise.all([cookies(), headers()]);
 
-  return request<T>(path, { ...options, cookie: jar.toString() });
+  return request<T>(path, { ...options, cookie: jar.toString(), visitor: visitorAddress(incoming) });
+}
+
+/**
+ * The address of the visitor this render is for: the first hop of
+ * `x-forwarded-for` (what Vercel and every reverse proxy set), else
+ * `x-real-ip`, else nothing — the API then counts the relay itself.
+ */
+function visitorAddress(incoming: Headers): string | undefined {
+  const forwarded = incoming.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || incoming.get("x-real-ip")?.trim() || undefined;
 }
 
 /** Runs a server call that is allowed to fail with 401/403, returning null. */

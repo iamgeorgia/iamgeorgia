@@ -108,6 +108,14 @@ describe('services', { skip: dbAvailable ? false : 'Postgres is not reachable' }
         assert.equal(notReady.status, 422);
 
         await request(app).patch(`/api/admin/services/${created.body.id}`).set('Cookie', adminCookie).send({ netCents: 25_000 });
+
+        // A partial update cannot be checked by the schema alone: a fixed sell
+        // below the stored net is a 422 naming both figures, not a database 409.
+        const belowNet = await request(app).patch(`/api/admin/services/${created.body.id}`).set('Cookie', adminCookie).send({ sellCents: 20_000 });
+        assert.equal(belowNet.status, 422, JSON.stringify(belowNet.body));
+        assert.equal(belowNet.body.error.details.reason, 'SELL_BELOW_NET');
+        assert.equal(belowNet.body.error.details.netCents, 25_000);
+
         const published = await request(app).post(`/api/admin/services/${created.body.id}/publish`).set('Cookie', adminCookie);
         assert.equal(published.status, 200, JSON.stringify(published.body));
         assert.equal(published.body.status, 'ACTIVE');

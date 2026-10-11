@@ -149,6 +149,17 @@ describe('audit trail', { skip: dbAvailable ? false : 'Postgres is not reachable
         assert.ok(res.body.data[0].actor.email.endsWith('@example.test'));
     });
 
+    it('refuses an unknown filter on the global log instead of answering with everything', async () => {
+        const { cookie } = await scenario();
+
+        // `search=` is a plausible typo for `q=`; silently ignored it returned the whole log.
+        const typo = await request(app).get('/api/admin/audit?search=BKG-000001').set('Cookie', cookie);
+        assert.equal(typo.status, 400, JSON.stringify(typo.body));
+
+        const real = await request(app).get('/api/admin/audit?q=BKG-000001&pageSize=5').set('Cookie', cookie);
+        assert.equal(real.status, 200, JSON.stringify(real.body));
+    });
+
     it('does not serve the trail to a partner', async () => {
         const { partner } = await scenario();
         const owner = await makePartnerUser(tracker, partner, { isPrimaryContact: false });

@@ -460,8 +460,12 @@ export const rollUpOrderStatus = async (tx, orderId, actor, req) => {
 };
 
 export const confirmOrder = async (input, actor, req) => {
-    const prepared = await prepareOrder(input, actor);
-    const { idempotencyKey } = prepared;
+    // The key is looked up *before* the package is re-priced. A retry after a
+    // timeout arrives once the first attempt has spent its hold tokens and
+    // taken the inventory, so preparing it again would refuse it as
+    // UNAVAILABLE — for an order that exists. A replay is a read of the
+    // original, and must be answered as one whatever the catalogue says now.
+    const idempotencyKey = deriveIdempotencyKey(input);
 
     const existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: orderInclude });
 
@@ -476,6 +480,8 @@ export const confirmOrder = async (input, actor, req) => {
     if (existing) {
         return replayOf(existing);
     }
+
+    const prepared = await prepareOrder(input, actor);
 
     try {
         const order = await prisma.$transaction(
@@ -757,7 +763,7 @@ const childCancellationQuote = (item, at) => {
         case 'TRANSFER': {
             const quote = quoteTransferCancellation(child, at);
 
-            return { chargeCents: quote.chargeCents, refundCents: quote.refundableCents ?? child.sellTotalCents - quote.chargeCents };
+            return { chargeCents: quote.chargeCents, refundCents: quote.refundCents ?? child.sellTotalCents - quote.chargeCents };
         }
         case 'TOUR':
             return quoteTourCancellation(child, at);

@@ -16,6 +16,7 @@ import { formatMoney } from "@/lib/money";
 import { formatDuration } from "@/lib/transfers/query";
 import type { AssignmentForPartner } from "@/types/driver";
 import type { TransferBooking } from "@/types/transfer";
+import { dateTimeFormat } from "@/lib/intl";
 
 /**
  * Confirmation.
@@ -50,7 +51,7 @@ export function TransferConfirmation({ booking }: { booking: TransferBooking }) 
 
   /** The pick-up as a wall clock at the pick-up point, never in the reader's zone. */
   const formatPickup = (iso: string) =>
-    new Intl.DateTimeFormat(intlLocale, {
+    dateTimeFormat(intlLocale, {
       dateStyle: "long",
       timeStyle: "short",
       timeZone: route.fromTimezone,

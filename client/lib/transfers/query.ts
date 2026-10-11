@@ -1,6 +1,7 @@
 import type { Locale } from "@/lib/i18n/config";
 import { plural } from "@/lib/i18n/plural";
 import type { UiDictionary } from "@/lib/i18n/ui/en";
+import { dateTimeFormat } from "@/lib/intl";
 
 /**
  * The transfer search query and everything derived from it.
@@ -228,7 +229,7 @@ export function formatJourneyDate(date: string, intlLocale = "en-GB"): string {
   if (!date) return "—";
   const parsed = new Date(`${date}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return new Intl.DateTimeFormat(intlLocale, {
+  return dateTimeFormat(intlLocale, {
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -240,7 +241,7 @@ export function formatJourneyDateShort(date: string, intlLocale = "en-GB"): stri
   if (!date) return "—";
   const parsed = new Date(`${date}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return date;
-  return new Intl.DateTimeFormat(intlLocale, { day: "numeric", month: "short" }).format(parsed);
+  return dateTimeFormat(intlLocale, { day: "numeric", month: "short" }).format(parsed);
 }
 
 /** Today, as `yyyy-mm-dd` in local time — the `min` on every date input. */

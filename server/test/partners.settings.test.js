@@ -66,6 +66,12 @@ describe('partner self-service settings', { skip: dbAvailable ? false : 'Postgre
         assert.equal(stored.email, 'hello@rooms.ge');
         assert.equal(stored.website, 'https://rooms.ge');
         assert.equal(stored.socialLinks.length, 1);
+
+        // Re-submitting the same values is not a change: no new row on the trail.
+        const before = await prisma.auditLog.count({ where: { entityId: partner.id, action: 'PARTNER_UPDATED' } });
+        const again = await request(app).patch('/api/partner/profile').set('Cookie', cookie).send({ name: 'Rooms Hotel Batumi', city: 'Batumi' });
+        assert.equal(again.status, 200);
+        assert.equal(await prisma.auditLog.count({ where: { entityId: partner.id, action: 'PARTNER_UPDATED' } }), before);
     });
 
     /**

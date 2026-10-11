@@ -435,7 +435,8 @@ describe('transfer cancellation', { skip: dbAvailable ? false : 'Postgres is not
             .query({ email });
 
         assert.equal(quote.body.chargeCents, totalCents);
-        assert.equal(quote.body.refundableCents, 0);
+        assert.equal(quote.body.refundCents, 0);
+        assert.equal(quote.body.refundableCents, 0, "deprecated alias still served");
     });
 
     it('cancels, and records what it cost', async () => {

@@ -593,7 +593,7 @@ export const quoteTransferCancellation = (booking, at = new Date()) => {
 
     return {
         chargeCents: refund.chargeCents,
-        refundableCents: refund.refundCents,
+        refundCents: refund.refundCents,
         currency: refund.currency,
         freeUntil: freeCancellationUntil(booking.cancellationSchedule),
         asAt: (at instanceof Date ? at : new Date(at)).toISOString()
@@ -638,7 +638,7 @@ export const cancelTransferBookingInTx = async (tx, booking, { reason, waiveChar
     const quote = waiveCharges
         ? {
               chargeCents: 0,
-              refundableCents: booking.sellTotalCents,
+              refundCents: booking.sellTotalCents,
               currency: booking.currency,
               freeUntil: null,
               asAt: new Date().toISOString()

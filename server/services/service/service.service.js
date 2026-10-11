@@ -175,6 +175,20 @@ export const updateService = async (id, input, actor, req) =>
             await assertPolicyUsable(tx, input.cancellationPolicyId);
         }
 
+        // The schema can only compare sell with net when both arrive together;
+        // a partial update is checked against what is stored, so the answer
+        // is a 422 naming the figures rather than the database's CHECK
+        // constraint surfacing as a 409 about "availability".
+        const netCents = input.netCents ?? current.netCents;
+        const sellCents = input.sellCents === undefined ? current.sellCents : input.sellCents;
+        if (sellCents !== null && sellCents < netCents) {
+            throw new UnprocessableEntityError('The sell price cannot be below the net price', {
+                reason: 'SELL_BELOW_NET',
+                netCents,
+                sellCents
+            });
+        }
+
         const service = await tx.service.update({ where: { id }, data: input, include: serviceInclude() });
 
         await recordAudit(tx, {
