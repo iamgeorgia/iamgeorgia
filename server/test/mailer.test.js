@@ -15,6 +15,7 @@ import {
     activationUrl,
     passwordResetUrl,
     adminApprovalUrl,
+    adminInvoiceUrl,
     adminPayableUrl,
     adminReceivableUrl,
     portalFinanceUrl
@@ -102,6 +103,15 @@ const sampleData = {
         ],
         unallocatedCents: 5_000,
         url: portalFinanceUrl()
+    },
+    financeInvoiceSyncFailed: {
+        kindLabel: 'Proforma',
+        reference: 'TRF-000123',
+        debtorName: 'Caucasus Travel',
+        amountCents: 48_000,
+        currency: 'GEL',
+        error: 'InvoiceOcean refused the request: currency: is not supported',
+        url: adminInvoiceUrl('inv1')
     }
 };
 

@@ -1377,6 +1377,153 @@ first run against a database with older payables, everything inside the
 window is reminded about at once; the Finance → Payables badge (`paymentsDue`
 on `GET /api/admin/badges`) and `GET /due` show the same rows.
 
+### Invoices
+
+The documents behind a receivable — a proforma, the VAT invoice, a
+correction — numbered, printed and emailed by **InvoiceOcean**. The
+platform keeps one `Invoice` row per document with its lines and the
+provider's id and number; the PDF is streamed from the provider on demand
+and never stored, and the provider's own share link is never handed out.
+Everything is behind `INVOICEOCEAN_ENABLED` (how to switch it on:
+`docs/DEPLOYMENT.md` §3.4b). Off, the read routes still list what was
+issued before, and every route that would write a document or call the
+provider answers 422 `{ reason: "INVOICING_DISABLED" }` — the flag is
+checked before the document is looked up, so an unknown id is 422 while
+off and 404 once on.
+
+Kinds: `PROFORMA`, `VAT`, `CORRECTION`, and `ADVANCE` / `FINAL`, which can
+be issued by hand but which no flow writes. Statuses: `DRAFT` (written here,
+not yet at the provider), `ISSUED`, `SENT`, `PARTIAL`, `PAID`, `CANCELLED`,
+`ERROR` (the provider refused it, or every attempt failed).
+
+**How documents come to be.** Three hooks run inside the booking's own
+transaction and write a `DRAFT` row plus an outbox event — nothing is
+called there, so a slow or absent provider delays the document, never the
+booking:
+
+- a **proforma** when the receivable is created — a standalone booking
+  confirmed, or an order once every request in it is answered;
+- a **VAT invoice**, chained from the proforma (`fromInvoice`), when the
+  receivable is paid in full. A partial payment is posted to the proforma at
+  the provider instead (`PaymentAllocation.externalPaymentId` makes that
+  once);
+- a **correction** of the VAT invoice when a VAT-invoiced receivable's
+  amount changes (a cancellation with a charge) — one live correction per
+  receivable. An unpaid proforma is cancelled here and at the provider
+  instead, and the new amount gets a fresh one.
+
+The outbox drain (`TRANSFER_OUTBOX_DRAIN_INTERVAL_MS`, 5 s) then creates the
+document: the row becomes `ISSUED` with `number`, `externalId` and
+`hasPdf: true` a few seconds after the 202, so a client reads the number
+back by refreshing, not from the response. Before creating, the drain asks
+the provider for a document already carrying our reference (`oid` = the
+booking or order reference) and adopts it, and a partial unique index allows
+one live document per kind per receivable, so a replayed event, a retried
+handler or two drains racing end with one document. A refusal the provider
+would only repeat — a 422 with field errors (`seller_name: can't be blank`
+while the account's company details are empty), a 404, a refused token —
+marks the row `ERROR` at once with the provider's words in `syncError`; a
+transient failure is retried by the outbox (8 attempts) and marked `ERROR`
+on the last. Both tell every `invoices.write` holder in-app
+(`FINANCE_INVOICE_SYNC_FAILED`) and email `FINANCE_OPS_EMAIL`; a document
+issued tells the finance readers and the partner's invoice readers in-app
+(`FINANCE_INVOICE_ISSUED`), and InvoiceOcean emails it to the buyer when
+`INVOICEOCEAN_AUTO_SEND=true` or Finance presses Send. **Retry** puts an
+`ERROR` row back to `DRAFT` and queues it again. Nothing is ever deleted: a
+cancelled proforma stays `CANCELLED`, a failed one `ERROR`, and the
+receivable's detail carries all of them in `invoices[]`. Outbox topics:
+`finance.invoice.issue_requested`, `…send_requested`, `…cancel_requested`,
+`…issued`, `…sync_failed`; audit actions `INVOICE_REQUESTED`,
+`INVOICE_SENT`, `INVOICE_CANCELLED`, `INVOICE_SYNC_FAILED`.
+
+What changes at the provider — marked paid there, sent there, cancelled
+there — arrives by webhook and, for deliveries that never came, by a poll
+every `INVOICEOCEAN_POLL_INTERVAL_MS` (15 min). Both are stored as
+`invoice_sync_events` (one per document and provider `updated_at`, so a
+repeated delivery is one event) and applied every
+`INVOICEOCEAN_SYNC_APPLY_INTERVAL_MS` (60 s) to the local row's `status`,
+`paidCents` and `number` — never to the ledger: a payment seen in
+InvoiceOcean is a prompt for Finance to record it, not a payment. A webhook
+is re-read from the API before it is believed.
+
+Reading needs `invoices.read` (super admin, admin, management, accountant;
+the seeded `FINANCE_OPERATOR` role does not hold it until given in the role
+editor). Issuing by hand, sending, cancelling and retrying need
+`invoices.write` (super admin, accountant). Under `/api/admin/invoices`,
+except the hand-issue route, which lives on the receivable it is for:
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/admin/invoices?kind&status&receivableId&debtorPartnerId&from&to&q&page&pageSize` | `status` repeatable; `debtorPartnerId=GUEST` for documents addressed to guests; `from`/`to` are issue dates (`YYYY-MM-DD`); `q` matches the number or the booking reference. Newest first; `{ data, total, page, pageSize, totalPages }` |
+| GET | `/admin/invoices/settings` | What a screen needs before offering anything: `{ enabled, provider: "INVOICEOCEAN", languages[], defaultLang, defaultTaxBps, autoSend }`. No secret in it |
+| GET | `/admin/invoices/sync-events?page&pageSize` | Provider reports that could not be applied: `{ id, source: WEBHOOK \| POLL, externalId, externalUpdatedAt, status, number, oid, error, processedAt, createdAt }`. `error` is `UNMATCHED` (a document the platform does not have — one issued by hand in InvoiceOcean, or before the import), `GONE` (the provider no longer has it) or the applier's own message |
+| GET | `/admin/invoices/:id` | |
+| GET | `/admin/invoices/:id/pdf` | `application/pdf`, `Content-Disposition: inline`, `Cache-Control: private, no-store`, streamed from the provider. 409 `NOT_ISSUED` for a draft or failed document (no `externalId`); 502 when the provider cannot be reached |
+| POST | `/admin/invoices/:id/send` | `{ to?: email }` — the buyer's address on the document when omitted. 202 `{ invoice, queued: true }`; InvoiceOcean sends it. 409 `NOT_ISSUED` unless `ISSUED`, `SENT`, `PAID` or `PARTIAL` |
+| POST | `/admin/invoices/:id/cancel` | `{ reason? }`. 200 with the invoice, `CANCELLED` here at once and at the provider through the outbox. A proforma only (409 `NOT_A_PROFORMA`: a VAT invoice is corrected, never cancelled), from `DRAFT`, `ISSUED`, `SENT`, `PARTIAL` or `ERROR` (409 `NOT_CANCELLABLE` once paid or already cancelled) |
+| POST | `/admin/invoices/:id/retry` | 202 `{ invoice, queued: true }`. `ERROR` only (409 `NOT_FAILED`); 409 `LIVE_INVOICE_EXISTS` if a live document of that kind appeared meanwhile |
+| POST | `/admin/finance/receivables/:id/invoices` | `{ kind: PROFORMA \| VAT \| ADVANCE \| FINAL, lang?, dueDate?: YYYY-MM-DD \| null, taxRateBps?, lines?: [{ description, quantity?, taxRateBps?, totalGrossCents }] }` — for a booking confirmed before invoicing was on, or after a failed one was cancelled. Lines default to the booking's own (one per package part when they add up); hand-written lines must add up to a positive amount (D4: the rate may differ per line). 202 `{ invoice, queued: true }`. 422 `NOTHING_OWED` (amount 0, `VOID` or `WAIVED`); 409 `LIVE_INVOICE_EXISTS` with the existing `invoiceId` |
+
+A staff invoice: `{ id, provider, kind, status, number, externalId,
+currency, lang, totalCents, paidCents, issueDate, sellDate, dueDate, buyer
+(the name, tax id and address as printed), receivable { id, reference,
+status, amountCents, paidCents, debtor { partner, name, email } },
+fromInvoice { id, kind, status, number, totalCents }, derived[] (the same
+shape: the VAT invoice from a proforma, the correction from a VAT invoice),
+correctionReason, source (what wrote it: CONFIRM, PAYMENT, CANCELLATION,
+MANUAL or IMPORT), syncError, lastSyncedAt,
+externalUpdatedAt, hasPdf, lines[] { id, description, quantity, taxRateBps,
+totalGrossCents, bookingReference }, createdAt, updatedAt }`. The receivable
+detail (`GET /admin/finance/receivables/:id`) carries `invoices[]` as
+compact rows (`id, kind, status, number, currency, totalCents, paidCents,
+issueDate, fromInvoiceId, syncError, hasPdf, createdAt`).
+
+**The partner's own documents** need `partner.invoices.read` (owner, partner
+admin, partner finance), an approved company, and are scoped to the
+session's partner: another company's document, a draft and a failed one are
+all **404**, because they do not exist as documents.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/partner/finance/invoices?kind&status&receivableId&from&to&q&page&pageSize` | Only `ISSUED`, `SENT`, `PARTIAL`, `PAID` and `CANCELLED` documents that exist at the provider; `debtorPartnerId` is ignored |
+| GET | `/partner/finance/invoices/:id` | `{ id, kind, status, number, currency, totalCents, paidCents, issueDate, dueDate, reference, receivableId, fromInvoice { id, kind, number }, hasPdf, lines[], createdAt }` — no provider ids, no sync error, no internal notes |
+| GET | `/partner/finance/invoices/:id/pdf` | As the staff route, scoped |
+
+**What is printed as the buyer.** A partner's `taxId` (its VAT or tax
+number, 2–32 characters, or null for none) and `invoiceLang` (one of the
+languages InvoiceOcean prints — `GET /admin/invoices/settings` lists them;
+Georgian and Hebrew are not among them, so the partner's locale is never
+used as-is; null = `INVOICEOCEAN_LANG`) are on every partner shape.
+`PATCH /admin/partners/:id` accepts both; `PATCH /partner/profile` accepts
+`taxId` only. A guest's document carries the lead name and email from the
+booking.
+
+**The webhook — `POST /api/integrations/invoiceocean/webhook`.** Public:
+there is no session on the other end. Guarded by the secret the webhook was
+registered with (`INVOICEOCEAN_WEBHOOK_SECRET`, 16+ characters), which
+InvoiceOcean echoes as `api_token` in the body; an `X-Webhook-Secret` header
+is accepted too, for a test with curl. The compare is constant-time and an
+unset secret matches nothing: a missing or wrong secret is **401**. The body
+is only loosely validated — InvoiceOcean's payload is its own, and only the
+id is relied on (`invoice.id`, or `id` / `invoice_id` at the top level; none
+is 400). A delivery is stored and answered **200 `{ received: true,
+duplicate }`** at once — for a document the platform has never heard of as
+well, which surfaces as `UNMATCHED` on `/admin/invoices/sync-events` after
+the next apply run rather than as a refusal, because a refused delivery
+would be retried forever. The global rate limit and the 100 kB body limit
+apply.
+
+Error reasons, in one place: 422 `INVOICING_DISABLED` (any write or
+provider call while the flag is off), 422 `NOTHING_OWED`, 409 `NOT_ISSUED`
+(send or PDF of a document that is not at the provider), 409
+`NOT_A_PROFORMA`, 409 `NOT_CANCELLABLE`, 409 `NOT_FAILED`, 409
+`LIVE_INVOICE_EXISTS`; 404 for a partner's foreign document; 401 for a
+webhook without the secret; 502 when the provider cannot be reached or
+refuses the token. `scripts/import-invoiceocean.js --from YYYY-MM-DD [--to
+YYYY-MM-DD] [--apply]` (a dry run without `--apply`; needs the domain and
+token, not the flag) brings documents already in the account in as
+`source: IMPORT`, matched by `oid` to a receivable's reference.
+
 ### A partner's own money — `/partner/finance`
 
 `partner.statement.read` (owner, partner admin, partner finance), approved
@@ -1386,6 +1533,7 @@ partners only, always scoped to the session's company.
 | --- | --- | --- |
 | GET | `/partner/finance/statement?status&page&pageSize` | `balances[]` per currency (`outstandingCents`, `overdueCents`, `creditCents`) and the agency's receivables with the payments against each — no supplier, no net, no internal notes |
 | GET | `/partner/finance/payables?status&page&pageSize` | For a supplier: what we owe it for its own bookings — its net and its schedule, nothing of ours |
+| GET | `/partner/finance/invoices` · `/invoices/:id` · `/invoices/:id/pdf` | `partner.invoices.read`: the company's own proformas and invoices, and their PDFs — see Invoices above |
 
 ## Supplier extranet
 

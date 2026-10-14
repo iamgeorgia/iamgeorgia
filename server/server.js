@@ -8,6 +8,7 @@ import { sweepExpiringCertifications } from './services/hotel/kosher.service.js'
 import { drainOutbox } from './services/notifications/outbox.service.js';
 import { sweepReminders } from './services/transfer/reminder.service.js';
 import { sweepFinanceReminders } from './services/finance/reminder.service.js';
+import { applySyncEvents, pollInvoices } from './services/invoicing/sync.service.js';
 import { auditTourSweep, sweepExpiredTourHolds } from './services/tour/availability.service.js';
 import { sweepCompletedTourBookings, sweepOverdueTourRequests } from './services/tour/booking.service.js';
 import { sweepCompletedHotelBookings } from './services/hotel/booking.service.js';
@@ -113,6 +114,35 @@ const start = async () => {
 
     financeReminderSweeper.unref();
 
+    /**
+     * Invoicing: the stored status reports from InvoiceOcean are applied
+     * every minute, and InvoiceOcean is polled for the ones its webhook
+     * never delivered. Neither runs while invoicing is switched off — there
+     * is nothing to apply and nobody to ask.
+     */
+    const invoiceSyncApplier = config.finance.invoiceocean.enabled
+        ? setInterval(() => {
+              applySyncEvents()
+                  .then(({ skipped, applied, failed }) => {
+                      if (!skipped && applied + failed > 0) logger.info({ applied, failed }, 'Invoice status events applied');
+                  })
+                  .catch((err) => logger.error({ err }, 'Invoice sync apply failed'));
+          }, config.finance.invoiceocean.syncApplyIntervalMs)
+        : null;
+
+    const invoicePoller = config.finance.invoiceocean.enabled
+        ? setInterval(() => {
+              pollInvoices()
+                  .then(({ skipped, stored }) => {
+                      if (!skipped && stored > 0) logger.info({ stored }, 'Invoice changes found by polling');
+                  })
+                  .catch((err) => logger.error({ err }, 'Invoice poll failed'));
+          }, config.finance.invoiceocean.pollIntervalMs)
+        : null;
+
+    invoiceSyncApplier?.unref();
+    invoicePoller?.unref();
+
     /** Tour holds: the same counter-and-sweeper discipline as room holds. */
     const tourHoldSweeper = setInterval(() => {
         sweepExpiredTourHolds()
@@ -187,6 +217,8 @@ const start = async () => {
         clearInterval(outboxDrainer);
         clearInterval(reminderSweeper);
         clearInterval(financeReminderSweeper);
+        if (invoiceSyncApplier) clearInterval(invoiceSyncApplier);
+        if (invoicePoller) clearInterval(invoicePoller);
         clearInterval(tourHoldSweeper);
         clearInterval(tourCompletionSweeper);
         clearInterval(tourRequestSweeper);

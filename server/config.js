@@ -258,7 +258,42 @@ export const config = {
 
         // The shared finance mailbox every reminder is also emailed to, beside
         // the in-app notices. Unset, reminders are in-app only.
-        opsEmail: process.env.FINANCE_OPS_EMAIL || null
+        opsEmail: process.env.FINANCE_OPS_EMAIL || null,
+
+        // Invoicing through InvoiceOcean (Phase 4). Off by default: with
+        // `enabled` false nothing is written to the outbox and nothing is
+        // called, so the code can be deployed before the account is ready.
+        // When it is on, every receivable gets a proforma at confirmation and
+        // a VAT invoice on full payment, issued by the outbox drain.
+        invoiceocean: {
+            enabled: process.env.INVOICEOCEAN_ENABLED === 'true',
+            // `acme` (for acme.invoiceocean.com), a full host, or a full URL —
+            // the last so a stub server can stand in for the real thing.
+            domain: process.env.INVOICEOCEAN_DOMAIN || null,
+            apiToken: process.env.INVOICEOCEAN_API_TOKEN || null,
+            // The secret the webhook was registered with; InvoiceOcean sends
+            // it back with every delivery and nothing else is accepted.
+            webhookSecret: process.env.INVOICEOCEAN_WEBHOOK_SECRET || null,
+            // Owner decision D3: the account's default numbering series, one
+            // department. Set when the account has more than one.
+            departmentId: process.env.INVOICEOCEAN_DEPARTMENT_ID || null,
+            // D2: the document language when the partner has none of its own.
+            // InvoiceOcean's codes; it has no Georgian or Hebrew.
+            lang: process.env.INVOICEOCEAN_LANG || 'en',
+            // D4: VAT on every line, in basis points (1800 = 18%), unless a
+            // finance user says otherwise on a hand-issued invoice.
+            defaultTaxBps: numberEnv('INVOICEOCEAN_DEFAULT_TAX_BPS', 1800),
+            // Ask InvoiceOcean to email each document to the buyer as soon as
+            // it is issued. Off: the platform shows the PDF and Finance sends
+            // by hand from the invoice page.
+            autoSend: process.env.INVOICEOCEAN_AUTO_SEND === 'true',
+            // Status changes made in InvoiceOcean arrive by webhook; the poll
+            // is the fallback for deliveries that never came, and the apply
+            // interval is how often stored events are worked through.
+            pollIntervalMs: numberEnv('INVOICEOCEAN_POLL_INTERVAL_MS', 15 * 60 * 1000),
+            syncApplyIntervalMs: numberEnv('INVOICEOCEAN_SYNC_APPLY_INTERVAL_MS', 60 * 1000),
+            requestTimeoutMs: numberEnv('INVOICEOCEAN_REQUEST_TIMEOUT_MS', 15 * 1000)
+        }
     },
 
     partners: {
@@ -639,8 +674,53 @@ const assertFinanceConfig = () => {
     }
 };
 
+// Languages InvoiceOcean can print a document in. Georgian and Hebrew are not
+// among them (owner decision D2), which is why a partner's own locale is never
+// used as-is.
+export const INVOICEOCEAN_LANGS = Object.freeze([
+    'en', 'pl', 'de', 'fr', 'es', 'it', 'nl', 'cz', 'hr', 'sk', 'ru', 'tr', 'ar', 'pt', 'et', 'lt', 'lv', 'hu', 'ro', 'bg', 'el', 'sv', 'da', 'fi', 'no', 'uk', 'sl', 'sr', 'zh', 'ja', 'ko', 'ee'
+]);
+
+/**
+ * Invoicing is checked at boot for the same reason the mail transport is: a
+ * deploy that thinks it is issuing invoices and is not would be found out by
+ * an accountant weeks later. Switched off, none of it is required.
+ */
+const assertInvoicingConfig = () => {
+    const io = config.finance.invoiceocean;
+
+    if (!Number.isInteger(io.defaultTaxBps) || io.defaultTaxBps < 0 || io.defaultTaxBps > 10_000) {
+        throw new Error(`INVOICEOCEAN_DEFAULT_TAX_BPS must be whole basis points between 0 and 10000, got "${io.defaultTaxBps}"`);
+    }
+
+    if (!INVOICEOCEAN_LANGS.includes(io.lang)) {
+        throw new Error(`INVOICEOCEAN_LANG must be a language InvoiceOcean prints (${INVOICEOCEAN_LANGS.join(', ')}), got "${io.lang}"`);
+    }
+
+    if (!io.enabled) {
+        return;
+    }
+
+    const missingKeys = [
+        ['INVOICEOCEAN_DOMAIN', io.domain],
+        ['INVOICEOCEAN_API_TOKEN', io.apiToken],
+        ...(isDeployed ? [['INVOICEOCEAN_WEBHOOK_SECRET', io.webhookSecret]] : [])
+    ]
+        .filter(([, value]) => !value)
+        .map(([key]) => key);
+
+    if (missingKeys.length > 0) {
+        throw new Error(`INVOICEOCEAN_ENABLED=true needs ${missingKeys.join(', ')}`);
+    }
+
+    if (io.webhookSecret && io.webhookSecret.length < 16) {
+        throw new Error('INVOICEOCEAN_WEBHOOK_SECRET must be at least 16 characters');
+    }
+};
+
 assertMailConfig();
 assertMediaConfig();
 assertFinanceConfig();
+assertInvoicingConfig();
 
 export default config;

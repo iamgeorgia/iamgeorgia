@@ -65,7 +65,17 @@ export const TOPICS = Object.freeze({
     APPROVAL_REQUESTED: 'finance.approval.requested',
     APPROVAL_DECIDED: 'finance.approval.decided',
     /** A WARN-mode partner booked past its credit limit; finance hears. */
-    CREDIT_LIMIT_WARNING: 'finance.credit.warning'
+    CREDIT_LIMIT_WARNING: 'finance.credit.warning',
+
+    // Invoicing. The first three ask the drain to call the provider — issue,
+    // email, cancel — and are written with the DRAFT row in the booking's own
+    // transaction, so the vendor is never called inside it. The last two
+    // are what the drain writes afterwards for the people to be told.
+    INVOICE_ISSUE_REQUESTED: 'finance.invoice.issue_requested',
+    INVOICE_SEND_REQUESTED: 'finance.invoice.send_requested',
+    INVOICE_CANCEL_REQUESTED: 'finance.invoice.cancel_requested',
+    INVOICE_ISSUED: 'finance.invoice.issued',
+    INVOICE_SYNC_FAILED: 'finance.invoice.sync_failed'
 });
 
 /** Writes one event on the given client — a transaction handle, in practice. */

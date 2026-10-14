@@ -1,6 +1,7 @@
 import { config } from '../../config.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { upsertPenaltyInTx } from './penalty.service.js';
+import { onReceivableAmountChangedInTx, onReceivableCreatedInTx } from '../invoicing/invoice.service.js';
 import { addDays, todayInTimezone, toDateOnly, zonedTimeToInstant } from '../../lib/time.js';
 
 /**
@@ -434,6 +435,11 @@ const applyReceivableTarget = async (tx, receivable, targetCents, actor, req, wh
             metadata: { from: receivable.amountCents, to: amountCents, why },
             req
         });
+
+        // The invoices follow the money: a proforma re-issued, a VAT invoice
+        // corrected. Writes a draft and an event; the provider is called by
+        // the outbox drain, never here.
+        await onReceivableAmountChangedInTx(tx, updated, receivable, actor, req);
     }
 
     return updated;
@@ -466,6 +472,10 @@ const createReceivable = async (tx, subject, { reference, partner, lead, currenc
         metadata: { ...subject, reference, source },
         req
     });
+
+    // The proforma: a draft and an event, in this transaction; the provider
+    // is called by the outbox drain afterwards. Nothing when invoicing is off.
+    await onReceivableCreatedInTx(tx, receivable, actor, req);
 
     return receivable;
 };

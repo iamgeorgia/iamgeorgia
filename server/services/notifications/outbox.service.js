@@ -5,6 +5,7 @@ import { prisma } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import {
     adminApprovalUrl,
+    adminInvoiceUrl,
     adminPayableUrl,
     adminReceivableUrl,
     bookingManageUrl,
@@ -25,6 +26,7 @@ import { daysBetween, todayInTimezone } from '../../lib/time.js';
 import { issueRatingToken } from '../../lib/transfer/ratingToken.js';
 import { usersWithCapability } from '../rbac/access.js';
 import { APPROVE_CAPABILITY_FOR_KIND } from '../finance/approval.service.js';
+import { cancelInvoiceRemote, issueInvoice, recordProviderPayment, sendInvoice } from '../invoicing/invoice.service.js';
 import { contactRevealed } from '../../serializers/dispatch.js';
 import { sqlStateOf } from '../../middleware/errors.js';
 
@@ -826,7 +828,13 @@ const handlers = {
                 allocations: { include: { receivable: { select: { reference: true } } }, orderBy: { createdAt: 'asc' } }
             }
         });
-        if (!payment || payment.direction !== 'IN' || payment.kind !== 'PAYMENT' || !payment.counterpartyPartnerId) return;
+        if (!payment || payment.direction !== 'IN' || payment.kind !== 'PAYMENT') return;
+
+        // The provider's ledger first, so a receipt is never sent for money
+        // InvoiceOcean does not know about. Skips what it already posted.
+        await recordProviderPayment(paymentId);
+
+        if (!payment.counterpartyPartnerId) return;
 
         const allocations = payment.allocations
             .filter((entry) => entry.receivable)
@@ -945,6 +953,96 @@ handlers[TOPICS.CREDIT_LIMIT_WARNING] = async ({ partnerId, limitCents, outstand
         entityType: 'Partner',
         entityId: partnerId
     });
+};
+
+// --- Invoicing ----------------------------------------------------------------------------
+//
+// The three "requested" handlers call the provider through the invoice
+// service, which is idempotent: a retried event finds the document already
+// there and adopts it. The other two tell people.
+
+/** Creates the document at the provider. The last attempt is told so, so a failure then is recorded for Finance. */
+handlers[TOPICS.INVOICE_ISSUE_REQUESTED] = async ({ invoiceId }) => {
+    const event = currentEvent();
+    await issueInvoice(invoiceId, { finalAttempt: Boolean(event) && event.attempts + 1 >= MAX_ATTEMPTS });
+};
+
+handlers[TOPICS.INVOICE_SEND_REQUESTED] = async ({ invoiceId, to }) => {
+    await sendInvoice(invoiceId, { to: to ?? null });
+};
+
+handlers[TOPICS.INVOICE_CANCEL_REQUESTED] = async ({ invoiceId }) => {
+    await cancelInvoiceRemote(invoiceId);
+};
+
+const INVOICE_KIND_LABELS = { PROFORMA: 'Proforma', VAT: 'VAT invoice', ADVANCE: 'Advance invoice', FINAL: 'Final invoice', CORRECTION: 'Correction' };
+
+const loadInvoiceForNotice = (invoiceId) =>
+    prisma.invoice.findUnique({
+        where: { id: invoiceId },
+        include: { receivable: { select: { id: true, reference: true, debtorPartnerId: true, debtorName: true } } }
+    });
+
+/** A document exists: the finance desk hears, and so does the company it is addressed to. */
+handlers[TOPICS.INVOICE_ISSUED] = async ({ invoiceId }) => {
+    const invoice = await loadInvoiceForNotice(invoiceId);
+    if (!invoice || !invoice.externalId) return;
+
+    const label = INVOICE_KIND_LABELS[invoice.kind] ?? invoice.kind;
+    const number = invoice.externalNumber ?? invoice.externalId;
+
+    await notify(await usersWithCapability(CAPABILITIES.INVOICES_READ, { partnerId: null }), {
+        kind: 'FINANCE_INVOICE_ISSUED',
+        title: `${label} ${number} issued for ${invoice.receivable.reference}`,
+        body: `${invoice.receivable.debtorName} · ${formatMoney(invoice.totalCents, invoice.currency)}`,
+        payload: { invoiceId, receivableId: invoice.receivableId, reference: invoice.receivable.reference, kind: invoice.kind, number },
+        entityType: 'Invoice',
+        entityId: invoiceId
+    });
+
+    if (!invoice.receivable.debtorPartnerId) return;
+
+    await notify(await usersWithCapability(CAPABILITIES.PARTNER_INVOICES_READ, { partnerId: invoice.receivable.debtorPartnerId }), {
+        kind: 'FINANCE_INVOICE_ISSUED',
+        title: `${label} ${number} for ${invoice.receivable.reference}`,
+        body: `${formatMoney(invoice.totalCents, invoice.currency)} · open it from your statement`,
+        payload: { invoiceId, receivableId: invoice.receivableId, reference: invoice.receivable.reference, kind: invoice.kind, number },
+        entityType: 'Invoice',
+        entityId: invoiceId
+    });
+};
+
+/** A document could not be issued: the finance desk hears in-app and by email, with the provider's own words. */
+handlers[TOPICS.INVOICE_SYNC_FAILED] = async ({ invoiceId }) => {
+    const invoice = await loadInvoiceForNotice(invoiceId);
+    if (!invoice || invoice.status !== 'ERROR') return;
+
+    const label = INVOICE_KIND_LABELS[invoice.kind] ?? invoice.kind;
+
+    await notify(await usersWithCapability(CAPABILITIES.INVOICES_WRITE, { partnerId: null }), {
+        kind: 'FINANCE_INVOICE_SYNC_FAILED',
+        title: `${label} for ${invoice.receivable.reference} was not issued`,
+        body: invoice.syncError ?? 'InvoiceOcean did not accept it',
+        payload: { invoiceId, receivableId: invoice.receivableId, reference: invoice.receivable.reference, kind: invoice.kind },
+        entityType: 'Invoice',
+        entityId: invoiceId
+    });
+
+    if (config.finance.opsEmail) {
+        await sendMail({
+            to: config.finance.opsEmail,
+            template: 'financeInvoiceSyncFailed',
+            data: {
+                kindLabel: label,
+                reference: invoice.receivable.reference,
+                debtorName: invoice.receivable.debtorName,
+                amountCents: invoice.totalCents,
+                currency: invoice.currency,
+                error: invoice.syncError ?? 'InvoiceOcean did not accept it',
+                url: adminInvoiceUrl(invoiceId)
+            }
+        });
+    }
 };
 
 const APPROVAL_KIND_LABELS = {

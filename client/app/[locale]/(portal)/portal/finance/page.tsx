@@ -3,15 +3,18 @@ import { redirect } from "next/navigation";
 
 import { CommissionTable, CreditCard } from "@/components/partners/FinanceCreditCommission";
 import { FinanceStatement, type StatementFilter } from "@/components/partners/FinanceStatement";
+import { PortalInvoices } from "@/components/partners/PortalInvoices";
 import { Container } from "@/components/ui/Container";
 import { getPartnerStatement, getSupplierStatement } from "@/lib/api/finance";
 import { getOwnCommission, getOwnCredit } from "@/lib/api/finance-controls";
+import { listOwnInvoices } from "@/lib/api/invoices";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
 import { can, homePathFor } from "@/types/auth";
 import type { SettlementStatus, SupplierStatementPayable } from "@/types/finance";
 import type { CommissionReport, CreditPosition } from "@/types/finance-controls";
+import type { PartnerInvoice } from "@/types/invoice";
 import type { Paginated } from "@/types/partner";
 
 export const metadata: Metadata = { title: "Finance" };
@@ -70,8 +73,10 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
   const filter: StatementFilter = requested === "paid" || requested === "all" ? requested : "open";
   const page = pageNumber(first(params.page));
   const supplierPage = pageNumber(first(params.spage));
+  const invoicePage = pageNumber(first(params.ipage));
+  const showInvoices = can(session, "partner.invoices.read");
 
-  const [statement, payables, credit, commission] = await Promise.all([
+  const [statement, payables, credit, commission, invoices] = await Promise.all([
     getPartnerStatement({ status: STATUSES[filter], page, pageSize: 25 }),
     // Only a supplier has rows here; for an agency the list is empty and the
     // section is left out. A failure costs the section, not the statement.
@@ -90,12 +95,20 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
       console.error("Commission report failed:", error);
       return null;
     }),
+    // Like the others, a failure costs the section, not the page.
+    showInvoices
+      ? listOwnInvoices({ page: invoicePage, pageSize: 25 }).catch((error: unknown): Paginated<PartnerInvoice> | null => {
+          console.error("Invoices failed:", error);
+          return null;
+        })
+      : Promise.resolve<Paginated<PartnerInvoice> | null>(null),
   ]);
 
   const current: Record<string, string | null> = {
     status: filter === "open" ? null : filter,
     page: page > 1 ? String(page) : null,
     spage: supplierPage > 1 ? String(supplierPage) : null,
+    ipage: invoicePage > 1 ? String(invoicePage) : null,
   };
 
   const hrefFor = (changes: Record<string, string | null>) => {
@@ -107,6 +120,7 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
     if ("status" in changes) {
       next.delete("page");
       next.delete("spage");
+      next.delete("ipage");
     }
     const query = next.toString();
     return path(query ? `/portal/finance?${query}` : "/portal/finance");
@@ -135,6 +149,12 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
           path={path}
           hrefFor={hrefFor}
         />
+
+        {invoices && (
+          <div className="mt-6">
+            <PortalInvoices invoices={invoices} hrefFor={hrefFor} />
+          </div>
+        )}
       </div>
     </Container>
   );

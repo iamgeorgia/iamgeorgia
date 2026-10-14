@@ -153,6 +153,10 @@ export interface PartnerSummary {
   kind: PartnerKind;
   status: PartnerStatus;
   registrationNumber: string | null;
+  /** The VAT or tax number printed as the buyer on invoices issued to the partner. */
+  taxId: string | null;
+  /** The language its invoices are printed in; null means the server default. */
+  invoiceLang: string | null;
   city: string | null;
   country: string | null;
   email: string | null;

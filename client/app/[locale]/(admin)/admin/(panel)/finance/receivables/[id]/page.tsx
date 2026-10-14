@@ -18,10 +18,12 @@ import {
 } from "@/components/admin/finance/PaymentFormat";
 import { ReceivableApprovalRequests } from "@/components/admin/finance/ApprovalRequestActions";
 import { ReceivableActions } from "@/components/admin/finance/ReceivableActions";
+import { ReceivableInvoicesPanel } from "@/components/admin/finance/ReceivableInvoicesPanel";
 import { SettlementStatusBadge } from "@/components/admin/finance/SettlementStatusBadge";
 import { dueInWords, paymentKindLabel, paymentMethodLabels, subjectHref } from "@/lib/admin/finance";
 import { ApiError } from "@/lib/api/client";
 import { getReceivable } from "@/lib/api/finance";
+import { getInvoicingSettings } from "@/lib/api/invoices";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
@@ -29,6 +31,7 @@ import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { can } from "@/types/auth";
 import type { Allocation, Receivable } from "@/types/finance";
+import type { InvoicingSettings } from "@/types/invoice";
 
 export async function generateMetadata({
   params,
@@ -73,6 +76,12 @@ export default async function AdminReceivablePage({
   const { id } = await params;
   const { path } = await getI18n();
 
+  const canReadInvoices = can(session, "invoices.read");
+  // The invoicing defaults are read alongside the receivable; a failure only disables the issue button.
+  const settingsRequest: Promise<InvoicingSettings | null> = canReadInvoices
+    ? getInvoicingSettings().catch(() => null)
+    : Promise.resolve(null);
+
   let receivable: Receivable;
 
   try {
@@ -82,6 +91,7 @@ export default async function AdminReceivablePage({
     throw error;
   }
 
+  const invoicingSettings = await settingsRequest;
   const canWrite = can(session, "finance.payments.write");
   const canReadPayments = can(session, "finance.payments.read");
   const canRefundWithoutApproval = can(session, "finance.refunds.execute");
@@ -274,6 +284,13 @@ export default async function AdminReceivablePage({
               ))}
             </ul>
           </AdminPanel>
+
+          <ReceivableInvoicesPanel
+            receivable={receivable}
+            canRead={canReadInvoices}
+            canWrite={can(session, "invoices.write")}
+            settings={invoicingSettings}
+          />
         </div>
 
         <div className="min-w-0 space-y-6">

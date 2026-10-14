@@ -7,6 +7,8 @@
  * are read off the stored amounts here, in one place.
  */
 
+import { toInvoiceSummary } from './invoice.js';
+
 const outstanding = (row) => Math.max(0, row.amountCents - row.paidCents);
 const refundDue = (row) => Math.max(0, row.paidCents - row.amountCents);
 
@@ -143,7 +145,8 @@ export const toReceivable = (receivable) => ({
     voidedAt: receivable.voidedAt ?? null,
     waivedAt: receivable.waivedAt ?? null,
     createdAt: receivable.createdAt,
-    ...(receivable.allocations ? { allocations: receivable.allocations.map(toAllocation) } : {})
+    ...(receivable.allocations ? { allocations: receivable.allocations.map(toAllocation) } : {}),
+    ...(receivable.invoices ? { invoices: receivable.invoices.map(toInvoiceSummary) } : {})
 });
 
 export const toPayment = (payment) => {

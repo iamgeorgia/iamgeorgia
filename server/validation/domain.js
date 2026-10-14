@@ -295,5 +295,16 @@ export const jsonFieldSchemas = {
     },
     AuditLog: {
         metadata: openObjectSchema
+    },
+    // What was sent to the invoicing provider about a buyer, and what it sent
+    // back about a document: shaped by the adapter, read whole, never queried.
+    InvoicingCustomer: {
+        snapshot: openObjectSchema
+    },
+    Invoice: {
+        buyerSnapshot: openObjectSchema
+    },
+    InvoiceSyncEvent: {
+        payload: openObjectSchema
     }
 };

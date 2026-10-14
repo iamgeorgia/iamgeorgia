@@ -153,11 +153,22 @@ export const purgeFinance = async ({
         await prisma.supplierPayable.deleteMany({ where: { id: { in: payableIds } } });
     }
 
+    // Invoices hold their receivable with Restrict, and a correction holds
+    // the invoice it corrects: the chain goes first, derived documents before
+    // the ones they came from (lines cascade).
+    const invoices = receivableIds.length > 0 ? await prisma.invoice.findMany({ where: { receivableId: { in: receivableIds } }, select: { id: true } }) : [];
+    const invoiceIds = invoices.map(({ id }) => id);
+
+    if (invoiceIds.length > 0) {
+        await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds }, fromInvoiceId: { not: null } } });
+        await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
+    }
+
     if (receivableIds.length > 0) {
         await prisma.receivable.deleteMany({ where: { id: { in: receivableIds } } });
     }
 
-    const financeIds = [...receivableIds, ...payableIds, ...payments.map(({ id }) => id)];
+    const financeIds = [...receivableIds, ...payableIds, ...payments.map(({ id }) => id), ...invoiceIds];
 
     if (financeIds.length > 0) {
         await prisma.auditLog.deleteMany({ where: { entityId: { in: financeIds } } });

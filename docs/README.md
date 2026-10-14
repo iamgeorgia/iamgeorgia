@@ -5,6 +5,7 @@
 | [LOCAL_SETUP.md](LOCAL_SETUP.md) | Anyone | Getting the whole platform running on your own machine, from prerequisites to troubleshooting |
 | [API_TESTING_GUIDE.md](API_TESTING_GUIDE.md) | Testers, QA | Every endpoint under `/api`, with the exact expected result for each — success and failure |
 | [postman/](postman/) | Testers, QA | A ready-to-import Postman collection: ~80 requests, each asserting its documented result |
+| [security-testing/](security-testing/10-executive-summary.md) | Engineering, QA, owner | Backend security assessment and testing plan (2026-10-12): attack surface, findings, test matrix, manual/tool/automated guides, performance plan, threat model, roadmap. Start with `10-executive-summary.md`. |
 
 ## Start here
 

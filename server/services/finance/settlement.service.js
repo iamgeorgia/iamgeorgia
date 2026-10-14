@@ -44,6 +44,8 @@ export const receivableInclude = {
     debtorPartner: { select: { id: true, name: true, reference: true } },
     allocations: allocationsWithPayment,
     order: { select: { id: true, reference: true, status: true } },
+    // The documents issued for it, newest first, for the "Invoices" panel.
+    invoices: { orderBy: { createdAt: 'desc' } },
     ...bookingRefs
 };
 

@@ -88,6 +88,8 @@ export interface PartnerProfileInput {
   email?: string;
   website?: string | null;
   socialLinks?: { label: string; url: string }[];
+  /** The VAT or tax number printed on invoices; null removes it. */
+  taxId?: string | null;
 }
 
 export const updateOwnProfile = (body: PartnerProfileInput) =>

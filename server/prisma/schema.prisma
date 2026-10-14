@@ -3184,6 +3184,15 @@ enum AuditAction {
   PARTNER_TERMINATED
   PARTNER_PRODUCT_ACCESS_CHANGED
 
+  INVOICE_REQUESTED
+  INVOICE_ISSUED
+  INVOICE_SENT
+  INVOICE_CANCELLED
+  INVOICE_SYNCED
+  INVOICE_SYNC_FAILED
+  INVOICE_IMPORTED
+  INVOICING_CUSTOMER_SYNCED
+
   PARTNER_INVITED
   PARTNER_CREATED
   PARTNER_UPDATED
@@ -3638,10 +3647,17 @@ model Partner {
   terminatedByUser  User?     @relation("PartnerTerminatedBy", fields: [terminatedByUserId], references: [id], onDelete: SetNull)
   terminatedReason  String?   @map("terminated_reason")
 
+  /// What goes on the company's invoices: its VAT or tax number, and the
+  /// language they are written in (an InvoiceOcean code; `en` when unset).
+  /// InvoiceOcean has no Georgian or Hebrew (owner decision D2).
+  taxId       String? @map("tax_id")
+  invoiceLang String? @map("invoice_lang")
+
   productAccess PartnerProductAccess[] @relation("PartnerProductAccess")
   receivables      Receivable[]        @relation("PartnerReceivables")
   supplierPayables SupplierPayable[]   @relation("PartnerSupplierPayables")
   paymentRecords   PaymentRecord[]     @relation("PartnerPaymentRecords")
+  invoicingCustomers InvoicingCustomer[] @relation("PartnerInvoicingCustomers")
 
   @@index([status])
   @@index([country])
@@ -5215,6 +5231,7 @@ model Receivable {
   source              String              @default("CONFIRM")
   notes               String?
   allocations         PaymentAllocation[]
+  invoices            Invoice[]
   createdAt           DateTime            @default(now()) @map("created_at")
   updatedAt           DateTime            @updatedAt @map("updated_at")
 
@@ -5270,12 +5287,169 @@ model PaymentAllocation {
   payableInstalmentId String?            @map("payable_instalment_id")
   payableInstalment   PayableInstalment? @relation(fields: [payableInstalmentId], references: [id], onDelete: Restrict)
   amountCents         Int                @map("amount_cents")
+  /// The payment InvoiceOcean recorded against this receivable's invoice, once
+  /// it has: what keeps a retried handler from recording it twice.
+  externalPaymentId   String?            @map("external_payment_id")
   createdAt           DateTime           @default(now()) @map("created_at")
 
   @@index([receivableId])
   @@index([payableInstalmentId])
   @@index([paymentRecordId])
   @@map("payment_allocations")
+}
+
+// --- Invoicing -----------------------------------------------------------------------
+//
+// Invoices are issued by a provider (InvoiceOcean today) from the receivables
+// above, never the other way round: the platform decides what is owed, the
+// provider numbers it, prints it and emails it. A row here is our record of
+// one document there — its id, number, status and what it was built from — so
+// a screen never needs the provider to show a list, and a provider outage
+// stalls issuing (retried from the outbox) rather than breaking a booking.
+
+enum InvoicingProvider {
+  INVOICEOCEAN
+
+  @@map("invoicing_provider")
+}
+
+enum InvoiceKind {
+  /// Issued when a booking is confirmed; the request for payment.
+  PROFORMA
+  /// The tax invoice, issued from the proforma once it is paid in full.
+  VAT
+  ADVANCE
+  FINAL
+  /// Issued against a VAT invoice when the amount owed changed afterwards.
+  CORRECTION
+
+  @@map("invoice_kind")
+}
+
+enum InvoiceStatus {
+  /// Written here, not yet created at the provider.
+  DRAFT
+  ISSUED
+  SENT
+  PAID
+  PARTIAL
+  CANCELLED
+  /// The provider refused it or could not be reached; `syncError` says why.
+  ERROR
+
+  @@map("invoice_status")
+}
+
+enum InvoiceSyncSource {
+  WEBHOOK
+  POLL
+
+  @@map("invoice_sync_source")
+}
+
+/// A buyer as the provider knows it: one per partner company, or one per
+/// guest email, each pointing at the provider's own client record so the same
+/// company is never created there twice.
+model InvoicingCustomer {
+  id               String            @id @default(cuid())
+  provider         InvoicingProvider
+  partnerId        String?           @map("partner_id")
+  partner          Partner?          @relation("PartnerInvoicingCustomers", fields: [partnerId], references: [id], onDelete: Cascade)
+  guestEmail       String?           @map("guest_email")
+  externalClientId String            @map("external_client_id")
+  /// What was last sent to the provider — name, tax id, address — so a change
+  /// on the partner is noticed and pushed before the next invoice.
+  snapshot         Json              @default("{}")
+  lastSyncedAt     DateTime?         @map("last_synced_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+
+  @@unique([provider, partnerId])
+  @@unique([provider, guestEmail])
+  @@unique([provider, externalClientId])
+  @@map("invoicing_customers")
+}
+
+model Invoice {
+  id                String            @id @default(cuid())
+  provider          InvoicingProvider @default(INVOICEOCEAN)
+  receivableId      String            @map("receivable_id")
+  receivable        Receivable        @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+  kind              InvoiceKind
+  status            InvoiceStatus     @default(DRAFT)
+  /// The provider's id and number, once it exists there.
+  externalId        String?           @map("external_id")
+  externalNumber    String?           @map("external_number")
+  externalUpdatedAt DateTime?         @map("external_updated_at")
+  /// The document this one was issued from: a VAT invoice from its proforma,
+  /// a correction from its VAT invoice. PROFORMA and ADVANCE have none (CHECK).
+  fromInvoiceId     String?           @map("from_invoice_id")
+  fromInvoice       Invoice?          @relation("InvoiceChain", fields: [fromInvoiceId], references: [id], onDelete: Restrict)
+  derived           Invoice[]         @relation("InvoiceChain")
+  currency          String            @db.Char(3)
+  /// The provider's language code for the document; never ka or he.
+  lang              String            @default("en")
+  /// Gross total in minor units; negative on a correction that reduces the bill.
+  totalCents        Int               @map("total_cents")
+  paidCents         Int               @default(0) @map("paid_cents")
+  issueDate         DateTime          @map("issue_date") @db.Date
+  sellDate          DateTime          @map("sell_date") @db.Date
+  dueDate           DateTime?         @map("due_date") @db.Date
+  /// Who it was addressed to, as sent: name, tax id, email, address.
+  buyerSnapshot     Json              @default("{}") @map("buyer_snapshot")
+  /// The provider's unauthenticated view token. Kept for the import and for
+  /// support; never handed to a partner — the PDF streams through our API.
+  publicToken       String?           @map("public_token")
+  lastSyncedAt      DateTime?         @map("last_synced_at")
+  syncError         String?           @map("sync_error")
+  correctionReason  String?           @map("correction_reason")
+  /// CONFIRM, PAYMENT, CANCELLATION, MANUAL or IMPORT: why it was written.
+  source            String            @default("CONFIRM")
+  lines             InvoiceLine[]
+  createdAt         DateTime          @default(now()) @map("created_at")
+  updatedAt         DateTime          @updatedAt @map("updated_at")
+
+  @@unique([provider, externalId])
+  @@index([receivableId, kind])
+  @@index([status, issueDate])
+  @@index([externalNumber])
+  @@index([createdAt])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id               String  @id @default(cuid())
+  invoiceId        String  @map("invoice_id")
+  invoice          Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sortOrder        Int     @default(0) @map("sort_order")
+  description      String
+  quantity         Int     @default(1)
+  /// Basis points, 1800 = 18%; null is "no tax" on the document.
+  taxRateBps       Int?    @map("tax_rate_bps")
+  totalGrossCents  Int     @map("total_gross_cents")
+  bookingReference String? @map("booking_reference")
+
+  @@index([invoiceId, sortOrder])
+  @@map("invoice_lines")
+}
+
+/// What the provider told us about an invoice, by webhook or by polling,
+/// written first and applied afterwards. The unique triple is what makes a
+/// webhook delivered twice a no-op.
+model InvoiceSyncEvent {
+  id                String            @id @default(cuid())
+  provider          InvoicingProvider
+  source            InvoiceSyncSource
+  externalId        String            @map("external_id")
+  externalUpdatedAt DateTime          @map("external_updated_at")
+  payload           Json
+  processedAt       DateTime?         @map("processed_at")
+  error             String?
+  createdAt         DateTime          @default(now()) @map("created_at")
+
+  @@unique([provider, externalId, externalUpdatedAt])
+  @@index([processedAt, createdAt])
+  @@map("invoice_sync_events")
 }
 
 // ---------------------------------------------------------------------------

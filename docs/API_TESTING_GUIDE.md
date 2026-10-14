@@ -1671,6 +1671,147 @@ that company's receivables, with `balances` per currency and no `debtor`,
 one's rows. `GET /api/partner/finance/payables` as a supplier — its own net
 and schedule, nothing of ours.
 
+## Part 8c — Invoicing
+
+The documents behind a receivable — a **proforma** at confirmation, the
+**VAT invoice** when it is paid in full, a **correction** when a VAT-invoiced
+booking is cancelled with a charge — numbered, printed and emailed by
+InvoiceOcean. Staff routes under `/api/admin/invoices`, the hand-issue route
+on the receivable, a partner's own view under `/api/partner/finance/invoices`,
+and one public webhook. Full contract in `server/API.md` → "Finance" →
+"Invoices".
+
+**Who:** reads (list, detail, PDF, settings, sync events) — `SUPER_ADMIN`,
+`ADMIN`, `MANAGEMENT`, `ACCOUNTANT`. Writes (issue by hand, send, cancel,
+retry) — `SUPER_ADMIN` and `ACCOUNTANT` only: an `ADMIN` or `MANAGEMENT`
+user gets `403` on every POST here, and so does `FINANCE_OPERATOR`, which as
+seeded holds neither `invoices.read` nor `invoices.write`. `TOUR_OPERATOR`,
+`DISPATCHER`, `DRIVER` and every partner role get `403` on all of
+`/api/admin/invoices`. A partner's `PARTNER_OWNER`, `PARTNER_ADMIN` and
+`PARTNER_FINANCE` read their own company's documents; `PARTNER_AGENT` gets
+`403`; an unapproved company gets `403`. The demo accounts from
+`scripts/seed-b2b-demo.js` cover every one of these
+(`finance@…` is the accountant, `reservations@…` the tour operator,
+`agency.owner@…` the agency).
+
+**The switch.** Everything is behind `INVOICEOCEAN_ENABLED`. With it off the
+server still lists what was issued before, and every write answers
+`422 { reason: "INVOICING_DISABLED" }` — checked *before* the id is looked
+up, so `POST /api/admin/invoices/no-such-id/retry` is `422` while off and
+`404` once on. Test both states; the Postman folder *06q · Admin · Invoices*
+reads `GET /settings` first and expects accordingly.
+
+### With the flag off
+
+Sign in as the accountant. `<api>` is your base URL; the session is the
+`iag_session` cookie, so pass the cookie jar to every call:
+
+```bash
+curl -s -c jar.txt -X POST <api>/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"<accountant email>","password":"<password>"}'
+```
+
+| Request | Expected |
+| --- | --- |
+| `GET /api/admin/invoices/settings` | `200` `{ enabled: false, provider: "INVOICEOCEAN", languages: [...], defaultLang: "en", defaultTaxBps: 1800, autoSend: false }` — and no token anywhere in it |
+| `GET /api/admin/invoices` | `200`, `data` newest first (empty on a fresh database), `total`, `totalPages` |
+| `GET /api/admin/invoices?status=BOGUS` | `400` |
+| `GET /api/admin/invoices?status=ISSUED&status=PAID&debtorPartnerId=GUEST&from=2026-01-01` | `200`; `status` repeats, `GUEST` means documents addressed to guests, `from`/`to` are issue dates |
+| `GET /api/admin/invoices/sync-events` | `200`, `data` (empty until the provider has reported something unknown) |
+| `POST /api/admin/finance/receivables/<open receivable id>/invoices` `{ "kind": "PROFORMA" }` | `422` `INVOICING_DISABLED` |
+| `POST /api/admin/invoices/<any id>/send`, `/cancel`, `/retry` | `422` `INVOICING_DISABLED`, even for an id that does not exist |
+| `GET /api/admin/invoices/<id>/pdf` of a `DRAFT` or `ERROR` document | `409` `NOT_ISSUED` — there is nothing at the provider to stream |
+| The same as `MANAGEMENT` | reads `200`, every POST `403` naming `invoices.write` |
+| The same as `TOUR_OPERATOR` or a partner | `403` on all of it |
+| `POST /api/integrations/invoiceocean/webhook` with `{ "api_token": "wrong", "invoice": { "id": 1 } }` | `401` — no session needed, and an unset secret matches nothing |
+
+### With the flag on
+
+Needs an InvoiceOcean account with its company details filled in, the API
+token and the webhook secret in the environment (`docs/DEPLOYMENT.md`
+§3.4b), and — for the webhook round trip — an API host InvoiceOcean can
+reach. Confirm a booking for the demo agency (Part 8b shows how), find its
+receivable, and watch:
+
+```bash
+curl -s -b jar.txt '<api>/api/admin/invoices?receivableId=<receivable id>'
+```
+
+| Do this | Expect |
+| --- | --- |
+| Confirm a booking | Within a few seconds a `PROFORMA` row appears for its receivable, first `DRAFT`, then `ISSUED` with `number` (e.g. `P1`), `externalId` and `hasPdf: true`. The finance bell gets `FINANCE_INVOICE_ISSUED`; so does the agency's |
+| …while the InvoiceOcean account's seller details are blank | `ERROR` instead, `syncError` holding the provider's own words (`seller_name: can't be blank`); the finance bell gets `FINANCE_INVOICE_SYNC_FAILED` and `FINANCE_OPS_EMAIL` an email. Nothing is retried automatically — the provider would only repeat itself |
+| Fill the company details in InvoiceOcean, then `POST /api/admin/invoices/<id>/retry` | `202` `{ invoice, queued: true }`; the row goes `DRAFT` → `ISSUED` on the next drain |
+| `POST …/retry` on it again | `409` `NOT_FAILED` |
+| `POST /api/admin/invoices/<id>/send` `{ "to": "<an inbox you can read>" }` | `202`; the status becomes `SENT`; InvoiceOcean emails the PDF |
+| `GET /api/admin/invoices/<id>/pdf` | `200`, `Content-Type: application/pdf`, `Content-Disposition: inline; filename="P1.pdf"`, `Cache-Control: private, no-store` |
+| Record a payment for the whole receivable (Part 8b) | A `VAT` row appears, `fromInvoice` pointing at the proforma, `ISSUED` with its own number (e.g. `I1`) and `paidCents = totalCents`, status `PAID`; the proforma's `derived[]` lists it |
+| Record a *partial* payment instead | No VAT invoice; the proforma becomes `PARTIAL` and the payment is posted to it at the provider (once — replaying the payment posts nothing twice) |
+| `POST /api/admin/invoices/<VAT id>/cancel` | `409` `NOT_A_PROFORMA` |
+| `POST /api/admin/invoices/<PAID proforma id>/cancel` | `409` `NOT_CANCELLABLE` |
+| `POST /api/admin/invoices/<unpaid proforma id>/cancel` `{ "reason": "duplicate" }` | `200`, `CANCELLED` at once here and, through the outbox, at the provider. `POST …/receivables/<id>/invoices` `{ "kind": "PROFORMA" }` then issues a fresh one |
+| `POST …/receivables/<id>/invoices` `{ "kind": "PROFORMA" }` while one is live | `409` `LIVE_INVOICE_EXISTS` with the existing `invoiceId` |
+| …on a `VOID` or `WAIVED` receivable | `422` `NOTHING_OWED` |
+| Cancel a VAT-invoiced booking with a 50% charge | A `CORRECTION` row from the VAT invoice, `correctionReason` naming the old and new amounts |
+| Mark the proforma paid **in InvoiceOcean** (or wait: it marks it paid itself when the VAT invoice is paid) | Within a minute of the webhook (or 15 minutes of the poll) the local row's `status`/`paidCents` follow — and the receivable in `/api/admin/finance` does **not**: a status seen at the provider is a prompt for Finance, not a payment |
+| As the agency owner: `GET /api/partner/finance/invoices` | `200`, only that company's issued documents, with `number`, `totalCents`, `hasPdf`, `lines`, and no `externalId`, `syncError` or `buyer` |
+| As the agency owner: `GET /api/partner/finance/invoices/<id>/pdf` | `200` `application/pdf` for its own document; `404` for another company's, for a `DRAFT`, for an `ERROR` one, for an id that does not exist |
+| As the agency agent: any of the above | `403` |
+| `PATCH /api/admin/partners/<id>` `{ "taxId": "GE123456789", "invoiceLang": "ru" }` | `200`; both fields come back on the partner, and the next document issued to it prints that tax id in Russian. `"invoiceLang": "ka"` is `400` — InvoiceOcean has no Georgian or Hebrew |
+| `PATCH /api/partner/profile` `{ "taxId": "GE123456789" }` as the owner | `200`; sending `invoiceLang` there is not an error but is dropped — the schema is an allow-list, so the language stays what Finance set |
+
+Nothing in this part deletes anything: look for `CANCELLED` and `ERROR`
+rows in the list, never for a row that vanished. A row that disappears is a
+bug.
+
+### The sandbox checklist
+
+What was walked on 2026-10-14 against a test InvoiceOcean account, in the
+order that works. Placeholders throughout; never paste a real token into a
+ticket.
+
+1. In the InvoiceOcean account, fill in the company details (seller name,
+   tax id, address, bank) **first**. Until the seller name is set the API
+   refuses every document with `seller_name: can't be blank`, and the
+   platform records that as `ERROR` — which is itself a useful first test
+   if you want to see the failure path, but do it on purpose.
+2. Create the API token in the account (Settings → API), invent a webhook
+   secret of 16+ characters, and start the API with
+   `INVOICEOCEAN_ENABLED=true`, `INVOICEOCEAN_DOMAIN=<account>`,
+   `INVOICEOCEAN_API_TOKEN=<token>`, `INVOICEOCEAN_WEBHOOK_SECRET=<secret>`.
+   It refuses to boot when one of the first three is missing, or when the
+   secret is shorter than 16 characters.
+3. `GET /api/admin/invoices/settings` as the accountant → `enabled: true`.
+4. Confirm a booking for the demo agency → a `PROFORMA` appears and reaches
+   `ISSUED` with a number (`P1` on an empty account). If you skipped step 1
+   it is `ERROR` with `seller_name: can't be blank`: fill the details, then
+   `POST /api/admin/invoices/<id>/retry` → `202`, and it reaches `ISSUED`.
+5. `POST /api/admin/invoices/<id>/send` → `202`, then `SENT`; the document
+   lands in the buyer's inbox from InvoiceOcean, not from the platform.
+6. Record an `IN` payment for the whole receivable → a `VAT` row from the
+   proforma, `I1`, `PAID`.
+7. InvoiceOcean marks the proforma paid on its side as well; a poll run
+   (or its webhook) brings the local proforma to `PAID` within the apply
+   interval. Nothing changes on the receivable.
+8. `GET /api/admin/invoices/<id>/pdf` as the accountant and
+   `GET /api/partner/finance/invoices/<id>/pdf` as the agency owner → both
+   `200 application/pdf`.
+9. The webhook round trip needs a host InvoiceOcean can reach (the
+   deployed API, or a tunnel to your machine). Register
+   `https://<api host>/api/integrations/invoiceocean/webhook` for
+   `invoice:create` and `invoice:update` with the secret as its token
+   (§3.4b), then:
+   - `curl -X POST <api>/api/integrations/invoiceocean/webhook -H 'Content-Type: application/json' -d '{"api_token":"wrong-secret","invoice":{"id":1}}'` → `401`;
+   - the same with the right secret and an id the platform does not have
+     (`"id": 424242`) → `200 { received: true, duplicate: false }`, the
+     same body again → `duplicate: true`, and about a minute later
+     `GET /api/admin/invoices/sync-events` lists it with `error: "UNMATCHED"`;
+   - mark a document paid in InvoiceOcean's own screen → the local row
+     follows within the apply interval without any poll.
+10. Switch the flag back off and confirm the list still shows everything
+    and every write is `422 INVOICING_DISABLED` again.
+
 ## Part 9 — Kosher
 
 Kosher support is three separate claims, trusted differently, and most of what is

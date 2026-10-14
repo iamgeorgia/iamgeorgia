@@ -46,6 +46,9 @@ import {
 import { recordPayment, allocatePayment, payInstalment, paymentInclude } from '../services/finance/payment.service.js';
 import { summary, margin, ageing, commission, toCsv, recordExport } from '../services/finance/report.service.js';
 import { getSupplierTerms, putSupplierTerms, updatePartnerTerms } from '../services/finance/terms.service.js';
+import { requestInvoice } from '../services/invoicing/invoice.service.js';
+import { requestInvoiceSchema } from '../validation/invoice.js';
+import { toInvoice } from '../serializers/invoice.js';
 import { prisma } from '../db/index.js';
 
 /**
@@ -195,6 +198,20 @@ adminFinanceRoutes.patch(
     validate({ params: financeIdParamSchema, body: adjustReceivableSchema }),
     async (req, res) => {
         res.json(toReceivable(await adjustReceivable(req.valid.params.id, req.valid.body, req.user, req)));
+    }
+);
+
+/**
+ * "Issue a proforma / VAT invoice" by hand: for a booking confirmed before
+ * invoicing was switched on, or after a failed one was cancelled. 202 — the
+ * document is written here and created at the provider by the outbox drain.
+ */
+adminFinanceRoutes.post(
+    '/receivables/:id/invoices',
+    requireCapability(C.INVOICES_WRITE),
+    validate({ params: financeIdParamSchema, body: requestInvoiceSchema }),
+    async (req, res) => {
+        res.status(202).json({ invoice: toInvoice(await requestInvoice(req.valid.params.id, req.valid.body, req.user, req)), queued: true });
     }
 );
 

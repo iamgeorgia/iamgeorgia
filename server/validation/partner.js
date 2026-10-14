@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { INVOICEOCEAN_LANGS } from '../config.js';
+
 import { socialLinkSchema, partnerDocumentSchema } from './domain.js';
 import {
     emailField,
@@ -53,6 +55,13 @@ const documentsField = z.array(partnerDocumentSchema).max(20);
 // 10000 basis points is 100%. Anything above it would mean paying the studio
 // more than the booking was worth.
 const commissionField = z.int().min(0).max(10_000);
+
+// The VAT or tax number printed as the buyer on every invoice issued to the
+// partner, and the language those documents are printed in (Phase 4). Both
+// optional: blank means no number on the document, and the server default
+// language.
+const taxIdField = z.string().trim().min(2).max(32);
+const invoiceLangField = z.enum(INVOICEOCEAN_LANGS);
 
 /** Everything a company must supply before an application can be reviewed. */
 export const companyFullSchema = z.object({
@@ -182,7 +191,9 @@ export const adminUpdatePartnerSchema = z
         socialLinks: socialLinksField,
         documents: documentsField,
         commissionRateBps: commissionField,
-        notes: textField(2000).nullable()
+        notes: textField(2000).nullable(),
+        taxId: taxIdField.nullable(),
+        invoiceLang: invoiceLangField.nullable()
     })
     .partial();
 
@@ -222,7 +233,8 @@ export const partnerSelfUpdateSchema = z
         phone: phoneField,
         email: emailField,
         website: websiteField.nullable(),
-        socialLinks: socialLinksField
+        socialLinks: socialLinksField,
+        taxId: taxIdField.nullable()
     })
     .partial();
 

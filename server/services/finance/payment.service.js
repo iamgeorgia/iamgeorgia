@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, UnprocessableEntityError } from '../../li
 import { lockRows } from '../../lib/locks.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { deriveStatus } from './ledger.service.js';
+import { onReceivablePaidInTx } from '../invoicing/invoice.service.js';
 
 /**
  * Money that actually moved, and what it settled.
@@ -234,7 +235,13 @@ const applyPlan = async (tx, input, target, payment, plan) => {
         const data = { paidCents, status, voidedAt: status === 'VOID' ? row.voidedAt ?? new Date() : null };
 
         if (target === 'RECEIVABLE') {
-            await tx.receivable.update({ where: { id: row.id }, data });
+            const updated = await tx.receivable.update({ where: { id: row.id }, data });
+
+            // Paid in full: the VAT invoice is asked for in the same
+            // transaction as the payment that earned it.
+            if (status === 'PAID' && row.status !== 'PAID' && input.kind === 'PAYMENT') {
+                await onReceivablePaidInTx(tx, updated);
+            }
         } else {
             await tx.payableInstalment.update({ where: { id: row.id }, data });
             touchedPayables.add(row.payableId);

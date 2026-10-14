@@ -4,7 +4,7 @@ Two files:
 
 | File | What it is |
 | --- | --- |
-| `I-am-Georgia.postman_collection.json` | The collection — 28 folders, ~700 requests covering **every** endpoint the server mounts, each asserting its expected result |
+| `I-am-Georgia.postman_collection.json` | The collection — 32 folders, ~700 requests covering **every** endpoint the server mounts, each asserting its expected result |
 | `I-am-Georgia.local.postman_environment.json` | The environment — base URL and credentials |
 
 Works in the Postman desktop app, the web app, and `newman` on the command line.
@@ -23,6 +23,7 @@ npm run prisma:migrate
 npm run seed:all                     # reference data, hotels, transfers, kosher, tours, services, packages,
                                      # plus the demo transfer bookings, drivers and cars the operations folders use
 node scripts/create-admin.js you@example.com Your Name
+node scripts/seed-b2b-demo.js         # the demo staff and partner logins folders 06o–06q use (optional)
 npm run dev
 ```
 
@@ -53,6 +54,10 @@ Click the environment name → **Edit**, and set:
 | `partnerPassword` | *(optional)* |
 | `driverEmail` | *(optional)* a `DRIVER` login, for folder 06i. Pre-filled with the first demo driver `seed-fleet.js` creates; clear it to skip |
 | `driverPassword` | *(optional)* `driver-demo-password` unless you seeded with `--password` |
+| `financeEmail` | *(optional)* an `ACCOUNTANT` login, for the invoice writes in folder 06q. Pre-filled with the demo accountant `seed-b2b-demo.js` creates; clear it to skip |
+| `financePassword` | *(optional)* `Demo-Georgia-2026` unless you seeded with `--password` |
+| `reservationsEmail` | *(optional)* a `TOUR_OPERATOR` login, for the 403 checks in folder 06q. Pre-filled with the demo reservations desk; clear it to skip |
+| `reservationsPassword` | *(optional)* as above |
 
 Leave everything else alone — the rest is filled in automatically as you go.
 
@@ -151,6 +156,7 @@ report, or `--folder "03 · Hotel search & booking"` to run one folder.
 | **06n · Admin — Staff, team & audit** | Staff accounts (super admins: invite → role change → resend → delete; anyone else is asserted to get 403), a partner's own team (needs `partnerEmail`), and the audit log with its filters |
 | **06o · Admin — Finance** | Reports per currency (and CSV), payables, receivables and payments lists, supplier terms, the refusals a payment or adjustment must give, and a partner's own statement. Read-only plus refusals: it never records a real payment |
 | **06p · Admin — Notifications & reminders** | The admin and portal bells (list, unread count, read marks), the payments-due queue behind the supplier payment reminders, the `paymentsDue` and `unreadNotifications` badges, and the outbox's failed-event list. The reminders themselves come from the server's clock, so the folder reads what the sweeper produced |
+| **06q · Admin · Invoices** | The invoicing module (InvoiceOcean): settings, the invoice list and its filters, sync events, one document and its PDF, a partner's own documents, the refusals (the reservations desk, a partner, a foreign document), the hand-issue, send, cancel and retry routes, and the webhook with a wrong secret. Runs green with `INVOICEOCEAN_ENABLED` off or on — the settings request reads the flag and the writes expect `422 INVOICING_DISABLED` while it is off. Never needs a live InvoiceOcean account; with the flag on, the hand-issue request writes a real proforma for the first open receivable |
 | **07 · Kosher** | Kosher services and certification on a hotel, the kosher search filters, a requirement the hotel cannot meet |
 | **08 · Security & error contract** | Requests that are *supposed* to fail: 401, 403, 404, 400, 413, 429, and the cross-site write check |
 
@@ -167,6 +173,9 @@ Confirm booking  → bookingReference, bookingTotalCents, bookingIdempotencyKey
 Quote a journey  → quoteToken, quotedFareCents
 Confirm transfer → transferReference, transferIdempotencyKey
 Partner login    → partnerId, partnerStatus, partnerRole
+Invoice settings → invoicingEnabled
+Invoices list    → invoiceId          (a document without a PDF when there is one)
+Receivables      → invReceivableId
 ```
 
 Dates are regenerated on **every** request by the collection pre-request script
@@ -204,6 +213,8 @@ Check this list before filing.
 | Postman not blocked by the cross-site check | Postman sends no `Origin`/`Sec-Fetch-Site`, and a browser cannot suppress those. Only requests from a page are checked |
 | `429` after a lot of clicking | The global limit is 100/minute per IP. Restart the server to clear it |
 | `400` from a media upload | No file was picked in the request's form-data tab. Everything downstream of it tolerates the missing id |
+| `422` `INVOICING_DISABLED` from an invoice write in folder 06q | Invoicing is switched off on that server (`INVOICEOCEAN_ENABLED=false`, the shipped value). Deliberate, and asserted; the same request answers for real once it is on |
+| `409` `NOT_ISSUED` from an invoice PDF | The folder picks a document that is not at the provider on purpose, so the run never calls InvoiceOcean. A real PDF needs an issued document and the account configured |
 | `404` / `409` from a folder-06 request on `{{bookingReference}}`, `{{transferReference}}` or `{{orderReference}}` | The earlier folder already cancelled that record; the description says how to see the 200 |
 
 ---

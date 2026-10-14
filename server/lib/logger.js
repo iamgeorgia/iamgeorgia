@@ -16,6 +16,8 @@ export const REDACTED_PATHS = [
     'req.headers.authorization',
     'req.headers.cookie',
     'req.headers["x-api-key"]',
+    // The InvoiceOcean webhook secret, when a manual test sends it as a header.
+    'req.headers["x-webhook-secret"]',
     'res.headers["set-cookie"]'
 ];
 

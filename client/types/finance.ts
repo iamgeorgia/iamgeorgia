@@ -1,3 +1,5 @@
+import type { InvoiceSummary } from "./invoice";
+
 /**
  * Finance types. Mirror `server/serializers/finance.js` exactly.
  *
@@ -118,6 +120,8 @@ export interface Receivable {
   waivedAt: string | null;
   createdAt: string;
   allocations?: Allocation[];
+  /** The documents issued for it, oldest first. Present on the detail read. */
+  invoices?: InvoiceSummary[];
 }
 
 /** An instalment in the "payments due" queue, with enough of its payable to say whose money it is. */

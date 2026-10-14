@@ -10,6 +10,8 @@ import { adminApprovalRoutes } from './admin.approvals.routes.js';
 import { adminAuditRoutes } from './admin.audit.routes.js';
 import { partnerTeamRoutes } from './partner.team.routes.js';
 import { adminFinanceRoutes } from './admin.finance.routes.js';
+import { adminInvoiceRoutes } from './admin.invoices.routes.js';
+import { invoiceOceanWebhookRoutes } from './integrations.invoiceocean.routes.js';
 import { partnerFinanceRoutes } from './partner.finance.routes.js';
 import { adminNotificationRoutes } from './admin.notifications.routes.js';
 import { partnerNotificationRoutes } from './partner.notifications.routes.js';
@@ -101,6 +103,9 @@ routes.use('/admin/roles', adminRoleRoutes);
 routes.use('/admin/approvals', adminApprovalRoutes);
 routes.use('/admin/audit', adminAuditRoutes);
 routes.use('/admin/finance', adminFinanceRoutes);
+routes.use('/admin/invoices', adminInvoiceRoutes);
+// Inbound from InvoiceOcean: no session, a shared secret instead.
+routes.use('/integrations/invoiceocean', invoiceOceanWebhookRoutes);
 routes.use('/admin/notifications', adminNotificationRoutes);
 routes.use('/admin/outbox', adminOutboxRoutes);
 routes.use('/admin/partners', adminPartnerRoutes);

@@ -65,6 +65,7 @@ function CompanySection({ partner }: { partner: Partner }) {
   const [values, setValues] = useState({
     name: partner.name,
     legalAddress: partner.legalAddress ?? "",
+    taxId: partner.taxId ?? "",
     city: partner.city ?? "",
     phone: partner.phone ?? "",
     email: partner.email ?? "",
@@ -93,6 +94,8 @@ function CompanySection({ partner }: { partner: Partner }) {
       await updateOwnProfile({
         name: values.name.trim(),
         legalAddress: values.legalAddress.trim(),
+        // An empty box means "remove it", which the server accepts as null.
+        taxId: values.taxId.trim() || null,
         city: values.city.trim(),
         phone: values.phone.trim(),
         email: values.email.trim(),
@@ -123,6 +126,15 @@ function CompanySection({ partner }: { partner: Partner }) {
         value={values.legalAddress}
         onChange={set("legalAddress")}
         error={errors.legalAddress}
+        wide
+      />
+      <Field
+        id="taxId"
+        label="Tax ID / VAT number"
+        hint="Printed as the buyer on your invoices."
+        value={values.taxId}
+        onChange={set("taxId")}
+        error={errors.taxId}
         wide
       />
       <Field id="phone" label="Company phone" type="tel" value={values.phone} onChange={set("phone")} error={errors.phone} />

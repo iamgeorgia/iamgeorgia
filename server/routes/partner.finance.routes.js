@@ -11,6 +11,10 @@ import { summaryQuerySchema } from '../validation/finance.js';
 import { toStatementReceivable, toSupplierStatementPayable } from '../serializers/finance.js';
 import { creditPosition } from '../services/finance/credit.service.js';
 import { commission } from '../services/finance/report.service.js';
+import { findInvoiceOr404, listInvoices, streamPdf } from '../services/invoicing/invoice.service.js';
+import { invoiceIdParamSchema, invoiceQuerySchema } from '../validation/invoice.js';
+import { toPartnerInvoice } from '../serializers/invoice.js';
+import { sendPdf } from './admin.invoices.routes.js';
 
 /**
  * A partner's own money, read from the portal.
@@ -107,6 +111,26 @@ partnerFinanceRoutes.get('/payables', validate({ query: statementQuerySchema }),
     ]);
 
     res.json({ data: payables.map(toSupplierStatementPayable), ...pageOf(total, req.valid.query) });
+});
+
+// --- Invoices -------------------------------------------------------------------------------
+//
+// The company's own documents, scoped by the session's partner in the
+// service: another company's invoice is a 404, and so is a draft or a failed
+// one, which do not exist as documents yet.
+
+partnerFinanceRoutes.get('/invoices', requireCapability(CAPABILITIES.PARTNER_INVOICES_READ), validate({ query: invoiceQuerySchema }), async (req, res) => {
+    const { invoices, ...meta } = await listInvoices(req.valid.query, { partnerId: req.user.partnerId });
+
+    res.json({ data: invoices.map(toPartnerInvoice), ...meta });
+});
+
+partnerFinanceRoutes.get('/invoices/:id', requireCapability(CAPABILITIES.PARTNER_INVOICES_READ), validate({ params: invoiceIdParamSchema }), async (req, res) => {
+    res.json(toPartnerInvoice(await findInvoiceOr404(req.valid.params.id, { partnerId: req.user.partnerId })));
+});
+
+partnerFinanceRoutes.get('/invoices/:id/pdf', requireCapability(CAPABILITIES.PARTNER_INVOICES_READ), validate({ params: invoiceIdParamSchema }), async (req, res) => {
+    await sendPdf(res, await streamPdf(req.valid.params.id, { partnerId: req.user.partnerId }));
 });
 
 /** The company's credit limit and what is open against it. */

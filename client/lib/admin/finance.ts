@@ -10,6 +10,7 @@ import type {
   SettlementStatus,
   SettlementSubject,
 } from "@/types/finance";
+import type { InvoiceKind, InvoiceStatus } from "@/types/invoice";
 
 /**
  * Wording and small helpers for the finance screens, in one place so the
@@ -122,4 +123,99 @@ export const dueInWords = (dueAt: string | null, now: Date = new Date()): string
   if (days === 0) return "Today";
   if (days > 0) return days === 1 ? "Tomorrow" : `In ${days} days`;
   return days === -1 ? "1 day late" : `${-days} days late`;
+};
+
+// --- Invoices (Phase 4) -----------------------------------------------------------
+
+export const invoiceKindLabels: Record<InvoiceKind, string> = {
+  PROFORMA: "Proforma",
+  VAT: "VAT invoice",
+  ADVANCE: "Advance invoice",
+  FINAL: "Final invoice",
+  CORRECTION: "Correction",
+};
+
+export const invoiceStatusLabels: Record<InvoiceStatus, string> = {
+  DRAFT: "Queued",
+  ISSUED: "Issued",
+  SENT: "Sent",
+  PAID: "Paid",
+  PARTIAL: "Part paid",
+  CANCELLED: "Cancelled",
+  ERROR: "Failed",
+};
+
+/** Pill tone per status: queued and cancelled neutral, issued and sent informative, paid positive, part paid attention, failed critical. */
+export const invoiceStatusTone: Record<InvoiceStatus, "neutral" | "attention" | "positive" | "critical" | "info"> = {
+  DRAFT: "neutral",
+  ISSUED: "info",
+  SENT: "info",
+  PAID: "positive",
+  PARTIAL: "attention",
+  CANCELLED: "neutral",
+  ERROR: "critical",
+};
+
+/** One sentence on what each status means, for a tooltip or a detail page. */
+export const invoiceStatusHints: Record<InvoiceStatus, string> = {
+  DRAFT: "Written here and waiting for the invoicing provider to create it. Usually a few seconds.",
+  ISSUED: "Created at the provider and numbered. Not yet sent to the buyer.",
+  SENT: "Emailed to the buyer by the provider.",
+  PAID: "Marked paid at the provider.",
+  PARTIAL: "Part of the amount has been recorded against it at the provider.",
+  CANCELLED: "Cancelled. A cancelled proforma is replaced by a new one when something is still owed.",
+  ERROR: "The provider refused it, or could not be reached. The reason is shown; Retry sends it again.",
+};
+
+export const invoiceSourceLabels: Record<string, string> = {
+  CONFIRM: "Issued when the booking was confirmed",
+  PAYMENT: "Issued when the bill was paid in full",
+  CANCELLATION: "Issued after a cancellation or a price change",
+  MANUAL: "Issued by hand",
+  IMPORT: "Imported from the provider",
+};
+
+/** The languages the provider prints in (its own codes; no Georgian or Hebrew). */
+export const invoiceLanguageLabels: Record<string, string> = {
+  en: "English",
+  ru: "Russian",
+  de: "German",
+  fr: "French",
+  es: "Spanish",
+  it: "Italian",
+  pl: "Polish",
+  cz: "Czech",
+  sk: "Slovak",
+  hr: "Croatian",
+  nl: "Dutch",
+  pt: "Portuguese",
+  tr: "Turkish",
+  uk: "Ukrainian",
+  hu: "Hungarian",
+  ro: "Romanian",
+  bg: "Bulgarian",
+  et: "Estonian",
+  lv: "Latvian",
+  lt: "Lithuanian",
+  sl: "Slovenian",
+  sv: "Swedish",
+  sr: "Serbian",
+  ko: "Korean",
+  ee: "Estonian",
+  da: "Danish",
+  fi: "Finnish",
+  no: "Norwegian",
+  el: "Greek",
+  ar: "Arabic",
+  zh: "Chinese",
+  ja: "Japanese",
+};
+
+export const invoiceLanguageLabel = (code: string) => invoiceLanguageLabels[code] ?? code.toUpperCase();
+
+/** "18%" from basis points; "no VAT" for zero or none. */
+export const taxRateLabel = (bps: number | null | undefined) => {
+  if (bps === null || bps === undefined) return "no VAT";
+  if (bps === 0) return "0%";
+  return (bps / 100).toLocaleString("en-GB", { maximumFractionDigits: 2 }) + "%";
 };

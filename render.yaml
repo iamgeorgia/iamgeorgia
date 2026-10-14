@@ -119,6 +119,42 @@ services:
       - key: FINANCE_OPS_EMAIL
         sync: false
 
+      # Invoicing through InvoiceOcean. Ships off: nothing is issued and
+      # nothing is called until the account is ready and the flag is flipped
+      # (docs/DEPLOYMENT.md §3.4b). Switched on, the domain, the API token and
+      # the webhook secret become required and the API refuses to boot
+      # without them.
+      - key: INVOICEOCEAN_ENABLED
+        value: "false"
+      # The account's subdomain: acme for acme.invoiceocean.com.
+      - key: INVOICEOCEAN_DOMAIN
+        sync: false
+      # The account's API token (Settings → API).
+      - key: INVOICEOCEAN_API_TOKEN
+        sync: false
+      # Your own 16+ character secret, registered as the token of the two
+      # InvoiceOcean webhooks (invoice:create, invoice:update).
+      - key: INVOICEOCEAN_WEBHOOK_SECRET
+        sync: false
+      # Optional, with defaults: the department (numbering series) when the
+      # account has more than one, the document language when the partner has
+      # none, VAT in basis points, whether InvoiceOcean emails each document
+      # on issue, and how often events are applied and the account polled.
+      # - key: INVOICEOCEAN_DEPARTMENT_ID
+      #   sync: false
+      - key: INVOICEOCEAN_LANG
+        value: en
+      - key: INVOICEOCEAN_DEFAULT_TAX_BPS
+        value: "1800"
+      - key: INVOICEOCEAN_AUTO_SEND
+        value: "false"
+      - key: INVOICEOCEAN_SYNC_APPLY_INTERVAL_MS
+        value: "60000"
+      - key: INVOICEOCEAN_POLL_INTERVAL_MS
+        value: "900000"
+      - key: INVOICEOCEAN_REQUEST_TIMEOUT_MS
+        value: "15000"
+
       # Media on Cloudflare R2
       - key: MEDIA_DRIVER
         value: s3

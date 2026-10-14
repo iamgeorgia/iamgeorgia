@@ -99,6 +99,11 @@ Region is `frankfurt` in the file — the closest to Georgia. Change it in
 | `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` | From the email provider |
 | `TRANSFER_OPS_EMAIL` | Where "leg still has no driver" alerts go |
 | `FINANCE_OPS_EMAIL` | The shared finance mailbox: supplier payment reminders, overdue alerts and overdue bills are emailed there beside the in-app notices. Unset, reminders are in-app only (the API warns at boot). The schedule itself (`FINANCE_REMINDER_OFFSET_DAYS=7,3,1,0`, `FINANCE_OVERDUE_REPEAT_DAYS=1`) has defaults and is only set to change it |
+| `INVOICEOCEAN_ENABLED` | `false` on the first deploy. Invoicing through InvoiceOcean is switched on later, in the order §3.4b gives; off, nothing is issued and nothing is called |
+| `INVOICEOCEAN_DOMAIN` | The InvoiceOcean account's subdomain (`acme` for acme.invoiceocean.com). Prompted; leave blank until §3.4b |
+| `INVOICEOCEAN_API_TOKEN` | **Secret**, prompted: the account's API token (Settings → API). Blank until §3.4b |
+| `INVOICEOCEAN_WEBHOOK_SECRET` | **Secret**, prompted: your own 16+ character secret, registered as the token of the two InvoiceOcean webhooks. Blank until §3.4b; required once the flag is on |
+| `INVOICEOCEAN_DEPARTMENT_ID` | Optional: the department (numbering series) to issue under, only when the account has more than one. The rest of the block — `INVOICEOCEAN_LANG=en`, `INVOICEOCEAN_DEFAULT_TAX_BPS=1800`, `INVOICEOCEAN_AUTO_SEND=false`, the poll and apply intervals — has defaults in `render.yaml` and is only changed there |
 | `API_CLIENT_TOKEN` | A long random string, set **identically** on this service and on the Vercel project. The web app's server renders send it with the visitor's address so the API's per-IP rate limits count visitors rather than the one Vercel/Render address they all arrive from. Unset, every visitor shares one bucket of 30 dated searches a minute (`RATE_LIMIT_SEARCH`) and 100 requests a minute (`RATE_LIMIT_GLOBAL`) |
 | `MEDIA_S3_ENDPOINT` | `https://<account-id>.r2.cloudflarestorage.com` |
 | `MEDIA_S3_ACCESS_KEY_ID`, `MEDIA_S3_SECRET_ACCESS_KEY` | The R2 API token |
@@ -167,6 +172,76 @@ does not contain, so seed from your machine against the hosted database:
    with. A certificate error means the URL needs `?sslmode=no-verify` instead.
 3. Remove your IP from Access Control again. The API reaches the database
    over the private network and never needs the public door.
+
+### 3.4b Switching on invoicing (InvoiceOcean)
+
+The invoicing module ships **off** (`INVOICEOCEAN_ENABLED=false`): with the
+flag off nothing is issued and nothing is called, the API boots without an
+account, and the finance screens still list whatever was issued before. Turn
+it on once the account is ready, in this order:
+
+1. **Deploy with the flag off.** The migrations create the invoice tables
+   either way; nothing else changes until step 7.
+2. **Prepare the InvoiceOcean account.** Fill in the company details the
+   documents are issued under — seller name, tax id, address, bank account —
+   and, if you use more than one numbering series, create the department to
+   issue from. The API refuses every document while the seller name is
+   blank (`seller_name: can't be blank`), and the platform records each
+   refusal as an `ERROR` document that has to be retried by hand once the
+   details are in. Do this *before* the first booking goes through.
+3. **Create the API token** in the account (Settings → API). It is a
+   secret: it goes into the service's environment and nowhere else — never
+   into the repository, a ticket or a chat.
+4. **Invent a webhook secret** of at least 16 characters (`openssl rand
+   -hex 24` is fine). The API refuses to boot with a shorter one.
+5. **Register two webhooks** in the account — events `invoice:create` and
+   `invoice:update` — pointing at
+   `https://<api host>/api/integrations/invoiceocean/webhook`, with the
+   secret from step 4 as the webhook's token (InvoiceOcean echoes it as
+   `api_token` with every delivery, and the API accepts nothing else). Use
+   the account's Settings → Webhooks screen, or its API:
+   `POST https://<account>.invoiceocean.com/webhooks.json` with
+   `{ "api_token": "<API token>", "webhook": { "url": "...", "api_token":
+   "<webhook secret>", "events": ["invoice:create", "invoice:update"] } }`.
+   The route is public and rate-limited like any other; a wrong secret is
+   401, an unknown document is stored and shows up as `UNMATCHED` on the
+   finance desk's sync-events list rather than being refused.
+6. **Set the variables** on the service: `INVOICEOCEAN_DOMAIN` (the
+   account's subdomain, `acme` for acme.invoiceocean.com),
+   `INVOICEOCEAN_API_TOKEN`, `INVOICEOCEAN_WEBHOOK_SECRET`, and
+   `INVOICEOCEAN_DEPARTMENT_ID` only if step 2 created a department. The
+   optional ones (`INVOICEOCEAN_LANG=en`, `INVOICEOCEAN_DEFAULT_TAX_BPS=1800`,
+   `INVOICEOCEAN_AUTO_SEND=false`, the poll and apply intervals) have
+   defaults and are set only to change them. Keep the flag off for one more
+   deploy if the account already holds documents.
+7. **Import the history**, if the account was in use before the platform
+   (skip otherwise). From a shell on the service, with the domain and token
+   set but the flag still off:
+
+   ```bash
+   node scripts/import-invoiceocean.js --from 2026-01-01            # dry run: what would match
+   node scripts/import-invoiceocean.js --from 2026-01-01 --apply    # write
+   ```
+
+   A document is matched by its `oid` to a booking or order reference; one
+   that matches nothing is listed and left alone. The script is idempotent
+   and reads only — it never issues anything.
+8. **Set `INVOICEOCEAN_ENABLED=true`** and redeploy. The API now refuses to
+   boot if the domain, the token or (outside development) the webhook
+   secret is missing, so a half-configured deploy fails at startup rather
+   than at the first booking.
+9. **Verify.** `GET https://<api host>/api/admin/invoices/settings` as a
+   finance user answers `"enabled": true`. Confirm one real booking: within
+   a few seconds its receivable shows a `PROFORMA` that is `ISSUED` with a
+   number, and its PDF opens from the receivable page. If it is `ERROR`
+   instead, `syncError` holds InvoiceOcean's own words — almost always the
+   company details from step 2 — and the document is retried from its page
+   once they are fixed.
+
+**Rollback** is the flag: set `INVOICEOCEAN_ENABLED=false` and redeploy.
+Documents already issued stay listed and readable; nothing new is issued and
+nothing is called until it is switched on again. Nothing is deleted on
+either side.
 
 ### 3.5 Database plan, backups, access
 
@@ -278,6 +353,12 @@ request, so a migration that cannot apply is caught before it reaches Render.
 them by name, so a misconfigured deploy fails at startup rather than at the
 first sign-in or upload. The full reference, including every optional tuning
 knob, is `server/.env.example` and the table in `server/README.md`.
+
+The `INVOICEOCEAN_*` block is the one optional group: with
+`INVOICEOCEAN_ENABLED=false` (the shipped value) none of it is required; set
+to `true`, `INVOICEOCEAN_DOMAIN`, `INVOICEOCEAN_API_TOKEN` and
+`INVOICEOCEAN_WEBHOOK_SECRET` become required and are checked at boot the
+same way (§3.4b).
 
 The client has one required variable, `NEXT_PUBLIC_API_URL`, and two optional
 ones for the place search and maps on the admin location screens and the

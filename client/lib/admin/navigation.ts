@@ -1,5 +1,6 @@
 import {
   ArrowDownLeft,
+  FileText,
   ArrowUpRight,
   Banknote,
   BedDouble,
@@ -301,6 +302,8 @@ export const adminNavigation: AdminNavGroup[] = [
       },
       { label: "Receivables", href: "/admin/finance/receivables", icon: ArrowDownLeft, capability: "finance.receivables.read" },
       { label: "Payments", href: "/admin/finance/payments", icon: Banknote, capability: "finance.payments.read" },
+      // Proformas, VAT invoices and corrections issued through the invoicing provider.
+      { label: "Invoices", href: "/admin/finance/invoices", icon: FileText, capability: "invoices.read" },
       // Refunds and write-offs that need a second person; badged with those still waiting.
       {
         label: "Approvals",

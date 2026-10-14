@@ -51,6 +51,10 @@ export const toPartnerSummary = (partner) => ({
     kind: partner.kind,
     status: partner.status,
     registrationNumber: partner.registrationNumber ?? null,
+    // For the invoices issued to this partner (Phase 4): its VAT/tax number and
+    // the language its documents are printed in (null = the server default).
+    taxId: partner.taxId ?? null,
+    invoiceLang: partner.invoiceLang ?? null,
     city: partner.city ?? null,
     country: partner.country ?? null,
     email: partner.email ?? null,

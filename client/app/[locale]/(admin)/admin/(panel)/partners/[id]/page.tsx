@@ -11,6 +11,7 @@ import {
 } from "@/components/admin/AdminPage";
 import { PartnerActions } from "@/components/admin/PartnerActions";
 import { PartnerCreditPanel } from "@/components/admin/finance/PartnerCreditPanel";
+import { PartnerInvoicingPanel } from "@/components/admin/finance/PartnerInvoicingPanel";
 import { PartnerTermsPanel } from "@/components/admin/finance/PartnerTermsPanel";
 import { PartnerContractPanel } from "@/components/admin/PartnerContractPanel";
 import { PartnerDangerZone } from "@/components/admin/PartnerDangerZone";
@@ -19,6 +20,7 @@ import { InvitationStatusBadge, PartnerStatusBadge } from "@/components/admin/St
 import { ApiError } from "@/lib/api/client";
 import { getPartnerTerms } from "@/lib/api/finance";
 import { getPartnerCredit } from "@/lib/api/finance-controls";
+import { getInvoicingSettings } from "@/lib/api/invoices";
 import { getPartner, getPartnerAudit, getPartnerInvitations, getProductAccessServer } from "@/lib/api/partners";
 import { getSession } from "@/lib/auth/session";
 import {
@@ -29,12 +31,14 @@ import {
   partnerKindLabels,
   partnerStatusHints,
 } from "@/lib/admin/partners";
+import { invoiceLanguageLabels } from "@/lib/admin/finance";
 import { getI18n } from "@/lib/i18n/server";
 import type { AuditEntry, Invitation, Partner } from "@/types";
 import type { ProductAccessEntry } from "@/types/partner";
 import { can } from "@/types/auth";
 import type { PartnerTerms } from "@/types/finance";
 import type { CreditPosition } from "@/types/finance-controls";
+import type { InvoicingSettings } from "@/types/invoice";
 
 export async function generateMetadata({
   params,
@@ -73,6 +77,11 @@ export default async function AdminPartnerPage({
     ? getPartnerCredit(id).catch(() => null)
     : Promise.resolve(null);
 
+  // The languages invoices can be printed in. No right to read, or a failure, falls back to the known list.
+  const invoicingRequest: Promise<InvoicingSettings | null> = can(session, "invoices.read")
+    ? getInvoicingSettings().catch(() => null)
+    : Promise.resolve(null);
+
   // What the partner may sell. Read separately so a failure leaves only this panel out.
   const accessRequest: Promise<ProductAccessEntry[] | null> = getProductAccessServer(id)
     .then((result) => result.data)
@@ -94,7 +103,12 @@ export default async function AdminPartnerPage({
   }
 
   const { review } = partner;
-  const [terms, credit, access] = await Promise.all([termsRequest, creditRequest, accessRequest]);
+  const [terms, credit, access, invoicing] = await Promise.all([
+    termsRequest,
+    creditRequest,
+    accessRequest,
+    invoicingRequest,
+  ]);
 
   return (
     <AdminContainer>
@@ -432,6 +446,21 @@ export default async function AdminPartnerPage({
           </AdminPanel>
 
           <PartnerActions partner={partner} />
+
+          <PartnerInvoicingPanel
+            partner={{
+              id: partner.id,
+              taxId: partner.taxId,
+              invoiceLang: partner.invoiceLang,
+              legalName: partner.legalName,
+              legalAddress: partner.legalAddress,
+              city: partner.city,
+              country: partner.country,
+            }}
+            canEdit={can(session, "partners.write")}
+            languages={invoicing?.languages ?? Object.keys(invoiceLanguageLabels)}
+            defaultLang={invoicing?.defaultLang ?? "en"}
+          />
 
           <AdminPanel title="Completeness">
             <p className="flex items-start gap-2 text-[0.8125rem] leading-relaxed text-muted">

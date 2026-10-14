@@ -32,6 +32,7 @@ export const adminPayableUrl = (id) => link(`/admin/finance/payables/${encodeURI
 export const adminReceivableUrl = (id) => link(`/admin/finance/receivables/${encodeURIComponent(id)}`);
 export const portalFinanceUrl = () => link('/portal/finance');
 export const adminApprovalUrl = (id) => link(`/admin/finance/approvals/${encodeURIComponent(id)}`);
+export const adminInvoiceUrl = (id) => link(`/admin/finance/invoices/${encodeURIComponent(id)}`);
 
 const formatDate = (date) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format(date);
@@ -1409,6 +1410,38 @@ export const templates = {
                     applied.length > 0 ? { label: 'Applied to', value: applied.join('\n'), html: applied.map(escapeHtml).join('<br>') } : null
                 ],
                 cta: { label: 'View your statement', url }
+            })
+        };
+    },
+
+    /** InvoiceOcean would not take a document, or could not be reached for long enough. To the finance mailbox. */
+    financeInvoiceSyncFailed: ({ kindLabel, reference, debtorName, amountCents, currency, error, url }) => {
+        const amount = formatMoney(amountCents, currency);
+
+        return {
+            subject: `${kindLabel} not issued for ${reference}`,
+            text: plain([
+                `The ${kindLabel.toLowerCase()} for ${reference} (${debtorName}, ${amount}) was not issued in InvoiceOcean.`,
+                `InvoiceOcean said: ${error}`,
+                `Check the document, fix what it names (a missing tax number, an unsupported currency) and retry it from the invoice page:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: `Invoicing · ${reference}`,
+                heading: 'A document was not issued',
+                preheader: `${kindLabel} for ${reference} failed: ${error}`,
+                paragraphs: [
+                    `The <strong>${escapeHtml(kindLabel.toLowerCase())}</strong> for <strong>${escapeHtml(reference)}</strong> (${escapeHtml(debtorName)}, ${escapeHtml(amount)}) was not issued in InvoiceOcean.`,
+                    `InvoiceOcean said: <em>${escapeHtml(error)}</em>`,
+                    'Check the document, fix what it names (a missing tax number, an unsupported currency) and retry it from the invoice page.'
+                ],
+                facts: [
+                    { label: 'Document', value: kindLabel },
+                    { label: 'Reference', value: reference },
+                    { label: 'Buyer', value: debtorName },
+                    { label: 'Amount', value: amount, strong: true },
+                    { label: 'Error', value: error }
+                ],
+                cta: { label: 'Open the invoice', url }
             })
         };
     }

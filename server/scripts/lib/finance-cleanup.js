@@ -37,7 +37,16 @@ export const deleteFinanceForBookings = async (prisma, { hotelBooking = null, tr
 
     await prisma.paymentRecord.deleteMany({ where: { id: { in: payments.map(({ id }) => id) } } });
     await prisma.supplierPayable.deleteMany({ where: { id: { in: payableIds } } });
+
+    // Invoices hold their receivable with Restrict (a document must not lose
+    // what it was issued for), and a correction holds the invoice it corrects:
+    // derived documents go first, then the rest, then the receivables.
+    const invoices = await prisma.invoice.findMany({ where: { receivableId: { in: receivableIds } }, select: { id: true } });
+    const invoiceIds = invoices.map(({ id }) => id);
+
+    await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds }, fromInvoiceId: { not: null } } });
+    await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
     await prisma.receivable.deleteMany({ where: { id: { in: receivableIds } } });
 
-    return { payables: payableIds.length, receivables: receivableIds.length };
+    return { payables: payableIds.length, receivables: receivableIds.length, invoices: invoiceIds.length };
 };
