@@ -139,6 +139,16 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
 
     const mailsTo = (address, template) => outbox.filter((entry) => entry.to === address && entry.template === template);
 
+    /**
+     * The instant a calendar day begins for the supplier, `days` from today.
+     * The handlers count days in the payable's timezone, so a test that wants
+     * "an hour ago" to mean "earlier today" has to keep the instant inside the
+     * Tbilisi day: for an hour each evening and each morning, an hour either
+     * side of now is a different date there than it is on the runner's clock.
+     */
+    const TIMEZONE = 'Asia/Tbilisi';
+    const dayStart = (days = 0) => zonedTimeToInstant(addDays(todayInTimezone(TIMEZONE), days), '00:00', TIMEZONE).getTime();
+
     it('computes a due instant from a calendar day and cutoff in the supplier timezone', () => {
         assert.equal(zonedTimeToInstant('2026-12-13', '10:00', 'Asia/Tbilisi').toISOString(), '2026-12-13T06:00:00.000Z');
     });
@@ -184,12 +194,7 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
     });
 
     it('says "due today" for an instalment due later today', async () => {
-        // "Today" is the supplier's calendar day, not the runner's: an hour from
-        // now is tomorrow in Tbilisi for an hour every evening, so the due
-        // instant is held inside the day when the clock is that late.
-        const timezone = 'Asia/Tbilisi';
-        const midnight = zonedTimeToInstant(addDays(todayInTimezone(timezone), 1), '00:00', timezone).getTime();
-        const { instalment } = await dueIn(Math.min(HOUR, midnight - 1_000 - Date.now()));
+        const { instalment } = await dueIn(Math.min(HOUR, dayStart(1) - 1_000 - Date.now()));
 
         await sweepFinanceReminders();
         assert.deepEqual((await remindersFor(instalment.id)).map((row) => row.offsetDays), [7, 3, 1, 0]);
@@ -230,7 +235,7 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
     });
 
     it('alerts once when an instalment goes overdue, then again a day later', async () => {
-        const { instalment, payable } = await dueIn(-HOUR);
+        const { instalment, payable } = await dueIn(Math.max(-HOUR, dayStart() + 1_000 - Date.now()));
 
         await sweepFinanceReminders();
         let row = await prisma.payableInstalment.findUnique({ where: { id: instalment.id } });
@@ -265,7 +270,8 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
 
     it('tells the desk and nudges the agency when a receivable goes overdue', async () => {
         const { receivable } = await booked();
-        await prisma.receivable.update({ where: { id: receivable.id }, data: { dueAt: new Date(Date.now() - 2 * DAY - HOUR) } });
+        // Two calendar days ago in Tbilisi, whatever the hour here.
+        await prisma.receivable.update({ where: { id: receivable.id }, data: { dueAt: new Date(Math.max(Date.now() - 2 * DAY - HOUR, dayStart(-2) + 1_000)) } });
 
         await sweepFinanceReminders();
         const events = await eventsFor('finance.receivable.overdue', 'receivableId', receivable.id);

@@ -63,6 +63,7 @@ import {
     deleteBlackout,
     listBlackouts,
     listExtras,
+    updateExtra,
     upsertExtra
 } from '../services/transfer/extra.service.js';
 import { toBlackout, toExtra, toPoint, toProvider, toRoute, toVehicle } from '../serializers/transfer.js';
@@ -314,7 +315,7 @@ adminTransferRoutes.put(
     '/extras/:id',
     validate({ params: idParamSchema, body: updateExtraSchema }),
     async (req, res) => {
-        const extra = await upsertExtra({ ...req.valid.body, code: req.valid.params.id }, req.user, req);
+        const extra = await updateExtra(req.valid.params.id, req.valid.body, req.user, req);
 
         res.json(toExtra(extra));
     }

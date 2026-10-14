@@ -362,6 +362,29 @@ describe('the transfer panel', { skip: dbAvailable ? false : 'Postgres is not re
         assert.equal(removed.status, 204);
     });
 
+    it('changes only the fields an extra is sent, and knows an extra it has never heard of', async () => {
+        const code = unique('childSeat');
+        const created = await request(app)
+            .post('/api/admin/transfers/extras')
+            .set('Cookie', adminCookie)
+            .send({ code, name: 'Child seat', basis: 'PER_PASSENGER', priceCents: 1_500, currency: 'USD', appliesToClasses: ['VAN'], position: 4 });
+        assert.equal(created.status, 201, JSON.stringify(created.body));
+        tracker.transferExtra(created.body);
+
+        // The panel's "reactivate" sends only the flag: nothing else may move.
+        const retired = await request(app).put(`/api/admin/transfers/extras/${code}`).set('Cookie', adminCookie).send({ isActive: false });
+        assert.equal(retired.status, 200, JSON.stringify(retired.body));
+        assert.equal(retired.body.isActive, false);
+        assert.equal(retired.body.basis, 'PER_PASSENGER');
+        assert.equal(retired.body.currency, 'USD');
+        assert.equal(retired.body.priceCents, 1_500);
+        assert.deepEqual(retired.body.appliesToClasses, ['VAN']);
+        assert.equal(retired.body.position, 4);
+
+        const unknown = await request(app).put(`/api/admin/transfers/extras/${unique('nothing')}`).set('Cookie', adminCookie).send({});
+        assert.equal(unknown.status, 404, 'a code nobody created is not created by a PUT');
+    });
+
     it('refuses a blackout that closes nothing, or ends before it starts', async () => {
         const nothing = await request(app)
             .post('/api/admin/transfers/blackouts')

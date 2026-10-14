@@ -467,21 +467,34 @@ export const bulkPriceSchema = z
         path: ['tier']
     });
 
+const extraFields = {
+    code: z.string().trim().min(1).max(64),
+    name: nameField,
+    description: textField(500).nullish(),
+    basis: z.enum(EXTRA_BASES),
+    priceCents: centsField,
+    currency: currencyField,
+    appliesToClasses: z.array(z.enum(VEHICLE_CLASSES)).max(VEHICLE_CLASSES.length),
+    position: z.number().int().min(0).max(999),
+    isActive: z.boolean()
+};
+
 export const createExtraSchema = z
     .object({
-        code: z.string().trim().min(1).max(64),
-        name: nameField,
-        description: textField(500).nullish(),
-        basis: z.enum(EXTRA_BASES).default('FIXED'),
-        priceCents: centsField,
-        currency: currencyField.default('GEL'),
-        appliesToClasses: z.array(z.enum(VEHICLE_CLASSES)).max(VEHICLE_CLASSES.length).default([]),
-        position: z.number().int().min(0).max(999).default(0),
-        isActive: z.boolean().default(true)
+        ...extraFields,
+        basis: extraFields.basis.default('FIXED'),
+        currency: extraFields.currency.default('GEL'),
+        appliesToClasses: extraFields.appliesToClasses.default([]),
+        position: extraFields.position.default(0),
+        isActive: extraFields.isActive.default(true)
     })
     .strict();
 
-export const updateExtraSchema = createExtraSchema.partial();
+// Built from the bare fields, not from `createExtraSchema.partial()`: zod
+// fills a defaulted field in even inside a partial, and a PUT that sent only
+// `{ isActive: false }` was resetting the price basis, currency, classes and
+// position of the extra to their defaults.
+export const updateExtraSchema = z.object(extraFields).partial().strict();
 
 export const createBlackoutSchema = z
     .object({

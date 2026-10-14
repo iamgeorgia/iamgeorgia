@@ -114,7 +114,8 @@ describe('credit, penalties and commission', { skip: dbAvailable ? false : 'Post
         assert.equal(warned.warning.reason, 'CREDIT_LIMIT_EXCEEDED');
         assert.ok(await prisma.auditLog.findFirst({ where: { action: 'PARTNER_CREDIT_WARNING', entityId: agency.id } }));
 
-        const audit = await prisma.auditLog.findFirst({ where: { action: 'PARTNER_CREDIT_LIMIT_CHANGED', entityId: agency.id } });
+        // The earliest of the two so far: the one that set the limit, not the one that switched the mode.
+        const audit = await prisma.auditLog.findFirst({ where: { action: 'PARTNER_CREDIT_LIMIT_CHANGED', entityId: agency.id }, orderBy: { createdAt: 'asc' } });
         assert.equal(audit.metadata.changes.creditLimitCents.to, 50_000);
 
         assert.equal((await credit({ creditLimitCents: null })).body.limitCents, null);

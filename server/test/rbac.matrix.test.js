@@ -130,15 +130,41 @@ describe('who reaches what, across the whole API', { skip: dbAvailable ? false :
 
         const res = await req;
 
-        return classify(res.status);
+        return res.status;
     };
 
+    /**
+     * A 5xx is not an answer about authorization. Thirteen callers at once on
+     * a pool of two connections means a route that opens a transaction can
+     * keep the others waiting past their timeout, and with the whole suite
+     * sharing one Postgres even a session lookup can be refused. Both read as
+     * REACHED if the status is sorted blindly, so the cells that erred are
+     * asked again afterwards, one at a time, with the pool to themselves; one
+     * that still errs is written down as the error rather than as an answer.
+     */
     const observe = async () => {
         const observed = {};
+        const erred = [];
 
         for (const endpoint of endpoints) {
-            const classes = await Promise.all(ROLES.map((role) => call(endpoint, role)));
-            observed[`${endpoint.method} ${endpoint.path}`] = Object.fromEntries(ROLES.map((role, i) => [role, classes[i]]));
+            const key = `${endpoint.method} ${endpoint.path}`;
+            const statuses = await Promise.all(ROLES.map((role) => call(endpoint, role)));
+
+            observed[key] = {};
+            ROLES.forEach((role, i) => {
+                if (statuses[i] >= 500) erred.push({ endpoint, role, key });
+                else observed[key][role] = classify(statuses[i]);
+            });
+        }
+
+        for (const { endpoint, role, key } of erred) {
+            let status = 500;
+
+            for (let attempt = 0; attempt < 3 && status >= 500; attempt += 1) {
+                status = await call(endpoint, role);
+            }
+
+            observed[key][role] = status >= 500 ? `ERROR_${status}` : classify(status);
         }
 
         return observed;

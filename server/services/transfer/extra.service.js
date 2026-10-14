@@ -41,6 +41,30 @@ export const upsertExtra = async (input, actor, req) => {
     return extra;
 };
 
+/** Changes an existing extra; the fields sent are the fields changed. */
+export const updateExtra = async (code, patch, actor, req) => {
+    const existing = await prisma.transferExtra.findUnique({ where: { code } });
+
+    if (!existing) {
+        throw new NotFoundError('That extra does not exist');
+    }
+
+    return prisma.$transaction(async (tx) => {
+        const saved = await tx.transferExtra.update({ where: { code }, data: patch });
+
+        await recordAudit(tx, {
+            action: 'TRANSFER_EXTRA_UPDATED',
+            actor,
+            entityType: AUDIT_ENTITY.transferExtra,
+            entityId: saved.id,
+            summary: `Saved transfer extra ${saved.code}`,
+            req
+        });
+
+        return saved;
+    });
+};
+
 /**
  * Retires an extra.
  *
