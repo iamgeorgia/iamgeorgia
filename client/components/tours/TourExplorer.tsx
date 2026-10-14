@@ -140,7 +140,10 @@ export function TourExplorer({ tours, regions }: TourExplorerProps) {
             {hasFilters && ` ${t.tours.matchingFilters}`}
           </p>
 
-          <div className="flex flex-wrap items-center gap-3">
+          {/* `max-w-full min-w-0`, as on the hotel list: a wrapped flex item is
+              sized to its content, and the Georgian sort option at the 16px
+              touch size is wider than a phone. */}
+          <div className="flex max-w-full min-w-0 flex-wrap items-center gap-3">
             <label className="flex min-w-0 items-center gap-2">
               <span className="sr-only">{t.a11y.filterByRegion}</span>
               <select

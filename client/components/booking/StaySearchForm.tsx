@@ -197,7 +197,9 @@ export function StaySearchForm({
             <select
               value={destination}
               onChange={(event) => setDestination(event.target.value)}
-              className={cn(control, "cursor-pointer")}
+              // `truncate`: the Georgian "anywhere" option is wider than the
+              // field on a phone, and a select otherwise cuts it mid-letter.
+              className={cn(control, "cursor-pointer truncate")}
             >
               <option value="all">{t.hotels.searchAnywhere}</option>
               {destinations.map((item) => (

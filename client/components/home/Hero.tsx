@@ -30,7 +30,10 @@ export async function Hero() {
       <div className="scrim-side absolute inset-0" aria-hidden />
 
       <Container className="relative pt-28 pb-12 sm:pt-32 lg:pb-16">
-        <div className="max-w-4xl">
+        {/* `max-w-6xl` rather than 4xl: the English headline balances onto two
+            lines well inside either, but the Georgian one needs the extra
+            width to do the same instead of stacking one word per line. */}
+        <div className="max-w-6xl">
           <p className="type-eyebrow animate-hero-rise-soft text-on-dark/70" style={{ animationDelay: "0.1s" }}>
             {t.home.hero.eyebrow}
           </p>
@@ -75,9 +78,16 @@ export async function Hero() {
         style={{ animationDelay: "0.56s" }}
       >
         <Container>
-          <dl className="grid grid-cols-2 gap-y-6 py-7 lg:grid-cols-4">
+          {/* The column gap is what keeps a long Georgian label out of its
+              neighbour; without one the two columns of text ran together.
+              Below `lg` each item is half the row (less half the gap) unless
+              its longest word needs more — "ხელმისაწვდომობა," is 135px, wider
+              than half a 320px phone — in which case it takes a row of its
+              own instead of breaking the word in two. English fits, and stays
+              two by two. */}
+          <dl className="flex flex-wrap gap-x-5 gap-y-6 py-7 lg:grid lg:grid-cols-4 lg:gap-x-4">
             {t.studio.credentials.map((item) => (
-              <div key={item.label} className="lg:px-2">
+              <div key={item.label} className="grow basis-[calc(50%-0.625rem)] lg:px-2">
                 <dt className="type-h4 text-on-dark">{item.value}</dt>
                 <dd className="type-caption mt-1 text-on-dark/60">{item.label}</dd>
               </div>
