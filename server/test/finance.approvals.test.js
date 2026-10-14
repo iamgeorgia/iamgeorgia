@@ -5,6 +5,7 @@ import request from 'supertest';
 import { createApp } from '../app.js';
 import { prisma, disconnect } from '../db/index.js';
 import { syncBookingInTx } from '../services/finance/ledger.service.js';
+import { TOPICS } from '../lib/outbox.js';
 import { drainOutbox } from '../services/notifications/outbox.service.js';
 import {
     createTracker,
@@ -95,6 +96,29 @@ describe('approval requests', { skip: dbAvailable ? false : 'Postgres is not rea
         return res;
     };
     const decide = (id, verb, cookie, body = {}) => request(app).post(`/api/admin/approvals/${id}/${verb}`).set('Cookie', cookie).send(body);
+
+    /**
+     * Drains, then waits until the approval's event has actually been handled.
+     * The files run at once against one database, so another file's drain may
+     * have leased this event first and still be working on it when this one
+     * returns with nothing to do; reading the notification rows before that
+     * handler commits is the flake this guards against.
+     */
+    const delivered = async (topic, approvalId) => {
+        await drainOutbox({ limit: 100 });
+
+        const deadline = Date.now() + 15_000;
+
+        for (;;) {
+            const pending = await prisma.outboxEvent.count({ where: { topic, processedAt: null, payload: { path: ['approvalId'], equals: approvalId } } });
+
+            if (pending === 0) return;
+            if (Date.now() > deadline) throw new Error(`outbox event ${topic} for ${approvalId} was not processed in time`);
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            await drainOutbox({ limit: 100 });
+        }
+    };
 
     it('refuses a refund and a write-off done alone, by anyone, and names the request to open instead', async () => {
         const one = await booked();
@@ -232,7 +256,7 @@ describe('approval requests', { skip: dbAvailable ? false : 'Postgres is not rea
         assert.equal((await request(app).get('/api/admin/badges').set('Cookie', cookies.ACCOUNTANT)).body.pendingApprovals, null);
 
         // The approvers are told in-app; the requester is not told about their own asking.
-        await drainOutbox({ limit: 100 });
+        await delivered(TOPICS.APPROVAL_REQUESTED, asked.body.id);
         const told = await prisma.notification.findMany({ where: { kind: 'APPROVAL_REQUESTED', entityId: asked.body.id }, select: { recipientUserId: true } });
         const recipients = told.map((row) => row.recipientUserId);
         assert.ok(recipients.includes(users.SUPER_ADMIN.id) && recipients.includes(users.SECOND.id));
@@ -242,12 +266,11 @@ describe('approval requests', { skip: dbAvailable ? false : 'Postgres is not rea
         assert.equal(approved.status, 200, JSON.stringify(approved.body));
         assert.equal((await prisma.receivable.findUnique({ where: { id: one.receivable.id } })).dueAt.toISOString().slice(0, 10), asked.body.payload.dueAt.slice(0, 10));
 
-        // And the requester hears how it went.
-        await drainOutbox({ limit: 100 });
-        // The rows, not this process's mail outbox: with the whole suite
-        // running, another file's drain may have taken the event first, and
-        // its mail then went out from there. The template itself is covered
-        // by mailer.test.js.
+        // And the requester hears how it went. The rows, not this process's
+        // mail outbox: another file's drain may have taken the event, and its
+        // mail then went out from there. The template itself is covered by
+        // mailer.test.js.
+        await delivered(TOPICS.APPROVAL_DECIDED, asked.body.id);
         const decided = await prisma.notification.findMany({ where: { kind: 'APPROVAL_DECIDED', entityId: asked.body.id }, select: { recipientUserId: true } });
         assert.deepEqual(decided.map((row) => row.recipientUserId), [users.FINANCE_OPERATOR.id]);
     });

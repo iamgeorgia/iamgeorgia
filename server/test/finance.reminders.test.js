@@ -7,7 +7,7 @@ import { createApp } from '../app.js';
 import { config } from '../config.js';
 import { prisma, disconnect } from '../db/index.js';
 import { clearOutbox, outbox } from '../lib/mailer/index.js';
-import { zonedTimeToInstant } from '../lib/time.js';
+import { addDays, todayInTimezone, zonedTimeToInstant } from '../lib/time.js';
 import { syncBookingInTx } from '../services/finance/ledger.service.js';
 import { countDueInstalments, sweepFinanceReminders } from '../services/finance/reminder.service.js';
 import { processEvent } from '../services/notifications/outbox.service.js';
@@ -184,7 +184,12 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
     });
 
     it('says "due today" for an instalment due later today', async () => {
-        const { instalment } = await dueIn(HOUR);
+        // "Today" is the supplier's calendar day, not the runner's: an hour from
+        // now is tomorrow in Tbilisi for an hour every evening, so the due
+        // instant is held inside the day when the clock is that late.
+        const timezone = 'Asia/Tbilisi';
+        const midnight = zonedTimeToInstant(addDays(todayInTimezone(timezone), 1), '00:00', timezone).getTime();
+        const { instalment } = await dueIn(Math.min(HOUR, midnight - 1_000 - Date.now()));
 
         await sweepFinanceReminders();
         assert.deepEqual((await remindersFor(instalment.id)).map((row) => row.offsetDays), [7, 3, 1, 0]);
