@@ -2,7 +2,7 @@
 
 import { CalendarDays, MapPin, Minus, Plus, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
@@ -56,7 +56,7 @@ export function StaySearchForm({
   const [stay, setStay] = useState<StayQuery>(() => value ?? defaultStay());
   const [destination, setDestination] = useState(destinationSlug ?? "all");
   const [occupancyOpen, setOccupancyOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, startTransition] = useTransition();
   const occupancyRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -134,12 +134,15 @@ export function StaySearchForm({
     if (!isValidStay(stay)) return;
 
     setOccupancyOpen(false);
-    setSubmitting(true);
 
     const query = stayQueryString(stay);
     const suffix = destinations && destination !== "all" ? `&destinationSlug=${destination}` : "";
 
-    router.push(path(`${action}${query}${suffix}`));
+    // A transition rather than a flag: the search lands on this same route, so
+    // the form stays mounted and a flag set here was never cleared — the button
+    // stayed disabled after the first search. `submitting` ends once the new
+    // page has rendered.
+    startTransition(() => router.push(path(`${action}${query}${suffix}`)));
   };
 
   const field = "flex flex-col gap-1.5 px-4 py-3.5";
