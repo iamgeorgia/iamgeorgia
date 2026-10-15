@@ -19,11 +19,18 @@ const baseSections = [
  * Sticky in-page navigation, the pattern travellers expect on a long property
  * page. The active state follows the scroll position via IntersectionObserver.
  *
- * The kosher entry appears only for a property that offers kosher services —
- * a tab that scrolls to nothing is worse than a shorter nav, and every other
- * section here is always present.
+ * The kosher entry appears only for a property that offers kosher services,
+ * and the facilities entry only when that section has something to show — a
+ * tab that scrolls to nothing is worse than a shorter nav. Every other section
+ * here is always present.
  */
-export function HotelSectionNav({ hasKosher = false }: { hasKosher?: boolean }) {
+export function HotelSectionNav({
+  hasKosher = false,
+  hasAmenities = true,
+}: {
+  hasKosher?: boolean;
+  hasAmenities?: boolean;
+}) {
   const { t } = useI18n();
 
   // Between Facilities and Location: the kosher block is a facility section,
@@ -34,14 +41,15 @@ export function HotelSectionNav({ hasKosher = false }: { hasKosher?: boolean }) 
   // scroll-driven state change.
   const sections = useMemo(
     () =>
-      hasKosher
+      (hasKosher
         ? [
             ...baseSections.slice(0, 2),
             { id: "kosher", label: t.hotels.kosher.navLabel },
             ...baseSections.slice(2),
           ]
-        : baseSections,
-    [hasKosher, t.hotels.kosher.navLabel],
+        : baseSections
+      ).filter((section) => hasAmenities || section.id !== "amenities"),
+    [hasKosher, hasAmenities, t.hotels.kosher.navLabel],
   );
 
   const [active, setActive] = useState(sections[0].id);
@@ -63,8 +71,8 @@ export function HotelSectionNav({ hasKosher = false }: { hasKosher?: boolean }) 
       if (element) observer.observe(element);
     }
     return () => observer.disconnect();
-    // Re-observed when the section list changes, which it does exactly once —
-    // when a kosher property renders its extra anchor.
+    // Re-observed when the section list changes, which it does only when the
+    // page's optional anchors differ from the defaults.
   }, [sections]);
 
   return (

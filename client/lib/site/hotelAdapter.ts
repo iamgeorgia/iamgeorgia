@@ -1,9 +1,12 @@
+import { isAmenityId } from "@/data/amenities";
+import { textOrNull } from "@/lib/hotels/facilities";
 import type {
+  CatalogueAmenity,
   Hotel as ApiHotel,
   HotelSummary as ApiHotelSummary,
   RoomType as ApiRoomType,
 } from "@/types/catalogue";
-import type { AmenityId, Hotel, Room } from "@/types";
+import type { AmenityId, Hotel, HotelFacility, Room } from "@/types";
 
 /**
  * Live catalogue records, in the shape the site components already render.
@@ -19,26 +22,39 @@ import type { AmenityId, Hotel, Room } from "@/types";
  * whole units. Divided here, once, and `formatPrice` now defaults to GEL.
  */
 
-/** The amenity codes the site's icon map knows. Anything else has no icon. */
-const KNOWN_AMENITIES = new Set<AmenityId>([
-  "wifi",
-  "breakfast",
-  "pool",
-  "parking",
-  "restaurant",
-  "spa",
-  "airConditioning",
-  "gym",
-  "bar",
-  "petFriendly",
-  "familyRooms",
-  "airportShuttle",
-  "terrace",
-  "roomService",
-]);
+/**
+ * The codes the site has its own icon and label for — the narrowed list the
+ * typed maps read. Derived from the label map rather than kept as a second
+ * list, so the two cannot drift. What a page *displays* is `facilities`,
+ * which keeps every code.
+ */
+const toKnownAmenities = (codes: string[]): AmenityId[] => codes.filter(isAmenityId);
 
-const toKnownAmenities = (codes: string[]): AmenityId[] =>
-  codes.filter((code): code is AmenityId => KNOWN_AMENITIES.has(code as AmenityId));
+/**
+ * Every facility the API attached, in its order, each code once.
+ *
+ * A row is dropped only when it has no code at all — there is nothing to key
+ * it on. Being outside `AmenityId`, or arriving without an icon or a note, is
+ * not a reason: the API's vocabulary is open, and the page falls back.
+ */
+const toFacilities = (amenities: CatalogueAmenity[]): HotelFacility[] => {
+  const seen = new Set<string>();
+  const facilities: HotelFacility[] = [];
+
+  for (const amenity of amenities) {
+    const code = textOrNull(amenity.code);
+    if (!code || seen.has(code)) continue;
+    seen.add(code);
+    facilities.push({
+      code,
+      name: textOrNull(amenity.name),
+      icon: textOrNull(amenity.icon),
+      note: textOrNull(amenity.note),
+    });
+  }
+
+  return facilities;
+};
 
 /** A displayable image URL: the card rendition when it exists, else the original. */
 const imageUrl = (
@@ -153,6 +169,8 @@ export function adaptHotelDetail(api: ApiHotel): Hotel {
     })),
     amenities: toKnownAmenities(api.amenities.map((amenity) => amenity.code)),
     amenityCodes: api.amenities.map((amenity) => amenity.code),
+    facilities: toFacilities(api.amenities),
+    languages: api.languages ?? [],
     // The detail response carries the full profile; the card fields it shares
     // with the summary are the ones a list row reads.
     kosher: api.kosher ?? null,

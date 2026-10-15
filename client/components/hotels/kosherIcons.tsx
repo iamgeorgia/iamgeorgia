@@ -28,9 +28,10 @@ import type { LucideIcon } from "lucide-react";
  * writes.
  *
  * Kept beside `amenityIcons.tsx` rather than inside it: that map is typed on
- * `AmenityId`, the fourteen-code union the prototype shipped with, and widening
+ * `AmenityId`, the union of codes the site has its own copy for, and widening
  * it to `string` would remove the exhaustiveness check that stops somebody
- * adding an amenity there without an icon.
+ * adding an amenity there without an icon. `amenityIcon` there falls back to
+ * this map for a kosher code shown among the general facilities.
  *
  * `kosherIcon` falls back rather than throwing. A facility seeded on the server
  * and not yet mapped here should render with a generic mark, not crash a hotel
