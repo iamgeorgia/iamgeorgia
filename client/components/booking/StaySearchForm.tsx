@@ -272,8 +272,12 @@ export function StaySearchForm({
             {occupancyLabel}
           </button>
 
+          {/* `z-45`: above the hotel page's sticky section nav (z-30), which
+              follows this form in the DOM and at an equal z-index painted over
+              the panel, and above the mobile booking bar (z-40); still under
+              the site header (z-50). */}
           {occupancyOpen && (
-            <div className="absolute end-0 start-0 top-full z-30 mt-px max-h-[22rem] overflow-y-auto border border-line bg-surface p-4 shadow-card">
+            <div className="absolute end-0 start-0 top-full z-45 mt-px max-h-[22rem] overflow-y-auto border border-line bg-surface p-4 shadow-card">
               {(
                 [
                   { key: "adults" as const, label: t.booking.search.adults, min: 1, max: 30 },
