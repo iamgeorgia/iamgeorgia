@@ -41,7 +41,8 @@ export default async function AdminTransferBookingsPage({
   ]);
 
   // Summed in the database, per currency, largest first — not over a page.
-  const [leading, ...otherCurrencies] = summary.confirmedValue.byCurrency;
+  // Absent for a role that may work the register but not see its totals.
+  const [leading, ...otherCurrencies] = summary?.confirmedValue.byCurrency ?? [];
   const revenue = leading ?? { amountCents: 0, currency: "GEL" };
 
   return (
@@ -51,20 +52,22 @@ export default async function AdminTransferBookingsPage({
         description="Every journey sold, soonest pick-up first."
       />
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Bookings" value={String(summary.total)} icon={CalendarCheck} />
-        <StatCard label="Confirmed" value={String(summary.confirmed)} icon={CarFront} />
-        <StatCard
-          label="Confirmed value"
-          value={formatMoneyCompact(revenue.amountCents, revenue.currency)}
-          icon={Coins}
-          hint={
-            otherCurrencies.length > 0
-              ? `In ${revenue.currency}; ${otherCurrencies.length} more not shown`
-              : "Every confirmed journey"
-          }
-        />
-      </div>
+      {summary && (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard label="Bookings" value={String(summary.total)} icon={CalendarCheck} />
+          <StatCard label="Confirmed" value={String(summary.confirmed)} icon={CarFront} />
+          <StatCard
+            label="Confirmed value"
+            value={formatMoneyCompact(revenue.amountCents, revenue.currency)}
+            icon={Coins}
+            hint={
+              otherCurrencies.length > 0
+                ? `In ${revenue.currency}; ${otherCurrencies.length} more not shown`
+                : "Every confirmed journey"
+            }
+          />
+        </div>
+      )}
 
       <div className="mt-10 rounded-sm border border-line bg-surface">
         <DataTable

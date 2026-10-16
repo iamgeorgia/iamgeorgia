@@ -1,4 +1,4 @@
-import { serverFetch } from "./client";
+import { serverFetch, serverFetchOptional } from "./client";
 import type { AdminBadges } from "@/lib/admin/navigation";
 
 /**
@@ -71,5 +71,10 @@ export const getAdminBadges = async (): Promise<AdminBadges> => {
 export const getBookingSummary = (days = 30) =>
   serverFetch<BookingSummary>(`/api/admin/bookings/summary?days=${days}`);
 
+/**
+ * Null for a viewer without `finance.margin.read` — the dispatcher, the
+ * reservations desk and the finance operator all work this register, but
+ * the API keeps the confirmed-value totals from them.
+ */
 export const getTransferBookingSummary = () =>
-  serverFetch<TransferBookingSummary>("/api/admin/transfers/bookings/summary");
+  serverFetchOptional<TransferBookingSummary>("/api/admin/transfers/bookings/summary");
