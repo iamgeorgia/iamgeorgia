@@ -113,6 +113,22 @@ services:
         sync: false
       - key: SMTP_PASS
         sync: false
+      # The Gmail API (docs/DEPLOYMENT.md, "Sending mail through Gmail"): fill
+      # all four identifiers or none, connect the account in Settings → Email,
+      # send a test, then change MAIL_TRANSPORT above to gmail. Switching it
+      # back to smtp is the rollback, so leave SMTP_* in place until then.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # https://<this API's host>/api/admin/mail/google/callback
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: GMAIL_SENDER_EMAIL
+        sync: false
+      # Seals the stored refresh token. Rotating it means reconnecting.
+      - key: MAIL_CREDENTIALS_KEY
+        generateValue: true
       - key: TRANSFER_OPS_EMAIL
         sync: false
       # The finance mailbox for supplier payment reminders and overdue alerts.

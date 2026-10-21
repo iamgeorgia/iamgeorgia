@@ -17,7 +17,10 @@ export const toInvoiceLine = (line) => ({
     quantity: line.quantity,
     taxRateBps: line.taxRateBps ?? null,
     totalGrossCents: line.totalGrossCents,
-    bookingReference: line.bookingReference ?? null
+    bookingReference: line.bookingReference ?? null,
+    kind: line.kind ?? null,
+    unitCents: line.unitCents ?? null,
+    detail: line.detail ?? null
 });
 
 export const toInvoice = (invoice) => ({

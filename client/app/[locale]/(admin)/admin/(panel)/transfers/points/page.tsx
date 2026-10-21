@@ -9,6 +9,8 @@ import { TransferPointSearch } from "@/components/admin/TransferPointSearch";
 import { listAdminTransferPoints } from "@/lib/api/transfers";
 import { pointKindLabels } from "@/lib/admin/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Pick-up points" };
 
@@ -28,6 +30,7 @@ export const metadata: Metadata = { title: "Pick-up points" };
 export default async function AdminTransferPointsPage({
   searchParams,
 }: PageProps<"/[locale]/admin/transfers/points">) {
+  const session = await requireScreen();
   const params = await searchParams;
   const searchParam = Array.isArray(params.search) ? params.search[0] : params.search;
 
@@ -46,13 +49,15 @@ export default async function AdminTransferPointsPage({
         title="Pick-up points"
         description="Every place a journey can start or end. Coordinates here price any route that has no fare of its own."
         actions={
-          <Link
-            href={path("/admin/transfers/points/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add a point
-          </Link>
+          can(session, "catalogue.write") && (
+            <Link
+              href={path("/admin/transfers/points/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add a point
+            </Link>
+          )
         }
       />
 

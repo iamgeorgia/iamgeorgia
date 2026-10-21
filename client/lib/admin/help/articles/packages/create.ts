@@ -11,7 +11,6 @@ export const article = {
   title: "Adding a package",
   summary: "The create form: five fields, two of which — the slug and the nights — are harder to change than they look.",
   category: "packages",
-  roles: ["ADMIN"],
   routes: ["/admin/packages/new"],
   keywords: ["new package", "create package", "add package", "slug", "nights", "destination", "summary", "draft"],
   related: ["pk-hub", "pk-parts", "pk-details-pricing", "pk-publish-checklist", "pb-slugs-and-seo"],

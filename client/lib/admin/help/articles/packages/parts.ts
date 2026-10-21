@@ -13,7 +13,6 @@ export const article = {
   title: "Parts (slots)",
   summary: "How a package is assembled from hotel stays, transfers, tours and services, and why the whole set is saved and checked together.",
   category: "packages",
-  roles: ["ADMIN"],
   routes: ["/admin/packages/[slug]/components"],
   keywords: ["slot", "slots", "components", "parts", "hotel stay", "transfer", "tour", "service", "required", "day", "board", "room types", "rate plans", "route", "vehicle class", "quantity", "save parts", "problem"],
   related: ["pk-hub", "pk-preview-quote", "pk-details-pricing", "pk-publish-checklist", "ht-rooms-rates", "tr-options-prices", "sv-services", "tc-routes-register"],

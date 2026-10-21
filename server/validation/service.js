@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { bookingFilterFields } from '../lib/listing/bookingFilters.js';
 
 import { currencyField, emailField, nameField, phoneField, slugField, textField, timezoneField } from './normalize.js';
 import { dateOnlyField } from './ratePlan.js';
@@ -16,7 +17,7 @@ export const SERVICE_CATEGORIES = [
 ];
 export const SERVICE_BASES = ['PER_PERSON', 'PER_GROUP', 'PER_DAY', 'PER_PERSON_PER_DAY'];
 const CONFIRMATION_MODES = ['INSTANT', 'ON_REQUEST'];
-const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
+const BOOKING_STATUSES = ['PENDING_APPROVAL', 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
 
 const stringList = (max, items) => z.array(textField(max)).max(items);
 const centsField = z.number().int().min(0).max(100_000_000);
@@ -158,6 +159,7 @@ export const cancelServiceBookingSchema = z
 export const declineServiceBookingSchema = z.object({ reason: textField(500) }).strict();
 
 export const serviceBookingQuerySchema = z.object({
+    ...bookingFilterFields,
     status: oneOrMany(BOOKING_STATUSES),
     serviceId: z.string().min(1).optional(),
     partnerId: z.string().min(1).optional(),

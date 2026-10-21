@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { TransferPointForm } from "@/components/admin/TransferPointForm";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add a pick-up point" };
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = { title: "Add a pick-up point" };
  * minute. It is created ACTIVE and appears in the picker straight away.
  */
 export default async function NewTransferPointPage() {
+  await requireScreen();
   const { path } = await getI18n();
 
   return (

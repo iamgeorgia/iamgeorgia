@@ -19,11 +19,13 @@
  */
 
 /**
- * The two audiences. `SUPER_ADMIN` reads as `ADMIN` throughout: the two roles
- * are identical in code (`server/middleware/auth.js`), and a manual that
- * pretended otherwise would be documenting a distinction nobody can act on.
+ * Who may read what is not written on the articles. An article is readable by
+ * whoever is offered the screen it explains — resolved from its `routes`
+ * against the navigation and screen tables by `helpReadable` in `index.ts` —
+ * and an article with no routes (a glossary, the roles chapter) by everyone.
+ * That way a role made in the Roles editor reads exactly the manual for the
+ * screens it can open, with nothing to maintain here.
  */
-export type HelpRole = "ADMIN" | "DISPATCHER";
 
 export type HelpCategoryId =
   | "getting-started"
@@ -74,7 +76,6 @@ export interface HelpCategory {
   /** One sentence under the title on the hub. */
   summary: string;
   iconName: HelpIconName;
-  roles: HelpRole[];
   /**
    * Canonical admin paths whose screens fall back to this category when no
    * article claims them. A prefix matches the path itself and anything under
@@ -129,7 +130,6 @@ export interface HelpArticle {
   /** One sentence, shown in lists, in search results and under the title. */
   summary: string;
   category: HelpCategoryId;
-  roles: HelpRole[];
   routes?: HelpRoute[];
   /** Words a reader might type that the title does not contain. */
   keywords: string[];
@@ -167,4 +167,6 @@ export interface QuickStartStep {
   href: string;
   articleId: string;
   where: string[];
+  /** Any one of these makes the step the reader's; absent means everyone. */
+  capability?: string | string[];
 }

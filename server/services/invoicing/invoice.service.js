@@ -38,6 +38,8 @@ import { CHAINED_KINDS } from './provider.js';
  * document (D4).
  */
 
+import { buildDetailedLines, pickLine } from './lines.js';
+
 const PROVIDER = 'INVOICEOCEAN';
 
 /** Statuses that count as "there is a document": everything but a cancelled or failed one. */
@@ -54,22 +56,110 @@ const money = (cents, currency) => `${(cents / 100).toFixed(2)} ${currency}`;
 
 // --- What a receivable is for ---------------------------------------------------------
 
+/** What each product's line builder reads: the rooms and their guests, the legs and their flights, the names. */
+const GUESTS_FOR_LINES = { select: { title: true, firstName: true, lastName: true, type: true, age: true, isLead: true }, orderBy: [{ isLead: 'desc' }, { createdAt: 'asc' }] };
+const HOTEL_FOR_LINES = {
+    id: true,
+    reference: true,
+    status: true,
+    hotelSnapshot: true,
+    checkIn: true,
+    checkOut: true,
+    nights: true,
+    sellTotalCents: true,
+    taxTotalCents: true,
+    priceAdjustmentCents: true,
+    priceAdjustmentReason: true,
+    cancellationChargeCents: true,
+    hotel: { select: { destination: { select: { name: true, countryCode: true } } } },
+    rooms: {
+        select: { status: true, roomTypeName: true, ratePlanName: true, mealPlanCode: true, mealPlanName: true, adults: true, childAges: true, sellSubtotalCents: true, guests: GUESTS_FOR_LINES },
+        orderBy: { createdAt: 'asc' }
+    }
+};
+const TRANSFER_FOR_LINES = {
+    id: true,
+    reference: true,
+    status: true,
+    pickupAt: true,
+    returnPickupAt: true,
+    adults: true,
+    children: true,
+    flightNumber: true,
+    routeSnapshot: true,
+    vehicleSnapshot: true,
+    sellTotalCents: true,
+    priceAdjustmentCents: true,
+    priceAdjustmentReason: true,
+    cancellationChargeCents: true,
+    legs: {
+        select: { direction: true, fromPointName: true, toPointName: true, pickupAt: true, sellCents: true, flightNumber: true, fromPoint: { select: { kind: true, timezone: true } }, toPoint: { select: { kind: true } } },
+        orderBy: { legIndex: 'asc' }
+    },
+    extras: { select: { name: true, quantity: true, totalCents: true } }
+};
+const TOUR_FOR_LINES = {
+    id: true,
+    reference: true,
+    status: true,
+    tourSnapshot: true,
+    date: true,
+    endDate: true,
+    adults: true,
+    childAges: true,
+    sellTotalCents: true,
+    priceAdjustmentCents: true,
+    priceAdjustmentReason: true,
+    cancellationChargeCents: true,
+    travellers: GUESTS_FOR_LINES
+};
+const SERVICE_FOR_LINES = {
+    id: true,
+    reference: true,
+    status: true,
+    serviceSnapshot: true,
+    date: true,
+    endDate: true,
+    quantity: true,
+    pax: true,
+    days: true,
+    sellTotalCents: true,
+    priceAdjustmentCents: true,
+    priceAdjustmentReason: true,
+    cancellationChargeCents: true
+};
+
 /** Enough of the subject to describe it on a line, and of the debtor to address the document. */
 export const receivableForInvoicing = {
     debtorPartner: {
         select: { id: true, name: true, legalName: true, email: true, taxId: true, invoiceLang: true, legalAddress: true, city: true, country: true, reference: true }
     },
-    hotelBooking: { select: { id: true, reference: true, hotelSnapshot: true, checkIn: true, checkOut: true, nights: true } },
-    transferBooking: { select: { id: true, reference: true, pickupAt: true, legs: { select: { fromPointName: true, toPointName: true }, orderBy: { legIndex: 'asc' } } } },
-    tourBooking: { select: { id: true, reference: true, tourSnapshot: true, date: true, adults: true, childAges: true } },
-    serviceBooking: { select: { id: true, reference: true, serviceSnapshot: true, date: true, quantity: true } },
+    debtorCustomer: { select: { id: true, kind: true, name: true, contactName: true, email: true, taxId: true, billingAddress: true, city: true, country: true } },
+    hotelBooking: { select: HOTEL_FOR_LINES },
+    transferBooking: { select: TRANSFER_FOR_LINES },
+    tourBooking: { select: TOUR_FOR_LINES },
+    serviceBooking: { select: SERVICE_FOR_LINES },
     order: {
         select: {
             id: true,
             reference: true,
+            kind: true,
             packageSnapshot: true,
             startDate: true,
-            items: { select: { label: true, status: true, lineTotalCents: true, cancellationChargeCents: true }, orderBy: { slotIndex: 'asc' } }
+            items: {
+                select: {
+                    label: true,
+                    status: true,
+                    lineTotalCents: true,
+                    cancellationChargeCents: true,
+                    componentType: true,
+                    hotelBooking: { select: HOTEL_FOR_LINES },
+                    transferBooking: { select: TRANSFER_FOR_LINES },
+                    tourBooking: { select: TOUR_FOR_LINES },
+                    serviceBooking: { select: SERVICE_FOR_LINES }
+                },
+                orderBy: { slotIndex: 'asc' }
+            }
         }
     }
 };
@@ -77,52 +167,8 @@ export const receivableForInvoicing = {
 const day = (date) => (date instanceof Date ? date.toISOString().slice(0, 10) : date ? String(date).slice(0, 10) : null);
 
 /** The lines a document is made of, adding up to exactly what is owed. */
-export const buildLines = (receivable, { taxRateBps = settings().defaultTaxBps, amountCents = receivable.amountCents } = {}) => {
-    const line = (description, totalGrossCents, bookingReference = receivable.reference, quantity = 1) => ({
-        description,
-        quantity,
-        taxRateBps,
-        totalGrossCents,
-        bookingReference
-    });
-
-    const { hotelBooking: hotel, transferBooking: transfer, tourBooking: tour, serviceBooking: service, order } = receivable;
-
-    if (order) {
-        const name = order.packageSnapshot?.name ?? 'Package';
-        const owed = (item) => (item.status === 'DECLINED' ? 0 : item.status === 'CANCELLED' ? Math.max(0, item.cancellationChargeCents ?? 0) : item.lineTotalCents);
-        const items = order.items.filter((item) => owed(item) > 0).map((item) => line(`${name} · ${item.label}${item.status === 'CANCELLED' ? ' (cancellation charge)' : ''} · ${order.reference}`, owed(item)));
-
-        if (items.length > 0 && items.reduce((sum, item) => sum + item.totalGrossCents, 0) === amountCents) {
-            return items;
-        }
-
-        return [line(`${name}, from ${day(order.startDate)} · ${order.reference}`, amountCents)];
-    }
-
-    if (hotel) {
-        const nights = hotel.nights === 1 ? '1 night' : `${hotel.nights} nights`;
-        return [line(`${hotel.hotelSnapshot?.name ?? 'Hotel'}: ${nights}, ${day(hotel.checkIn)} – ${day(hotel.checkOut)} · ${hotel.reference}`, amountCents)];
-    }
-
-    if (transfer) {
-        const first = transfer.legs?.[0];
-        const route = first ? `${first.fromPointName} → ${first.toPointName}${transfer.legs.length > 1 ? ' and return' : ''}` : 'Transfer';
-        return [line(`Transfer ${route}, ${day(transfer.pickupAt)} · ${transfer.reference}`, amountCents)];
-    }
-
-    if (tour) {
-        const travellers = tour.adults + (tour.childAges?.length ?? 0);
-        const option = tour.tourSnapshot?.option?.name ? ` (${tour.tourSnapshot.option.name})` : '';
-        return [line(`${tour.tourSnapshot?.title ?? 'Tour'}${option}, ${day(tour.date)}, ${travellers} traveller${travellers === 1 ? '' : 's'} · ${tour.reference}`, amountCents)];
-    }
-
-    if (service) {
-        return [line(`${service.serviceSnapshot?.name ?? 'Service'}, ${day(service.date)} · ${service.reference}`, amountCents)];
-    }
-
-    return [line(`Booking ${receivable.reference}`, amountCents)];
-};
+export const buildLines = (receivable, { taxRateBps = settings().defaultTaxBps, amountCents = receivable.amountCents } = {}) =>
+    buildDetailedLines(receivable, { taxRateBps, amountCents });
 
 /** Who the document is addressed to: the company as registered, or the guest. */
 export const buyerFor = (receivable) => {
@@ -139,6 +185,19 @@ export const buyerFor = (receivable) => {
         };
     }
 
+    const customer = receivable.debtorCustomer;
+
+    if (customer) {
+        return {
+            name: customer.name,
+            taxId: customer.taxId ?? null,
+            email: customer.email || receivable.debtorEmail || null,
+            street: customer.billingAddress ?? null,
+            city: customer.city ?? null,
+            country: customer.country ?? null
+        };
+    }
+
     return { name: receivable.debtorName, taxId: null, email: receivable.debtorEmail ?? null, street: null, city: null, country: null };
 };
 
@@ -146,7 +205,20 @@ export const buyerFor = (receivable) => {
 export const langFor = (receivable) => receivable.debtorPartner?.invoiceLang || settings().lang;
 
 /** `partnerId` for a company, `guest:<email>` for a guest: what the provider's client record is filed under. */
-const customerKeyFor = (receivable) => (receivable.debtorPartnerId ? receivable.debtorPartnerId : `guest:${(receivable.debtorEmail ?? '').toLowerCase()}`);
+const customerKeyFor = (receivable) =>
+    receivable.debtorPartnerId
+        ? receivable.debtorPartnerId
+        : receivable.debtorCustomerId
+          ? `customer:${receivable.debtorCustomerId}`
+          : `guest:${(receivable.debtorEmail ?? '').toLowerCase()}`;
+
+/** Which unique the provider's client record is filed under, and the columns that file it. */
+const customerIdentity = (receivable, key) =>
+    receivable.debtorPartnerId
+        ? { where: { provider_partnerId: { provider: PROVIDER, partnerId: receivable.debtorPartnerId } }, columns: { partnerId: receivable.debtorPartnerId, customerId: null, guestEmail: null } }
+        : receivable.debtorCustomerId
+          ? { where: { provider_customerId: { provider: PROVIDER, customerId: receivable.debtorCustomerId } }, columns: { partnerId: null, customerId: receivable.debtorCustomerId, guestEmail: null } }
+          : { where: { provider_guestEmail: { provider: PROVIDER, guestEmail: key.slice('guest:'.length) } }, columns: { partnerId: null, customerId: null, guestEmail: key.slice('guest:'.length) } };
 
 // --- Reading ----------------------------------------------------------------------------------
 
@@ -320,7 +392,7 @@ export const onReceivableAmountChangedInTx = async (tx, receivable, previous, ac
         }
 
         const lines = [
-            ...vat.lines.map((line) => ({ description: `${line.description} (${why})`, quantity: line.quantity, taxRateBps: line.taxRateBps, totalGrossCents: -line.totalGrossCents, bookingReference: line.bookingReference })),
+            ...vat.lines.map((line) => ({ ...pickLine(line), description: `${line.description} (${why})`, totalGrossCents: -line.totalGrossCents })),
             ...(receivable.amountCents > 0 ? buildLines(full, { taxRateBps: vat.lines[0]?.taxRateBps ?? settings().defaultTaxBps }).map((line) => ({ ...line, description: `${line.description} (as now owed)` })) : [])
         ];
 
@@ -346,7 +418,7 @@ export const onReceivablePaidInTx = async (tx, receivable, actor = null, req = n
     if (!full || full.invoices.some((invoice) => ['VAT', 'FINAL'].includes(invoice.kind))) return null;
 
     const proforma = full.invoices.find((invoice) => invoice.kind === 'PROFORMA');
-    const lines = proforma && proforma.totalCents === receivable.amountCents ? proforma.lines.map(({ description, quantity, taxRateBps, totalGrossCents, bookingReference }) => ({ description, quantity, taxRateBps, totalGrossCents, bookingReference })) : buildLines(full, { amountCents: receivable.amountCents });
+    const lines = proforma && proforma.totalCents === receivable.amountCents ? proforma.lines.map(pickLine) : buildLines(full, { amountCents: receivable.amountCents });
 
     return draftInTx(tx, { ...full, amountCents: receivable.amountCents }, { kind: 'VAT', lines, fromInvoiceId: proforma?.id ?? null, paidCents: receivable.amountCents, dueDate: null, source: 'PAYMENT' }, actor, req);
 };
@@ -363,7 +435,7 @@ const ensureCustomer = async (receivable, actor = null) => {
     const key = customerKeyFor(receivable);
     const buyer = buyerFor(receivable);
     const snapshot = customerSnapshot(buyer, key);
-    const where = receivable.debtorPartnerId ? { provider_partnerId: { provider: PROVIDER, partnerId: receivable.debtorPartnerId } } : { provider_guestEmail: { provider: PROVIDER, guestEmail: key.slice('guest:'.length) } };
+    const { where, columns } = customerIdentity(receivable, key);
     const existing = await prisma.invoicingCustomer.findUnique({ where });
 
     if (existing && stable(existing.snapshot) === stable(snapshot)) {
@@ -376,8 +448,7 @@ const ensureCustomer = async (receivable, actor = null) => {
         where,
         create: {
             provider: PROVIDER,
-            partnerId: receivable.debtorPartnerId ?? null,
-            guestEmail: receivable.debtorPartnerId ? null : key.slice('guest:'.length),
+            ...columns,
             externalClientId: client.externalId,
             snapshot,
             lastSyncedAt: new Date()
@@ -457,7 +528,7 @@ export const issueInvoice = async (invoiceId, { finalAttempt = false } = {}) => 
                 departmentId: settings().departmentId,
                 clientExternalId: customer.externalClientId,
                 buyer: invoice.buyerSnapshot,
-                lines: invoice.lines.map(({ description, quantity, taxRateBps, totalGrossCents }) => ({ description, quantity, taxRateBps, totalGrossCents })),
+                lines: invoice.lines.map(({ description, quantity, taxRateBps, totalGrossCents, detail }) => ({ description, quantity, taxRateBps, totalGrossCents, detail })),
                 fromExternalId,
                 correctionReason: invoice.correctionReason,
                 paidCents: invoice.paidCents > 0 ? invoice.paidCents : null
@@ -528,17 +599,49 @@ export const issueInvoice = async (invoiceId, { finalAttempt = false } = {}) => 
     }
 };
 
-/** Asks the provider to email the document. The outbox handler behind "Send by email" and auto-send. */
-export const sendInvoice = async (invoiceId, { to = null } = {}) => {
+/**
+ * Asks the provider to email the document. The outbox handler behind "Send
+ * by email" and auto-send.
+ *
+ * A refusal (or the last attempt at a provider that cannot be reached) is
+ * written to the document as its `syncError`, with the provider's own
+ * words, so Finance reads why on the invoice page; the status stands, as
+ * the document itself exists. The next send clears it.
+ */
+export const sendInvoice = async (invoiceId, { to = null, finalAttempt = false } = {}) => {
     const invoice = await prisma.invoice.findUnique({ where: { id: invoiceId }, include: { receivable: { select: { reference: true } } } });
 
     if (!invoice?.externalId || !['ISSUED', 'SENT', 'PAID', 'PARTIAL'].includes(invoice.status)) return null;
 
     const address = to ?? invoice.buyerSnapshot?.email ?? null;
 
-    await provider().sendByEmail(invoice.externalId, address ? { to: address } : {});
+    try {
+        await provider().sendByEmail(invoice.externalId, address ? { to: address } : {});
+    } catch (err) {
+        if (!permanent(err) && !finalAttempt) throw err;
 
-    const updated = await prisma.invoice.update({ where: { id: invoice.id }, data: { status: invoice.status === 'ISSUED' ? 'SENT' : invoice.status, lastSyncedAt: new Date() } });
+        const reason = String(err?.message ?? err).slice(0, 1000);
+
+        logger.error({ err, invoiceId: invoice.id, kind: invoice.kind }, 'invoicing.send error');
+
+        await prisma.invoice.update({ where: { id: invoice.id }, data: { syncError: reason } });
+
+        await recordAudit(prisma, {
+            action: 'INVOICE_SYNC_FAILED',
+            actor: null,
+            entityType: AUDIT_ENTITY.invoice,
+            entityId: invoice.id,
+            summary: `${invoice.kind} ${invoice.externalNumber ?? invoice.externalId} was not emailed: ${reason.slice(0, 200)}`,
+            metadata: { receivableId: invoice.receivableId, kind: invoice.kind, send: true, to: address, permanent: permanent(err) }
+        });
+
+        return null;
+    }
+
+    const updated = await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { status: invoice.status === 'ISSUED' ? 'SENT' : invoice.status, lastSyncedAt: new Date(), syncError: null }
+    });
 
     await recordAudit(prisma, {
         action: 'INVOICE_SENT',
@@ -643,7 +746,7 @@ export const requestInvoice = async (receivableId, { kind, lang, dueDate, lines:
         }
 
         const lines = customLines?.length
-            ? customLines.map((line) => ({ description: line.description, quantity: line.quantity, taxRateBps: line.taxRateBps === undefined ? settings().defaultTaxBps : line.taxRateBps, totalGrossCents: line.totalGrossCents, bookingReference: receivable.reference }))
+            ? customLines.map((line) => ({ kind: 'MANUAL', description: line.description, quantity: line.quantity, taxRateBps: line.taxRateBps === undefined ? settings().defaultTaxBps : line.taxRateBps, totalGrossCents: line.totalGrossCents, bookingReference: receivable.reference }))
             : buildLines(receivable, { taxRateBps: taxRateBps ?? settings().defaultTaxBps });
 
         const chained = CHAINED_KINDS.includes(kind);

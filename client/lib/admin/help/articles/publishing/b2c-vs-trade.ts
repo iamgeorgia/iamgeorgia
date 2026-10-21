@@ -14,7 +14,6 @@ export const article = {
   title: "Public sale (B2C) vs trade-only",
   summary: "Publishing sells to partners; a second switch sells to the public. Where that switch is on each screen, and why Featured does nothing on its own.",
   category: "publishing",
-  roles: ["ADMIN"],
   keywords: ["b2c", "b2b", "public", "trade", "partners", "sell to the public", "featured", "homepage", "public site", "anonymous visitors"],
   related: ["pb-statuses", "ht-hub", "tr-hub", "pk-hub", "sv-editing", "tc-vehicle-classes"],
   blocks: [

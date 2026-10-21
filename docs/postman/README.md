@@ -4,7 +4,7 @@ Two files:
 
 | File | What it is |
 | --- | --- |
-| `I-am-Georgia.postman_collection.json` | The collection — 32 folders, ~700 requests covering **every** endpoint the server mounts, each asserting its expected result |
+| `I-am-Georgia.postman_collection.json` | The collection — 39 folders, ~950 requests covering **every** endpoint the server mounts, each asserting its expected result |
 | `I-am-Georgia.local.postman_environment.json` | The environment — base URL and credentials |
 
 Works in the Postman desktop app, the web app, and `newman` on the command line.
@@ -23,7 +23,7 @@ npm run prisma:migrate
 npm run seed:all                     # reference data, hotels, transfers, kosher, tours, services, packages,
                                      # plus the demo transfer bookings, drivers and cars the operations folders use
 node scripts/create-admin.js you@example.com Your Name
-node scripts/seed-b2b-demo.js         # the demo staff and partner logins folders 06o–06q use (optional)
+node scripts/seed-b2b-demo.js         # the demo staff and partner logins folders 06o–06w use (optional)
 npm run dev
 ```
 
@@ -56,7 +56,7 @@ Click the environment name → **Edit**, and set:
 | `driverPassword` | *(optional)* `driver-demo-password` unless you seeded with `--password` |
 | `financeEmail` | *(optional)* an `ACCOUNTANT` login, for the invoice writes in folder 06q. Pre-filled with the demo accountant `seed-b2b-demo.js` creates; clear it to skip |
 | `financePassword` | *(optional)* `Demo-Georgia-2026` unless you seeded with `--password` |
-| `reservationsEmail` | *(optional)* a `TOUR_OPERATOR` login, for the 403 checks in folder 06q. Pre-filled with the demo reservations desk; clear it to skip |
+| `reservationsEmail` | *(optional)* a `TOUR_OPERATOR` login, for the 403 checks in folders 06q, 06t and 06v. Pre-filled with the demo reservations desk; clear it to skip |
 | `reservationsPassword` | *(optional)* as above |
 
 Leave everything else alone — the rest is filled in automatically as you go.
@@ -138,6 +138,7 @@ report, or `--folder "03 · Hotel search & booking"` to run one folder.
 | **04d · Packages** | Browse, detail, quotes (including a kosher package across Shabbat) and the admin preview quote |
 | **04e · Orders** | A package booked as one thing: holds, confirm, replay, partial and whole cancellation, the on-request queue |
 | **04f · Public — more** | Transfer route and vehicle pages, package re-validation, recommendations for a stay, order holds and paperwork, the emailed rating link. Runs after the booking folders so it can use their references |
+| **04g · The cart — /orders/custom** | The cart (`CART_ENABLED`): a hotel stay and a transfer quoted together, held, booked as one `CUSTOM` order, read back and withdrawn, anonymously. The quote records whether the cart is open; with the flag off it answers `404 CART_DISABLED` and the rest of the folder is skipped |
 | **05 · Partner portal** | The approval gate, role restrictions, and cross-tenant isolation. Skips itself if no partner account is configured |
 | **05b · Partner portal — more** | The supplier extranet (room types, calendar, inventory and rate writes), the partner registers, service bookings, transfer bookings and driver choice, bank details. Skips without a partner account |
 | **06 · Admin** | The staff surface, read across; the other half of the staff-only field test |
@@ -157,6 +158,13 @@ report, or `--folder "03 · Hotel search & booking"` to run one folder.
 | **06o · Admin — Finance** | Reports per currency (and CSV), payables, receivables and payments lists, supplier terms, the refusals a payment or adjustment must give, and a partner's own statement. Read-only plus refusals: it never records a real payment |
 | **06p · Admin — Notifications & reminders** | The admin and portal bells (list, unread count, read marks), the payments-due queue behind the supplier payment reminders, the `paymentsDue` and `unreadNotifications` badges, and the outbox's failed-event list. The reminders themselves come from the server's clock, so the folder reads what the sweeper produced |
 | **06q · Admin · Invoices** | The invoicing module (InvoiceOcean): settings, the invoice list and its filters, sync events, one document and its PDF, a partner's own documents, the refusals (the reservations desk, a partner, a foreign document), the hand-issue, send, cancel and retry routes, and the webhook with a wrong secret. Runs green with `INVOICEOCEAN_ENABLED` off or on — the settings request reads the flag and the writes expect `422 INVOICING_DISABLED` while it is off. Never needs a live InvoiceOcean account; with the flag on, the hand-issue request writes a real proforma for the first open receivable |
+| **06r · Admin · Booking approvals** | The approvals queue (`BOOKING_APPROVAL_ENABLED`): the demo agency books a hotel and a transfer, the admin lists the queue with its filters, approves the hotel (the receivable opens at the yes) and rejects the transfer, and the `approval` / `payment` blocks on every booking. Runs green with the flag off too — the decisions then expect `409 NOT_PENDING_APPROVAL` |
+| **06s · Admin · Notifications — tabs & filters** | The bell's tabs: `category`, `kind[]`, `unread`, `sort=newest|oldest|unreadFirst`, `unreadByCategory`, `href` on every row, `read-all { category }`, and the same on the portal bell |
+| **06t · Admin · Manual bookings — the desk** | Desk customers, searching as a partner (`X-Act-As-Partner`), a manual hotel, transfer, tour, service, package order and cart order for a partner or a customer with the channel, the price adjustment and `confirmNow`, the desk block on every register, and the refusals (`PARTNER_INACTIVE`, `NOT_STAFF`, `ACT_AS_FORBIDDEN`, a price change without the capability) |
+| **06u · Admin · Booking register & filters** | `GET /api/admin/bookings/all` and `/api/partner/bookings/all` — the cross-product index — and the shared filters (`paymentStatus[]`, `invoiceStatus[]`, `paymentMethod`, `createdFrom/To`, `customerId`, `managerId`, `source[]`, `approval`, `sort`) on the five product registers. Read-only; runs after 06t so the searches find what it made |
+| **06v · Admin · Deadlines & reminders** | The deadline calendar and its filters, one deadline's history, moving a cancellation deadline (and the `403 APPROVAL_REQUIRED` / `409 DEADLINE_CLOSED` refusals), the reminder schedule with a partner override added and removed, and a partner's own deadlines |
+| **06w · Admin · Invoice lines** | The newest document's lines: `kind`, `unitCents` and the structured `detail` on every line. Read-only |
+| **06x · Admin · Email (Gmail API)** | The Gmail connection's status, starting Google's consent flow, and a forged callback refused with `303 ?error=state`. Writes need `settings.write` (log in as the demo super admin). Two opt-in requests with side effects: `mailTestSend=true` sends a real test email, `mailDisconnect=true` disconnects the account |
 | **07 · Kosher** | Kosher services and certification on a hotel, the kosher search filters, a requirement the hotel cannot meet |
 | **08 · Security & error contract** | Requests that are *supposed* to fail: 401, 403, 404, 400, 413, 429, and the cross-site write check |
 
@@ -215,6 +223,9 @@ Check this list before filing.
 | `400` from a media upload | No file was picked in the request's form-data tab. Everything downstream of it tolerates the missing id |
 | `422` `INVOICING_DISABLED` from an invoice write in folder 06q | Invoicing is switched off on that server (`INVOICEOCEAN_ENABLED=false`, the shipped value). Deliberate, and asserted; the same request answers for real once it is on |
 | `409` `NOT_ISSUED` from an invoice PDF | The folder picks a document that is not at the provider on purpose, so the run never calls InvoiceOcean. A real PDF needs an issued document and the account configured |
+| `404` `CART_DISABLED` from `/api/orders/custom/*` in folder 04g | The cart is switched off on that server (`CART_ENABLED=false`, the shipped value). Deliberate, and asserted; the folder skips the rest. The desk's `POST /api/admin/orders/custom/manual` works either way |
+| `409` `NOT_PENDING_APPROVAL` from an approve or reject in folder 06r | Booking approval is switched off (`BOOKING_APPROVAL_ENABLED=false`, the shipped value), so the partner's bookings confirmed at once and there was nothing to decide. Deliberate, and asserted |
+| `PENDING_APPROVAL` instead of `CONFIRMED` from a booking in folders 03–06 | Booking approval is switched **on** (`BOOKING_APPROVAL_ENABLED=true`). Every booking waits for the yes in 06r; the older folders accept both |
 | `404` / `409` from a folder-06 request on `{{bookingReference}}`, `{{transferReference}}` or `{{orderReference}}` | The earlier folder already cancelled that record; the description says how to see the 200 |
 
 ---

@@ -15,7 +15,6 @@ export const article = {
   title: "Slugs, URLs and automatic SEO",
   summary: "What a slug must look like, which records can change theirs, why changing one breaks every shared link, and what the site does for search engines without being asked.",
   category: "publishing",
-  roles: ["ADMIN"],
   keywords: ["slug", "url", "public address", "seo", "meta title", "meta description", "open graph", "social image", "json-ld", "hreflang", "redirect", "404", "canonical"],
   related: ["pb-translations", "ht-create", "sv-editing", "ds-editing", "md-images"],
   blocks: [

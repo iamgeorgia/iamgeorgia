@@ -6,6 +6,7 @@ import { TourOptionsManager } from "@/components/admin/TourOptionsManager";
 import { getTour, listTourCancellationPolicies } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Options & prices" };
 
@@ -17,6 +18,7 @@ export const metadata: Metadata = { title: "Options & prices" };
  * always offer terms, even on an empty tour.
  */
 export default async function TourOptionsPage({ params }: PageProps<"/[locale]/admin/tours/[slug]/options">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

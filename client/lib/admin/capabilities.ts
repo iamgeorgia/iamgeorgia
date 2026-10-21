@@ -37,6 +37,9 @@ export const capabilityAreas: CapabilityArea[] = [
       "bookings.read": c("Bookings: read", "See every booking and order"),
       "bookings.write": c("Bookings: handle", "Confirm and decline requests and change bookings"),
       "bookings.cancel": c("Bookings: cancel", "Cancel bookings and orders"),
+      "bookings.approve": c("Bookings: approve", "Say yes or no to new bookings before they are confirmed"),
+      "bookings.price.override": c("Bookings: override price", "Change the price of a booking before it is approved"),
+      "bookings.deadlines.write": c("Bookings: set deadlines", "Move the approval and answer deadlines on a booking"),
     },
   },
   {
@@ -107,6 +110,7 @@ export const capabilityAreas: CapabilityArea[] = [
     label: "Settings",
     capabilities: {
       "settings.write": c("Settings: edit", "Change platform settings"),
+      "settings.reminders.write": c("Reminders: edit", "Change when approval and payment reminders go out"),
     },
   },
   {

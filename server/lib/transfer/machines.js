@@ -100,6 +100,12 @@ export const transferBookingMachine = defineMachine({
     name: 'transfer booking',
     terminal: ['CANCELLED', 'COMPLETED', 'NO_SHOW'],
     transitions: {
+        // The platform's wait (OD1): approved to CONFIRMED, or rejected,
+        // withdrawn or expired to CANCELLED at no charge.
+        PENDING_APPROVAL: {
+            CONFIRMED: [OPS, SYSTEM],
+            CANCELLED: [...CANCELLERS, SYSTEM]
+        },
         PENDING: {
             CONFIRMED: [OPS, SYSTEM],
             CANCELLED: CANCELLERS

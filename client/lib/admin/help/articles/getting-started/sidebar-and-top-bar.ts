@@ -12,7 +12,6 @@ export const article = {
   summary:
     "What the groups and count pills in the sidebar mean, what the top bar holds, and which two controls are not wired up yet.",
   category: "getting-started",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["navigation", "menu", "sidebar", "badge", "count", "pill", "notifications", "bell", "search box", "mobile"],
   related: ["gs-roles", "gs-overview", "rf-search-filters"],
   blocks: [

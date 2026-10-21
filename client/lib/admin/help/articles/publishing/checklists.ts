@@ -12,7 +12,6 @@ export const article = {
   title: "Publish checklists at a glance",
   summary: "Everything Publish waits for, entity by entity, and how the refusal message reads when something is still missing.",
   category: "publishing",
-  roles: ["ADMIN"],
   keywords: ["checklist", "publish", "not ready to publish", "missing", "blockers", "requirements", "go live", "422"],
   related: ["pb-statuses", "ht-publish-checklist", "tr-publish-checklist", "pk-publish-checklist", "sv-editing", "tc-route-editing"],
   blocks: [

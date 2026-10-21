@@ -21,7 +21,9 @@ import type { Order } from "@/types/order";
  */
 export async function OrderConfirmationView({ order }: { order: Order }) {
   const { t, intlLocale, fill, path } = await getI18n();
-  const requested = order.status === "PENDING_CONFIRMATION";
+  // Both are "not yet confirmed" to the buyer: waiting for the platform's yes
+  // reads the same as waiting for a supplier's.
+  const requested = order.status === "PENDING_APPROVAL" || order.status === "PENDING_CONFIRMATION";
   const steps = requested ? t.orders.confirmation.requestedSteps : t.orders.confirmation.whatNextSteps;
 
   const manageHref = path(

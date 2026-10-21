@@ -1,4 +1,5 @@
-import type { BookingQuery, HotelBookingStatus } from "@/types/booking";
+import { bookingFiltersFromParams } from "./bookingFilters";
+import type { BookingQuery, BookingSource, GuestTitle, HotelBookingStatus } from "@/types/booking";
 
 /**
  * Display vocabulary for bookings, mirroring `lib/admin/partners.ts`.
@@ -8,7 +9,13 @@ import type { BookingQuery, HotelBookingStatus } from "@/types/booking";
  * has one file to work through rather than nine.
  */
 
+/**
+ * PENDING_APPROVAL is the platform's own gate (owner decision OD1), before
+ * any supplier is asked: the rooms are held, nothing is owed, and the booking
+ * goes nowhere until an operator says yes on the approval queue.
+ */
 export const bookingStatusLabels: Record<HotelBookingStatus, string> = {
+  PENDING_APPROVAL: "Awaiting approval",
   PENDING: "Pending",
   CONFIRMED: "Confirmed",
   CANCELLED: "Cancelled",
@@ -16,8 +23,13 @@ export const bookingStatusLabels: Record<HotelBookingStatus, string> = {
   NO_SHOW: "No show",
 };
 
+/** The same sentence for every register: what the platform's gate means. */
+export const AWAITING_APPROVAL_HINT =
+  "Waiting for the platform's yes. Rooms or seats are held; nothing is owed yet.";
+
 /** What each state means for the operator, shown under a filter. */
 export const bookingStatusHints: Record<HotelBookingStatus, string> = {
+  PENDING_APPROVAL: AWAITING_APPROVAL_HINT,
   PENDING: "Held but not yet confirmed.",
   CONFIRMED: "Rooms are committed and the guest has been told.",
   CANCELLED: "Rooms released. Any charge follows the terms agreed at booking.",
@@ -26,6 +38,7 @@ export const bookingStatusHints: Record<HotelBookingStatus, string> = {
 };
 
 export const BOOKING_STATUSES: HotelBookingStatus[] = [
+  "PENDING_APPROVAL",
   "PENDING",
   "CONFIRMED",
   "CANCELLED",
@@ -34,7 +47,43 @@ export const BOOKING_STATUSES: HotelBookingStatus[] = [
 ];
 
 /** The states that still owe the operator something. */
-export const ACTIVE_BOOKING_STATUSES: HotelBookingStatus[] = ["PENDING", "CONFIRMED"];
+export const ACTIVE_BOOKING_STATUSES: HotelBookingStatus[] = ["PENDING_APPROVAL", "PENDING", "CONFIRMED"];
+
+/**
+ * Where a booking came from: the session that made it, or the channel the
+ * desk named on a manual one. Upper-case, as the server's enum spells it.
+ */
+export const BOOKING_SOURCES: BookingSource[] = ["WEB", "PARTNER", "ADMIN", "PHONE", "EMAIL", "EXTERNAL_AGENCY", "DIRECT", "DEMO"];
+
+export const bookingSourceLabels: Record<BookingSource, string> = {
+  WEB: "Web",
+  PARTNER: "Partner",
+  ADMIN: "Admin",
+  PHONE: "Phone",
+  EMAIL: "Email",
+  EXTERNAL_AGENCY: "External agency",
+  DIRECT: "Direct",
+  DEMO: "Demo",
+};
+
+/** The courtesy titles a guest may carry, as the voucher prints them. */
+export const GUEST_TITLES: GuestTitle[] = ["MR", "MRS", "MS", "MISS", "MSTR"];
+
+export const guestTitleLabels: Record<GuestTitle, string> = {
+  MR: "Mr",
+  MRS: "Mrs",
+  MS: "Ms",
+  MISS: "Miss",
+  MSTR: "Master",
+};
+
+/** "Mrs " before a name, or nothing when no title was given. */
+export const guestTitleLabel = (title: GuestTitle | string | null | undefined): string =>
+  title && title in guestTitleLabels ? `${guestTitleLabels[title as GuestTitle]} ` : "";
+
+/** A source word as the register shows it; an unknown one is shown as sent. */
+export const bookingSourceLabel = (source: string | null | undefined): string =>
+  source ? (bookingSourceLabels[source as BookingSource] ?? source) : "—";
 
 const DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const DATE_TIME = new Intl.DateTimeFormat("en-GB", {
@@ -80,21 +129,14 @@ export function bookingQueryFromParams(
     return Array.isArray(value) ? value[0] : value;
   };
 
-  const requested = params.status;
-  const asArray = Array.isArray(requested) ? requested : requested ? [requested] : [];
-  const valid = asArray.filter((value): value is HotelBookingStatus =>
-    BOOKING_STATUSES.includes(value as HotelBookingStatus),
-  );
-
-  const page = Number.parseInt(read("page") ?? "", 10);
+  // The shared keys — payment, source, partner, manager, created range, sort
+  // — are read the same way on every register (`lib/admin/bookingFilters.ts`).
+  const { status, ...shared } = bookingFiltersFromParams(params, { statuses: BOOKING_STATUSES });
 
   return {
-    status: options.lockedStatuses ?? (valid.length > 0 ? valid : undefined),
-    search: read("search") || undefined,
-    from: read("from") || undefined,
-    to: read("to") || undefined,
+    ...shared,
+    status: options.lockedStatuses ?? (status as HotelBookingStatus[] | undefined),
     hotelId: read("hotelId") || undefined,
-    page: Number.isFinite(page) && page > 0 ? page : 1,
     pageSize: 25,
   };
 }

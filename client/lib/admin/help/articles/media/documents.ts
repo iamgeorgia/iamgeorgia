@@ -14,7 +14,6 @@ export const article = {
   title: "Private documents",
   summary: "Certificates, registrations, licences and the like: what can be uploaded, why they never have a public address, and what the expiry date does — and does not — do.",
   category: "media",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["document", "pdf", "certificate", "registration", "insurance", "technical inspection", "driving licence", "id document", "medical certificate", "background check", "valid until", "expired", "private", "signed link", "audit"],
   related: ["md-images", "fd-verification-documents", "fd-car-detail", "fd-driver-detail"],
   blocks: [

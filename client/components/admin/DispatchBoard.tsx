@@ -1,13 +1,16 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { Cell, DataTable, EmptyRow, Row } from "./DataTable";
 import { TransferLegStatusBadge } from "./DispatchBadges";
 import { LegActions } from "./LegActions";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { LEG_STATUSES, formatPickup, legStatusLabels } from "@/lib/admin/dispatch";
 import { useLocalePath } from "@/lib/i18n/provider";
 import type { DispatchLeg } from "@/types/driver";
@@ -40,7 +43,12 @@ export function DispatchBoard({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const path = useLocalePath();
+  const can = useCan();
   const [search, setSearch] = useState(searchParams.get("search") ?? "");
+
+  // Without this the Actions column would be a column of nothing, so it goes.
+  const canDispatch = can("dispatch.write");
+  const columnCount = canDispatch ? 6 : 5;
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -69,40 +77,50 @@ export function DispatchBoard({
 
   return (
     <div>
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="relative min-w-52 flex-1">
-          <Search size={15} className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle" aria-hidden />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Reference or passenger"
-            aria-label="Search legs"
-            className={`${control} w-full ps-9 pe-3 text-ink`}
-          />
-        </label>
-        <label className="text-[0.75rem] font-semibold text-muted">
-          From
-          <input type="date" value={from} onChange={(event) => setParam("from", event.target.value)} className={`${control} mt-1 block`} />
-        </label>
-        <label className="text-[0.75rem] font-semibold text-muted">
-          To
-          <input type="date" value={to} onChange={(event) => setParam("to", event.target.value)} className={`${control} mt-1 block`} />
-        </label>
-        <select
-          value={searchParams.get("legStatus") ?? ""}
-          onChange={(event) => setParam("legStatus", event.target.value)}
-          aria-label="Filter by status"
-          className={control}
-        >
-          <option value="">Every status</option>
-          {LEG_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {legStatusLabels[status]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <FilterDisclosure
+        count={(from ? 1 : 0) + (to ? 1 : 0) + (searchParams.get("legStatus") ? 1 : 0)}
+        lead={
+          <label className="relative min-w-52 flex-1">
+            <Search size={15} className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle" aria-hidden />
+            <input
+              type="search"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Reference or passenger"
+              aria-label="Search legs"
+              className={`${control} w-full ps-9 pe-3 text-ink`}
+            />
+          </label>
+        }
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-[0.75rem] font-semibold text-muted">
+            From
+            <input type="date" value={from} onChange={(event) => setParam("from", event.target.value)} className={`${control} mt-1 block`} />
+          </label>
+          <label className="text-[0.75rem] font-semibold text-muted">
+            To
+            <input type="date" value={to} onChange={(event) => setParam("to", event.target.value)} className={`${control} mt-1 block`} />
+          </label>
+          <select
+            value={searchParams.get("legStatus") ?? ""}
+            onChange={(event) => setParam("legStatus", event.target.value)}
+            aria-label="Filter by status"
+            className={control}
+          >
+            <option value="">Every status</option>
+            {LEG_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {legStatusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </FilterDisclosure>
+
+      {!canDispatch && (
+        <ReadOnlyNote needs="dispatch.write" what="Assigning drivers and moving legs" className="mt-6" />
+      )}
 
       <div className="mt-6 rounded-sm border border-line bg-surface">
         <DataTable
@@ -113,11 +131,11 @@ export function DispatchBoard({
             { label: "Party", align: "end", hideBelow: "md" },
             { label: "Status" },
             { label: "Driver", hideBelow: "lg" },
-            { label: "Actions" },
+            ...(canDispatch ? [{ label: "Actions" }] : []),
           ]}
         >
           {data.length === 0 ? (
-            <EmptyRow colSpan={6} message="Nothing to dispatch in this window." />
+            <EmptyRow colSpan={columnCount} message="Nothing to dispatch in this window." />
           ) : (
             data.map((leg) => (
               <Row key={leg.id}>
@@ -166,9 +184,11 @@ export function DispatchBoard({
                     <span className="text-subtle">—</span>
                   )}
                 </Cell>
-                <Cell>
-                  <LegActions leg={leg} compact />
-                </Cell>
+                {canDispatch && (
+                  <Cell>
+                    <LegActions leg={leg} compact />
+                  </Cell>
+                )}
               </Row>
             ))
           )}

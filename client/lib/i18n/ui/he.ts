@@ -144,6 +144,7 @@ export const he: UiDictionary = {
     review: { one: "ביקורת", two: "ביקורות", other: "ביקורות" },
     result: { one: "תוצאה", two: "תוצאות", other: "תוצאות" },
     seat: { one: "מקום", two: "מקומות", other: "מקומות" },
+    item: { one: "פריט", two: "פריטים", other: "פריטים" },
   },
 
   a11y: {
@@ -550,6 +551,7 @@ export const he: UiDictionary = {
       pendingFree: "בקשה שהמפעיל טרם אישר מבוטלת ללא חיוב.",
     },
     status: {
+      PENDING_APPROVAL: "ממתין לאישור הפלטפורמה",
       PENDING: "ממתין לאישור",
       CONFIRMED: "אושר",
       CANCELLED: "בוטל",
@@ -849,6 +851,7 @@ export const he: UiDictionary = {
     },
 
     status: {
+      PENDING_APPROVAL: "ממתין לאישור הפלטפורמה",
       PENDING_CONFIRMATION: "ממתין לאישור",
       CONFIRMED: "אושר",
       PARTIALLY_CANCELLED: "בוטל חלקית",
@@ -856,6 +859,7 @@ export const he: UiDictionary = {
       COMPLETED: "הושלם",
     },
     itemStatus: {
+      AWAITING_APPROVAL: "ממתין לאישור הפלטפורמה",
       REQUESTED: "ממתין למפעיל",
       CONFIRMED: "אושר",
       DECLINED: "לא זמין",
@@ -888,6 +892,84 @@ export const he: UiDictionary = {
       notFound: "לא מצאנו.",
       partOfOrder: "ההזמנה הזו היא חלק מטיול, וניתן לשנות אותה רק מתוך הטיול עצמו.",
       requeryTrip: "תמחור הטיול מחדש",
+    },
+
+    // --- העגלה: כמה מוצרים כטיול אחד ---
+    cart: {
+      metaTitle: "העגלה שלכם",
+      title: "העגלה שלכם",
+      crumb: "עגלה",
+      defaultName: "הטיול שלכם",
+      steps: {
+        choose: "מילוי העגלה",
+        details: "הפרטים שלכם",
+        confirm: "הוזמן",
+      },
+      add: "הוספה לעגלה",
+      added: "נוסף לעגלה.",
+      viewCart: "לעגלה",
+      openCart: "עגלה, {count}",
+      mixedCurrencyAdd:
+        "העגלה שלכם מתומחרת ב-{currency}, ולכן פריט ב-{other} לא יכול להצטרף אליה. הזמינו או רוקנו את העגלה קודם.",
+      full: "העגלה מלאה \u2014 טיול אחד מכיל עד עשרים פריטים.",
+      storageFailed:
+        "הדפדפן לא אפשר לנו לשמור את העגלה. הסיבה הרגילה היא גלישה פרטית או נתוני אתר חסומים.",
+      emptyTitle: "העגלה שלכם ריקה",
+      emptyBody:
+        "לינה, טיולים, הסעות וחבילות שלמות יכולים להיכנס יחד ולהיות מוזמנים כטיול אחד, עם אישור אחד.",
+      count: "{count} בעגלה",
+      pricedIn: "מתומחר ב-{currency}",
+      currencyGuard:
+        "טיול מסולק במטבע אחד. בעגלה הזו יש {currencies} \u2014 הסירו את הפריטים שאינם שייכים לפני התשלום.",
+      checking: "בודקים את מחירי היום\u2026",
+      refresh: "רענון מחירים",
+      quoteFailed: "לא הצלחנו לבדוק את המחירים כרגע. המספרים המוצגים הם ממועד ההוספה.",
+      priceChangedNotice:
+        "חלק מהמחירים השתנו מאז שהוספתם אותם. הסיכומים למטה הם של היום; כל שורה שהשתנתה מציינת מה היה.",
+      unavailableNotice:
+        "חלק מהפריטים כבר לא ניתנים להזמנה בתאריכים שלהם. הסירו אותם כדי להמשיך עם השאר.",
+      wasNow: "היה {was}, עכשיו {now}",
+      priceMoved: "המחיר השתנה",
+      unavailable: "כבר לא זמין",
+      includes: "כולל",
+      remove: "הסרה",
+      removeItem: "הסרת {title}",
+      open: "פתיחה",
+      summary: "סיכום",
+      itemsTotal: "פריטים",
+      discounts: "הנחות חבילה",
+      total: "סך הכול",
+      totalWhenAdded: "סך הכול בעת ההוספה",
+      totalHint: "נבדק מול מחירי היום. התשלום מוסדר מולנו אחרי ההזמנה, לא בעמוד הזה.",
+      checkout: "לתשלום",
+      keepBrowsing: "להמשיך לעיין",
+      disabledTitle: "העגלה עדיין לא פתוחה",
+      disabledBody: "בינתיים הזמינו כל לינה, טיול והסעה בעמוד שלהם.",
+
+      // --- תשלום ---
+      checkoutMetaTitle: "תשלום",
+      checkoutTitle: "הזמנת הטיול",
+      checkoutCrumb: "תשלום",
+      holding: "שומרים את החדרים והמקומות שלכם\u2026",
+      holdFailedTitle: "לא הצלחנו לשמור הכול",
+      holdFailedBody:
+        "חלק מהעגלה כבר לא ניתן לשמירה בתאריכים שלו. הסירו אותו, או חזרו לעגלה ובדקו את מחירי היום.",
+      tryHoldAgain: "לשמור שוב",
+      backToCart: "חזרה לעגלה",
+      expiredBody:
+        "חדרים ומקומות נשמרים רק כמה דקות, כדי שלא יימנעו ממטיילים אחרים. דבר לא הוזמן ודבר לא חויב \u2014 שמרו אותם שוב כדי להמשיך.",
+      itemRequests: "בקשות עבור {title}",
+      itemRequestsHint: "מועבר למלון או למפעיל הזה בלבד.",
+      confirm: "הזמנת הטיול",
+      priceChangedBody:
+        "הפריטים האלה כבר לא במחיר שבו הוספתם אותם. דבר לא הוזמן. הסירו כל אחד, או פתחו אותו כדי להוסיף שוב במחיר של היום.",
+      unavailableBody:
+        "הפריטים האלה כבר לא ניתנים להזמנה בתאריכים שלהם. דבר לא הוזמן ודבר לא חויב. הסירו אותם כדי להזמין את השאר.",
+      reAdd: "פתיחה והוספה מחדש",
+      mixedCurrency:
+        "בעגלה יש יותר ממטבע אחד ({currencies}). טיול מסולק במטבע אחד, לכן הסירו את הפריטים שאינם תואמים.",
+      tripName: "טיול",
+      standaloneItems: "הוזמנו בנפרד",
     },
 
     nav: {
@@ -949,6 +1031,8 @@ export const he: UiDictionary = {
     emptyTitle: "אין נכסים שתואמים את המסננים",
     emptyBody:
       "אפשר להרחיב את התקציב או להסיר מתקן — יש לנו תשעה נכסים בסך הכול, וכל אחד מהם שווה מבט.",
+    searchLabel: "חיפוש מלונות",
+    searchPlaceholder: "חיפוש לפי שם או מקום",
     showProperties: "להציג {count}",
     filters: {
       propertyType: "סוג הנכס",
@@ -2209,6 +2293,7 @@ export const he: UiDictionary = {
       tooLong: "הזמנה אחת היא עד {limit} לילות. פצלו את השהייה, או פנו אלינו ונסדר.",
     },
     status: {
+      PENDING_APPROVAL: "ממתין לאישור הפלטפורמה",
       PENDING: "ממתין",
       CONFIRMED: "מאושר",
       CANCELLED: "בוטל",
@@ -2237,5 +2322,21 @@ export const he: UiDictionary = {
     native: "שיתוף…",
     nativeHint: "שליחה דרך אפליקציה במכשיר זה",
     copyLink: "העתקת קישור",
+  },
+  portalDeadlines: {
+    title: "מועדים קרובים",
+    intro: "מה צפוי בהזמנות שלכם בשבועיים הקרובים: תשלומים, סיום חלון הביטול החינמי ותשובות שאתם ממתינים להן.",
+    overdueCount: "{count} באיחור",
+    kinds: {
+      PAYMENT: "מועד תשלום",
+      FREE_CANCELLATION: "סיום ביטול חינם",
+      CONFIRMATION: "מועד אישור",
+    },
+    awaitingPlatform: "ממתין לאישור I am Georgia",
+    awaitingSupplier: "ממתין לתשובת הספק",
+    today: "היום",
+    tomorrow: "מחר",
+    inDays: "בעוד {count} ימים",
+    daysLate: "{count} ימים באיחור",
   },
 };

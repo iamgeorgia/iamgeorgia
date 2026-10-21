@@ -11,7 +11,6 @@ export const article = {
   title: "Getting a tour on sale",
   summary: "The eight things a tour must have before Publish will work, in the order you would naturally do them.",
   category: "tours",
-  roles: ["ADMIN"],
   keywords: ["publish", "checklist", "not ready to publish", "go live", "on sale", "blocker", "cover", "capacity", "price sheet"],
   related: ["tr-hub", "tr-details-itinerary", "tr-options-prices", "tr-departures", "md-images", "pb-checklists"],
   blocks: [

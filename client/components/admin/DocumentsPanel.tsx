@@ -5,7 +5,9 @@ import { useRef, useState } from "react";
 import { ExternalLink, FileText, Trash2, Upload } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, SelectInput, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { uploadMedia, type MediaCategory } from "@/lib/api/media";
 import type { AttachedDocument } from "@/types/driver";
@@ -21,9 +23,21 @@ import type { AttachedDocument } from "@/types/driver";
  *
  * Functions arrive as props from a thin client wrapper (`FleetDocuments`,
  * `DriverDocuments`), because a Server Component cannot hand a function down.
+ *
+ * Opening a file is a read; uploading and removing are writes, and which
+ * capability the server asks for depends on whose library this is. A caller
+ * can name it with `needs`; left out, it follows the category — fleet and
+ * driver files are dispatch's, everything else is the catalogue's — which is
+ * the rule the media endpoint applies to the upload itself.
  */
 
 const ACCEPT = "application/pdf,image/jpeg,image/png,image/webp,image/avif";
+
+const OPS_CATEGORIES: ReadonlySet<MediaCategory> = new Set<MediaCategory>([
+  "VEHICLE_DOCUMENT",
+  "DRIVER_DOCUMENT",
+  "FLEET_IMAGE",
+]);
 
 export function DocumentsPanel<T extends string>({
   title,
@@ -34,6 +48,7 @@ export function DocumentsPanel<T extends string>({
   attach,
   detach,
   link,
+  needs,
 }: {
   title: string;
   description?: string;
@@ -43,9 +58,15 @@ export function DocumentsPanel<T extends string>({
   attach: (body: { fileAssetId: string; docType: T; label: string | null; validUntil: string | null }) => Promise<unknown>;
   detach: (documentId: string) => Promise<unknown>;
   link: (documentId: string) => Promise<{ url: string }>;
+  /** The capabilities any one of which allows uploading and removing here. Derived from `category` when omitted. */
+  needs?: string | string[];
 }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
+  const can = useCan();
+
+  const writeNeeds = needs ?? (OPS_CATEGORIES.has(category) ? "dispatch.write" : "catalogue.write");
+  const canEdit = can(...(Array.isArray(writeNeeds) ? writeNeeds : [writeNeeds]));
 
   const [docType, setDocType] = useState<T>(docTypes[0]?.value);
   const [label, setLabel] = useState("");
@@ -153,51 +174,57 @@ export function DocumentsPanel<T extends string>({
                   <ExternalLink size={13} aria-hidden />
                   Open
                 </button>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void remove(document)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line px-3 text-[0.75rem] font-medium text-body transition-colors hover:border-error/50 hover:text-error-text disabled:opacity-50"
-                >
-                  <Trash2 size={13} aria-hidden />
-                  Remove
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void remove(document)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line px-3 text-[0.75rem] font-medium text-body transition-colors hover:border-error/50 hover:text-error-text disabled:opacity-50"
+                  >
+                    <Trash2 size={13} aria-hidden />
+                    Remove
+                  </button>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
 
-      <div className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
-        <SelectInput
-          label="Type"
-          value={docType}
-          onChange={(event) => setDocType(event.target.value as T)}
-          options={docTypes}
-        />
-        <TextInput label="Label" value={label} onChange={(event) => setLabel(event.target.value)} />
-        <TextInput
-          label="Valid until"
-          type="date"
-          value={validUntil}
-          onChange={(event) => setValidUntil(event.target.value)}
-        />
-        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-sm border border-line px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink hover:text-ink">
-          <Upload size={14} aria-hidden />
-          {busy === "upload" ? "Uploading…" : "Upload"}
-          <input
-            ref={fileInput}
-            type="file"
-            accept={ACCEPT}
-            disabled={busy !== null}
-            className="sr-only"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void upload(file);
-            }}
+      {canEdit ? (
+        <div className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end">
+          <SelectInput
+            label="Type"
+            value={docType}
+            onChange={(event) => setDocType(event.target.value as T)}
+            options={docTypes}
           />
-        </label>
-      </div>
+          <TextInput label="Label" value={label} onChange={(event) => setLabel(event.target.value)} />
+          <TextInput
+            label="Valid until"
+            type="date"
+            value={validUntil}
+            onChange={(event) => setValidUntil(event.target.value)}
+          />
+          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-sm border border-line px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink hover:text-ink">
+            <Upload size={14} aria-hidden />
+            {busy === "upload" ? "Uploading…" : "Upload"}
+            <input
+              ref={fileInput}
+              type="file"
+              accept={ACCEPT}
+              disabled={busy !== null}
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void upload(file);
+              }}
+            />
+          </label>
+        </div>
+      ) : (
+        <ReadOnlyNote className="mt-5" needs={writeNeeds} what="Uploading or removing a document" />
+      )}
 
       <FormError message={error} />
     </AdminPanel>

@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { ReceivablesBrowser } from "@/components/admin/finance/ReceivablesBrowser";
 import { listReceivables, type ReceivableQuery } from "@/lib/api/finance";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { requireScreen } from "@/lib/auth/session";
 import type { SettlementStatus } from "@/types/finance";
 
 export const metadata: Metadata = { title: "Receivables" };
@@ -51,11 +47,8 @@ function receivableQueryFromParams(params: Record<string, string | string[] | un
 export default async function AdminReceivablesPage({
   searchParams,
 }: PageProps<"/[locale]/admin/finance/receivables">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.receivables.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const query = receivableQueryFromParams(await searchParams);
   const list = await listReceivables(query);

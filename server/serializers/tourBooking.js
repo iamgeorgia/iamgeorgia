@@ -1,4 +1,7 @@
 import { toDateOnly } from '../lib/time.js';
+import { approvalOf } from '../lib/booking/approval.js';
+import { paymentBlock } from './booking.js';
+import { toDesk } from '../lib/booking/desk.js';
 import { canViewBuyer, canViewMargin, canViewNetRates } from '../middleware/auth.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 
@@ -14,6 +17,7 @@ import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 const toTraveller = (traveller, net) => ({
     id: traveller.id,
     type: traveller.type,
+    title: traveller.title ?? null,
     firstName: traveller.firstName,
     lastName: traveller.lastName,
     age: traveller.age ?? null,
@@ -48,13 +52,15 @@ export const toTourBookingSummary = (booking, viewer) => {
         travellerCount: (booking.travellers ?? []).length,
         leadTravellerName: booking.leadTravellerName,
         currency: booking.currency,
-        totalCents: booking.sellTotalCents,
+        totalCents: booking.sellTotalCents + (booking.priceAdjustmentCents ?? 0),
         confirmationMode: booking.confirmationMode,
         requestDeadlineAt: booking.requestDeadlineAt ?? null,
         createdAt: booking.createdAt,
         confirmedAt: booking.confirmedAt ?? null,
         cancelledAt: booking.cancelledAt ?? null,
-        declinedAt: booking.declinedAt ?? null
+        declinedAt: booking.declinedAt ?? null,
+        approval: approvalOf(booking),
+        payment: paymentBlock(booking)
     };
 
     if (canViewNetRates(viewer, booking.tour)) {
@@ -68,6 +74,7 @@ export const toTourBookingSummary = (booking, viewer) => {
 
     if (canViewBuyer(viewer)) {
         summary.partner = booking.partner ?? null;
+        summary.desk = toDesk(booking);
     } else if (canViewNetRates(viewer, booking.tour)) {
         summary.bookedVia = booking.partnerId ? 'AGENCY' : 'DIRECT';
     }

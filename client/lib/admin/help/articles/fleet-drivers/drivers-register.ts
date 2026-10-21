@@ -12,7 +12,6 @@ export const article = {
   title: "Drivers register",
   summary: "Every driver profile on file — searching, filtering by verification and activity, and reading the Login column.",
   category: "fleet-drivers",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["drivers", "driver list", "verified", "awaiting checks", "deactivated", "login", "pending", "phone", "languages"],
   routes: ["/admin/transfers/drivers"],
   related: ["fd-add-driver", "fd-driver-detail", "fd-verification-documents", "fd-fleet-register", "dp-assigning-a-driver"],

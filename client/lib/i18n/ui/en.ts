@@ -35,7 +35,8 @@ export type UnitKey =
   | "bag"
   | "review"
   | "result"
-  | "seat";
+  | "seat"
+  | "item";
 
 const englishUnits: Record<UnitKey, PluralForms> = {
   traveller: { one: "traveller", other: "travellers" },
@@ -56,6 +57,7 @@ const englishUnits: Record<UnitKey, PluralForms> = {
   review: { one: "review", other: "reviews" },
   result: { one: "result", other: "results" },
   seat: { one: "seat", other: "seats" },
+  item: { one: "item", other: "items" },
 };
 
 export const en = {
@@ -607,6 +609,7 @@ export const en = {
       pendingFree: "A request the operator has not yet confirmed is cancelled at no charge.",
     },
     status: {
+      PENDING_APPROVAL: "Awaiting approval",
       PENDING: "Awaiting confirmation",
       CONFIRMED: "Confirmed",
       CANCELLED: "Cancelled",
@@ -914,6 +917,7 @@ export const en = {
 
     // --- statuses ---
     status: {
+      PENDING_APPROVAL: "Awaiting approval",
       PENDING_CONFIRMATION: "Awaiting confirmation",
       CONFIRMED: "Confirmed",
       PARTIALLY_CANCELLED: "Partly cancelled",
@@ -921,6 +925,7 @@ export const en = {
       COMPLETED: "Completed",
     },
     itemStatus: {
+      AWAITING_APPROVAL: "Awaiting approval",
       REQUESTED: "Awaiting the operator",
       CONFIRMED: "Confirmed",
       DECLINED: "Not available",
@@ -954,6 +959,84 @@ export const en = {
       notFound: "We could not find that.",
       partOfOrder: "This booking is part of a trip and can only be changed from the trip itself.",
       requeryTrip: "Price the trip again",
+    },
+
+    // --- the cart: several products booked as one trip ---
+    cart: {
+      metaTitle: "Your cart",
+      title: "Your cart",
+      crumb: "Cart",
+      defaultName: "Your trip",
+      steps: {
+        choose: "Fill the cart",
+        details: "Your details",
+        confirm: "Booked",
+      },
+      add: "Add to cart",
+      added: "Added to your cart.",
+      viewCart: "View cart",
+      openCart: "Cart, {count}",
+      mixedCurrencyAdd:
+        "Your cart is priced in {currency}, so something priced in {other} cannot join it. Book or empty the cart first.",
+      full: "Your cart is full \u2014 one trip can hold twenty items.",
+      storageFailed:
+        "Your browser would not let us keep the cart. Private browsing or blocked site data is the usual reason.",
+      emptyTitle: "Your cart is empty",
+      emptyBody:
+        "Stays, tours, transfers and whole packages can go in together and be booked as one trip, with one confirmation.",
+      count: "{count} in your cart",
+      pricedIn: "Priced in {currency}",
+      currencyGuard:
+        "A trip is settled in one currency. This cart holds {currencies} \u2014 remove the items that do not belong before checking out.",
+      checking: "Checking today\u2019s prices\u2026",
+      refresh: "Refresh prices",
+      quoteFailed: "We could not check the prices just now. The figures shown are from when each item was added.",
+      priceChangedNotice:
+        "Some prices have moved since you added them. The totals below are today\u2019s; each changed line says what it was.",
+      unavailableNotice:
+        "Some items can no longer be booked for their dates. Remove them to carry on with the rest.",
+      wasNow: "Was {was}, now {now}",
+      priceMoved: "Price moved",
+      unavailable: "No longer available",
+      includes: "Includes",
+      remove: "Remove",
+      removeItem: "Remove {title}",
+      open: "Open",
+      summary: "Summary",
+      itemsTotal: "Items",
+      discounts: "Package discounts",
+      total: "Total",
+      totalWhenAdded: "Total when added",
+      totalHint: "Checked against today\u2019s prices. Payment is settled with us after booking, not on this page.",
+      checkout: "Checkout",
+      keepBrowsing: "Keep browsing",
+      disabledTitle: "The cart is not open",
+      disabledBody: "Book each stay, tour and transfer on its own page for now.",
+
+      // --- checkout ---
+      checkoutMetaTitle: "Checkout",
+      checkoutTitle: "Book your trip",
+      checkoutCrumb: "Checkout",
+      holding: "Holding your rooms and seats\u2026",
+      holdFailedTitle: "We could not hold everything",
+      holdFailedBody:
+        "Part of your cart can no longer be held for its dates. Remove it, or go back to the cart and check today\u2019s prices.",
+      tryHoldAgain: "Hold them again",
+      backToCart: "Back to the cart",
+      expiredBody:
+        "Rooms and seats are only held for a few minutes so they are not kept from other travellers. Nothing was booked and nothing was charged \u2014 hold them again to carry on.",
+      itemRequests: "Requests for {title}",
+      itemRequestsHint: "Passed to this hotel or operator only.",
+      confirm: "Book the trip",
+      priceChangedBody:
+        "These items are no longer at the price you added them. Nothing was booked. Remove each one, or open it to add it again at today\u2019s price.",
+      unavailableBody:
+        "These items can no longer be booked for their dates. Nothing was booked and nothing was charged. Remove them to book the rest.",
+      reAdd: "Open to add again",
+      mixedCurrency:
+        "Your cart holds more than one currency ({currencies}). A trip is settled in one, so remove the items that do not match.",
+      tripName: "Trip",
+      standaloneItems: "Booked on their own",
     },
 
     nav: {
@@ -1015,6 +1098,8 @@ export const en = {
     emptyTitle: "No properties match those filters",
     emptyBody:
       "Try widening the budget or removing a facility — we only list nine properties, and every one of them is worth a look.",
+    searchLabel: "Search hotels",
+    searchPlaceholder: "Search by name or place",
     showProperties: "Show {count}",
     filters: {
       propertyType: "Property type",
@@ -2310,6 +2395,7 @@ export const en = {
       tooLong: "One booking can run to at most {limit} nights. Split the stay, or ask us to arrange it.",
     },
     status: {
+      PENDING_APPROVAL: "Awaiting approval",
       PENDING: "Pending",
       CONFIRMED: "Confirmed",
       CANCELLED: "Cancelled",
@@ -2338,6 +2424,22 @@ export const en = {
     native: "Share…",
     nativeHint: "Send with an app on this device",
     copyLink: "Copy link",
+  },
+  portalDeadlines: {
+    title: "Upcoming deadlines",
+    intro: "What is due on your bookings in the next two weeks: payments, free-cancellation windows and answers you are waiting on.",
+    overdueCount: "{count} overdue",
+    kinds: {
+      PAYMENT: "Payment due",
+      FREE_CANCELLATION: "Free cancellation ends",
+      CONFIRMATION: "Confirmation due",
+    },
+    awaitingPlatform: "Waiting for I am Georgia to approve",
+    awaitingSupplier: "Waiting for the supplier's answer",
+    today: "Today",
+    tomorrow: "Tomorrow",
+    inDays: "In {count} days",
+    daysLate: "{count} days late",
   },
 };
 

@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, LineListInput, SubmitButton, TextArea, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { setTourTranslation } from "@/lib/api/tours";
 import { ApiError, describeError } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
@@ -63,6 +65,8 @@ export function TourTranslationsEditor({
   translations: TourTranslation[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write", "tours.write");
   const [locale, setLocale] = useState<LocaleCode>("ka");
   const [drafts, setDrafts] = useState<Record<LocaleCode, Draft>>(() =>
     Object.fromEntries(
@@ -141,6 +145,8 @@ export function TourTranslationsEditor({
         })}
       </div>
 
+      {/* The language tabs above stay live for a reader; only the fields lock. */}
+      <fieldset disabled={!canEdit} className="flex min-w-0 flex-col gap-6">
       <AdminPanel title="Listing" description={`English: “${tour.title}” — ${tour.summary}`}>
         <div className="grid gap-5 sm:grid-cols-2">
           <TextInput className="sm:col-span-2" label="Title" value={draft.title} onChange={(e) => set("title", e.target.value)} error={fieldErrors.title} />
@@ -161,14 +167,19 @@ export function TourTranslationsEditor({
           <LineListInput label="Not included" value={draft.excluded} onChange={(next) => set("excluded", next)} rows={6} placeholder={tour.excluded.join("\n")} />
         </div>
       </AdminPanel>
+      </fieldset>
 
       <FormError message={error} />
 
-      <div className="flex justify-end">
-        <SubmitButton type="submit" busy={busy} saved={saved}>
-          {saved ? "Saved" : `Save ${LOCALES.find((entry) => entry.code === locale)?.label}`}
-        </SubmitButton>
-      </div>
+      {canEdit ? (
+        <div className="flex justify-end">
+          <SubmitButton type="submit" busy={busy} saved={saved}>
+            {saved ? "Saved" : `Save ${LOCALES.find((entry) => entry.code === locale)?.label}`}
+          </SubmitButton>
+        </div>
+      ) : (
+        <ReadOnlyNote needs={["catalogue.write", "tours.write"]} what="Editing translations" />
+      )}
     </form>
   );
 }

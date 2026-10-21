@@ -5,7 +5,9 @@ import { useState } from "react";
 import { Loader2, Trash2 } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, SelectInput, SubmitButton, TextArea, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { createBlock, deleteBlock } from "@/lib/api/dispatch";
 import { blockReasonLabels, formatPickup } from "@/lib/admin/dispatch";
@@ -45,6 +47,8 @@ export function ScheduleView({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const can = useCan();
+  const canBlock = can("dispatch.write");
 
   const [reason, setReason] = useState<BlockReason>("DAY_OFF");
   const [startsAt, setStartsAt] = useState("");
@@ -188,7 +192,9 @@ export function ScheduleView({
 
       <div className="space-y-8 lg:col-span-4">
         <AdminPanel title="Block time" description="A day off, a service. Refused while a job sits inside it.">
-          {!resource ? (
+          {!canBlock ? (
+            <ReadOnlyNote needs="dispatch.write" what="Blocking time" />
+          ) : !resource ? (
             <p className="text-[0.8125rem] text-muted">Choose a driver or a car first.</p>
           ) : (
             <div className="space-y-4">
@@ -220,15 +226,17 @@ export function ScheduleView({
                       {formatPickup(block.startsAt, "Asia/Tbilisi")} – {formatPickup(block.endsAt, "Asia/Tbilisi")}
                     </span>
                   </span>
-                  <button
-                    type="button"
-                    disabled={busy !== null}
-                    onClick={() => void removeBlock(block.id)}
-                    aria-label="Remove block"
-                    className="text-subtle hover:text-error-text disabled:opacity-50"
-                  >
-                    {busy === `remove-${block.id}` ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Trash2 size={15} aria-hidden />}
-                  </button>
+                  {canBlock && (
+                    <button
+                      type="button"
+                      disabled={busy !== null}
+                      onClick={() => void removeBlock(block.id)}
+                      aria-label="Remove block"
+                      className="text-subtle hover:text-error-text disabled:opacity-50"
+                    >
+                      {busy === `remove-${block.id}` ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <Trash2 size={15} aria-hidden />}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

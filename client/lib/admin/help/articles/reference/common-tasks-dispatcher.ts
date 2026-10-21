@@ -14,7 +14,6 @@ export const article = {
   title: "Common tasks for dispatchers",
   summary: "Step-by-step recipes for the dispatch board, the schedule, the fleet and driver screens and the ratings queue.",
   category: "reference",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["how to", "recipe", "task", "cookbook", "steps", "assign", "reassign", "unassign", "no-show", "block", "phone", "rating"],
   related: ["gs-quick-start-dispatcher", "dp-assigning-a-driver", "dp-leg-statuses", "dp-schedule", "rf-dangerous-actions", "rf-troubleshooting"],
   blocks: [

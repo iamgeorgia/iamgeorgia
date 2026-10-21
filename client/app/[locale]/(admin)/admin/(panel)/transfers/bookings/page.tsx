@@ -1,15 +1,17 @@
-import Link from "next/link";
 import type { Metadata } from "next";
 import { CalendarCheck, CarFront, Coins } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
-import { Cell, DataTable, EmptyRow, Row } from "@/components/admin/DataTable";
+import { CreateBookingButton } from "@/components/admin/CreateBookingButton";
 import { StatCard } from "@/components/admin/StatCard";
-import { TransferBookingStatusBadge } from "@/components/admin/DispatchBadges";
-import { getTransferBookingSummary } from "@/lib/api/admin";
+import { TransferBookingsBrowser } from "@/components/admin/TransferBookingsBrowser";
+import { getTransferBookingSummary, type TransferBookingSummary } from "@/lib/api/admin";
 import { listAdminTransferBookings } from "@/lib/api/transfers";
-import { getI18n } from "@/lib/i18n/server";
-import { formatMoney, formatMoneyCompact } from "@/lib/money";
+import { todayISO } from "@/lib/admin/dates";
+import { transferBookingQueryFromParams } from "@/lib/admin/transfers";
+import { formatMoneyCompact } from "@/lib/money";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Transfer bookings" };
 
@@ -23,25 +25,27 @@ export const metadata: Metadata = { title: "Transfer bookings" };
  *
  * Ordered by pick-up rather than by when it was booked: what an operator needs
  * from this screen is which cars go out next.
+ *
+ * The summary tiles sum confirmed value in the database, which is a margin
+ * figure, so they are only asked for by a viewer who may read margins — a
+ * dispatcher opens this screen too, and the summary would answer them 403.
  */
 export default async function AdminTransferBookingsPage({
   searchParams,
 }: PageProps<"/[locale]/admin/transfers/bookings">) {
+  const session = await requireScreen();
   const params = await searchParams;
-  const { path } = await getI18n();
-
-  const page = Number.parseInt(
-    (Array.isArray(params.page) ? params.page[0] : params.page) ?? "1",
-    10,
-  );
+  const query = transferBookingQueryFromParams(params);
 
   const [list, summary] = await Promise.all([
-    listAdminTransferBookings({ page: Number.isFinite(page) && page > 0 ? page : 1, pageSize: 25 }),
-    getTransferBookingSummary(),
+    listAdminTransferBookings(query),
+    can(session, "finance.margin.read")
+      ? getTransferBookingSummary()
+      : Promise.resolve<TransferBookingSummary | null>(null),
   ]);
 
   // Summed in the database, per currency, largest first — not over a page.
-  const [leading, ...otherCurrencies] = summary.confirmedValue.byCurrency;
+  const [leading, ...otherCurrencies] = summary?.confirmedValue.byCurrency ?? [];
   const revenue = leading ?? { amountCents: 0, currency: "GEL" };
 
   return (
@@ -49,81 +53,29 @@ export default async function AdminTransferBookingsPage({
       <AdminPageHeader
         title="Transfer bookings"
         description="Every journey sold, soonest pick-up first."
+        actions={<CreateBookingButton />}
       />
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard label="Bookings" value={String(summary.total)} icon={CalendarCheck} />
-        <StatCard label="Confirmed" value={String(summary.confirmed)} icon={CarFront} />
-        <StatCard
-          label="Confirmed value"
-          value={formatMoneyCompact(revenue.amountCents, revenue.currency)}
-          icon={Coins}
-          hint={
-            otherCurrencies.length > 0
-              ? `In ${revenue.currency}; ${otherCurrencies.length} more not shown`
-              : "Every confirmed journey"
-          }
-        />
-      </div>
-
-      <div className="mt-10 rounded-sm border border-line bg-surface">
-        <DataTable
-          caption="Transfer bookings"
-          columns={[
-            { label: "Reference" },
-            { label: "Passenger" },
-            { label: "Journey", hideBelow: "lg" },
-            { label: "Pick-up", hideBelow: "md" },
-            { label: "Status" },
-            { label: "Total", align: "end" },
-          ]}
-        >
-          {list.data.length === 0 ? (
-            <EmptyRow colSpan={6} message="No transfer bookings yet." />
-          ) : (
-            list.data.map((booking) => (
-              <Row key={booking.reference}>
-                <Cell>
-                  <Link
-                    href={path(`/admin/transfers/bookings/${booking.reference}`)}
-                    className="font-medium text-ink tabular-nums underline-offset-4 hover:underline"
-                  >
-                    {booking.reference}
-                  </Link>
-                </Cell>
-                <Cell>
-                  <span className="text-ink">{booking.leadPassengerName}</span>
-                  <span className="type-caption mt-0.5 block break-all text-subtle">
-                    {booking.leadPassengerEmail}
-                  </span>
-                </Cell>
-                <Cell hideBelow="lg">
-                  {booking.from} → {booking.to}
-                  <span className="type-caption mt-0.5 block text-subtle">
-                    {booking.vehicleName}
-                    {booking.tripType === "RETURN" ? " · return" : ""}
-                  </span>
-                </Cell>
-                <Cell hideBelow="md" className="tabular-nums">
-                  {new Date(booking.pickupAt).toISOString().slice(0, 16).replace("T", " ")}
-                </Cell>
-                <Cell>
-                  <TransferBookingStatusBadge status={booking.status} />
-                </Cell>
-                <Cell align="end" className="tabular-nums">
-                  {formatMoney(booking.totalCents, booking.currency)}
-                </Cell>
-              </Row>
-            ))
-          )}
-        </DataTable>
-      </div>
-
-      {list.totalPages > 1 && (
-        <p className="mt-5 text-[0.8125rem] text-muted tabular-nums">
-          Page {list.page} of {list.totalPages} · {list.total} bookings
-        </p>
+      {summary && (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <StatCard label="Bookings" value={String(summary.total)} icon={CalendarCheck} />
+          <StatCard label="Confirmed" value={String(summary.confirmed)} icon={CarFront} />
+          <StatCard
+            label="Confirmed value"
+            value={formatMoneyCompact(revenue.amountCents, revenue.currency)}
+            icon={Coins}
+            hint={
+              otherCurrencies.length > 0
+                ? `In ${revenue.currency}; ${otherCurrencies.length} more not shown`
+                : "Every confirmed journey"
+            }
+          />
+        </div>
       )}
+
+      <div className="mt-8">
+        <TransferBookingsBrowser {...list} today={todayISO()} />
+      </div>
     </AdminContainer>
   );
 }

@@ -8,6 +8,7 @@ import type {
   FinanceProduct,
   FinanceSummary,
   MarginReport,
+  PartnerBookingApproval,
   PartnerStatement,
   PartnerTerms,
   PayInstalmentInput,
@@ -175,7 +176,12 @@ export const saveSupplierTerms = (
 
 export const savePartnerTerms = (
   partnerId: string,
-  body: { paymentDueDays?: number; paymentDueAnchor?: ReceivableDueAnchor; paymentTermsNote?: string | null },
+  body: {
+    paymentDueDays?: number;
+    paymentDueAnchor?: ReceivableDueAnchor;
+    paymentTermsNote?: string | null;
+    bookingApproval?: PartnerBookingApproval;
+  },
 ) => apiFetch<PartnerTerms>(`${base}/partners/${partnerId}/terms`, { method: "PATCH", body });
 
 export { newKey as newIdempotencyKey };

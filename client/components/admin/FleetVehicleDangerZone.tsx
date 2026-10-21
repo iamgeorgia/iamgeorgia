@@ -5,7 +5,9 @@ import { Archive, CarFront, Loader2, PauseCircle, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import {
   activateFleetVehicle,
@@ -42,6 +44,10 @@ export function FleetVehicleDangerZone({
   listHref?: string;
 }) {
   const router = useRouter();
+  const can = useCan();
+  // On and off the road, and archiving, are dispatch's; deleting is the
+  // admin's, decided by the page.
+  const canDispatch = can("dispatch.write");
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [typed, setTyped] = useState("");
@@ -159,19 +165,35 @@ export function FleetVehicleDangerZone({
             {error}
           </p>
         )}
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => run(() => activateFleetVehicle(vehicle.id))}
-          className={`${secondary} mt-4`}
-        >
-          {busy ? (
-            <Loader2 size={15} className="animate-spin" aria-hidden />
-          ) : (
-            <CarFront size={15} aria-hidden />
-          )}
-          Put back on the road
-        </button>
+        {canDispatch ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => activateFleetVehicle(vehicle.id))}
+            className={`${secondary} mt-4`}
+          >
+            {busy ? (
+              <Loader2 size={15} className="animate-spin" aria-hidden />
+            ) : (
+              <CarFront size={15} aria-hidden />
+            )}
+            Put back on the road
+          </button>
+        ) : (
+          <ReadOnlyNote needs="dispatch.write" what="Putting this car back on the road" className="mt-4" />
+        )}
+        {deleteSection}
+      </AdminPanel>
+    );
+  }
+
+  if (!canDispatch) {
+    return (
+      <AdminPanel title="Availability">
+        <p className="text-[0.8125rem] leading-relaxed text-muted">
+          {vehicle.status === "ACTIVE" ? "Dispatch offers this car." : "Not offered to dispatch right now."}
+        </p>
+        <ReadOnlyNote needs="dispatch.write" what="Taking this car on or off the road, or archiving it" className="mt-4" />
         {deleteSection}
       </AdminPanel>
     );

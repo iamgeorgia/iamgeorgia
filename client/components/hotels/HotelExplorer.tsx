@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Modal } from "@/components/ui/Modal";
+import { SearchField } from "@/components/ui/SearchField";
 import { hotelSortOptions, type HotelSort } from "@/data/hotels";
 import {
   buildFacets,
@@ -53,6 +54,7 @@ export function HotelExplorer({ hotels }: HotelExplorerProps) {
   const path = useLocalePath();
   const [filters, setFilters] = useState<HotelFilterState>(defaultFilters);
   const [sort, setSort] = useState<HotelSort>("recommended");
+  const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Derived from the whole list, never from the filtered one: options that
@@ -60,16 +62,24 @@ export function HotelExplorer({ hotels }: HotelExplorerProps) {
   const facets = useMemo(() => buildFacets(hotels), [hotels]);
 
   const results = useMemo(() => {
-    const filtered = hotels.filter((hotel) => matchesFilters(hotel, filters));
+    const needle = query.trim().toLowerCase();
+    const filtered = hotels.filter(
+      (hotel) =>
+        matchesFilters(hotel, filters) &&
+        (!needle || `${hotel.name} ${hotel.location} ${hotel.address}`.toLowerCase().includes(needle)),
+    );
 
     const sorted = [...filtered];
     if (sort === "price-low") sorted.sort((a, b) => a.priceFrom - b.priceFrom);
     if (sort === "price-high") sorted.sort((a, b) => b.priceFrom - a.priceFrom);
     if (sort === "rating") sorted.sort((a, b) => b.guestScore - a.guestScore);
     return sorted;
-  }, [hotels, filters, sort]);
+  }, [hotels, filters, sort, query]);
 
-  const reset = () => setFilters(defaultFilters);
+  const reset = () => {
+    setFilters(defaultFilters);
+    setQuery("");
+  };
 
   const activeFilterCount = countActiveFilters(filters);
 
@@ -104,6 +114,15 @@ export function HotelExplorer({ hotels }: HotelExplorerProps) {
           </aside>
 
           <div className="min-w-0 lg:col-span-9">
+            <SearchField
+              value={query}
+              onChange={setQuery}
+              tone="dark"
+              label={t.hotels.searchLabel}
+              placeholder={t.hotels.searchPlaceholder}
+              className="mb-6"
+            />
+
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-5">
               <p className="type-body-sm text-muted" aria-live="polite">
                 <span className="font-medium text-ink">

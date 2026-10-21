@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { ChevronDown, Loader2, Plus, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { Cell, DataTable, EmptyRow, Row } from "./DataTable";
 import {
   CheckboxField,
@@ -15,6 +16,7 @@ import {
   TextArea,
   TextInput,
 } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import {
   createTransferExtra,
@@ -116,6 +118,10 @@ const bodyFrom = (values: ExtraValues, stored: number): TransferExtraInput => ({
 
 export function TransferExtrasEditor({ extras }: { extras: TransferExtra[] }) {
   const router = useRouter();
+  const can = useCan();
+  // Creating, repricing and retiring an extra are all catalogue writes; the
+  // table already shows every figure, so a reader loses only the row editors.
+  const canEdit = can("catalogue.write");
 
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -169,23 +175,25 @@ export function TransferExtrasEditor({ extras }: { extras: TransferExtra[] }) {
                       : formatMoney(extra.priceCents ?? 0, extra.currency)}
                   </Cell>
                   <Cell align="end">
-                    <button
-                      type="button"
-                      onClick={() => setOpenCode(open ? null : extra.code)}
-                      aria-expanded={open}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line px-2.5 text-[0.75rem] font-medium text-body transition-colors hover:border-ink/40 hover:text-ink"
-                    >
-                      {open ? "Close" : "Edit"}
-                      <ChevronDown
-                        size={13}
-                        aria-hidden
-                        className={cn("transition-transform", open && "rotate-180")}
-                      />
-                    </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => setOpenCode(open ? null : extra.code)}
+                        aria-expanded={open}
+                        className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line px-2.5 text-[0.75rem] font-medium text-body transition-colors hover:border-ink/40 hover:text-ink"
+                      >
+                        {open ? "Close" : "Edit"}
+                        <ChevronDown
+                          size={13}
+                          aria-hidden
+                          className={cn("transition-transform", open && "rotate-180")}
+                        />
+                      </button>
+                    )}
                   </Cell>
                 </Row>,
 
-                open && (
+                open && canEdit && (
                   <tr key={`${extra.code}-editor`} className="bg-surface-soft/50">
                     <td colSpan={5} className="px-4 py-5">
                       <ExtraForm
@@ -210,7 +218,9 @@ export function TransferExtrasEditor({ extras }: { extras: TransferExtra[] }) {
         the code they bought — it is hidden from travellers, not erased.
       </p>
 
-      {adding ? (
+      {!canEdit ? (
+        <ReadOnlyNote className="mt-5" needs="catalogue.write" what="Adding, repricing or retiring an extra" />
+      ) : adding ? (
         <div className="mt-5 rounded-sm border border-line bg-surface p-5">
           <p className="mb-4 text-[0.9375rem] font-semibold text-ink">A new extra</p>
           <ExtraForm

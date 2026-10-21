@@ -4,8 +4,8 @@ import type { Metadata } from "next";
 import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { HelpArticleList } from "@/components/admin/help/HelpArticleList";
 import { HelpCategoryIcon } from "@/components/admin/help/HelpCategoryList";
-import { getSession } from "@/lib/auth/session";
-import { helpArticlesIn, helpCategoryById, helpRoleOf } from "@/lib/admin/help";
+import { requireScreen } from "@/lib/auth/session";
+import { helpArticlesIn, helpCategoryById, helpCategoriesFor } from "@/lib/admin/help";
 import { getI18n } from "@/lib/i18n/server";
 
 type Props = PageProps<"/[locale]/admin/help/[category]">;
@@ -22,14 +22,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
  * reading about a screen they cannot open.
  */
 export default async function HelpCategoryPage({ params }: Props) {
+  const session = await requireScreen();
   const { category: categoryId } = await params;
-  const [session, { path }] = await Promise.all([getSession(), getI18n()]);
-  const role = helpRoleOf(session?.user.role ?? "ADMIN");
+  const { path } = await getI18n();
+  const capabilities = session.user.capabilities ?? [];
 
   const category = helpCategoryById(categoryId);
-  if (!category || !category.roles.includes(role)) notFound();
+  if (!category || !helpCategoriesFor(capabilities).some((readable) => readable.id === category.id)) notFound();
 
-  const articles = helpArticlesIn(category.id, role);
+  const articles = helpArticlesIn(category.id, capabilities);
 
   return (
     <AdminContainer>

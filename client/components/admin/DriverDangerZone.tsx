@@ -5,7 +5,9 @@ import { Loader2, RotateCcw, Trash2, UserX } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { CheckboxField, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import { deactivateDriver, deleteDriver, reactivateDriver } from "@/lib/api/drivers";
 import type { DriverAdmin } from "@/types/driver";
@@ -35,6 +37,10 @@ export function DriverDangerZone({
   listHref?: string;
 }) {
   const router = useRouter();
+  const can = useCan();
+  // Taking a driver off the roster and putting them back is dispatch's call;
+  // deleting is the admin's, decided by the page.
+  const canDispatch = can("dispatch.write");
   const [reason, setReason] = useState("");
   const [force, setForce] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -127,10 +133,14 @@ export function DriverDangerZone({
           {driver.deactivatedAt && ` · ${new Date(driver.deactivatedAt).toLocaleDateString("en-GB")}`}
         </p>
         {error && <p role="alert" className="mt-3 text-[0.8125rem] text-error-text">{error}</p>}
-        <button type="button" disabled={busy} onClick={() => run(() => reactivateDriver(driver.id))} className={`${secondary} mt-4`}>
-          {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <RotateCcw size={15} aria-hidden />}
-          Reactivate
-        </button>
+        {canDispatch ? (
+          <button type="button" disabled={busy} onClick={() => run(() => reactivateDriver(driver.id))} className={`${secondary} mt-4`}>
+            {busy ? <Loader2 size={15} className="animate-spin" aria-hidden /> : <RotateCcw size={15} aria-hidden />}
+            Reactivate
+          </button>
+        ) : (
+          <ReadOnlyNote needs="dispatch.write" what="Reactivating this driver" className="mt-4" />
+        )}
         {deleteSection}
       </AdminPanel>
     );
@@ -143,7 +153,9 @@ export function DriverDangerZone({
         unless you send those back to dispatch.
       </p>
 
-      {!confirming ? (
+      {!canDispatch ? (
+        <ReadOnlyNote needs="dispatch.write" what="Deactivating this driver" className="mt-4" />
+      ) : !confirming ? (
         <button type="button" onClick={() => setConfirming(true)} className={`${outlined} mt-4`}>
           <UserX size={15} aria-hidden />
           Deactivate driver

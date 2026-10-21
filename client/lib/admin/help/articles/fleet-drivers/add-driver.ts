@@ -12,7 +12,6 @@ export const article = {
   title: "Adding a driver",
   summary: "Creating a driver profile under a supplier — the public, contact and internal fields, and why no login is created yet.",
   category: "fleet-drivers",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/drivers/new"],
   keywords: ["new driver", "add driver", "works for", "languages", "phone", "contact email", "licence", "date of birth", "internal notes"],
   related: ["fd-drivers-register", "fd-driver-detail", "fd-verification-documents", "gs-accounts"],

@@ -11,7 +11,6 @@ export const article = {
   title: "The applications queue",
   summary: "Partners waiting for a decision, and the ones still filling in their registration.",
   category: "partners",
-  roles: ["ADMIN"],
   routes: ["/admin/partners/applications"],
   keywords: ["applications", "pending approval", "awaiting decision", "review", "queue", "registration in progress", "invitee"],
   related: ["pt-detail-review", "pt-register", "pt-lifecycle", "gs-overview"],

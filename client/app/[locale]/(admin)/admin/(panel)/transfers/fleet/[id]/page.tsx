@@ -18,9 +18,9 @@ import { ApiError } from "@/lib/api/client";
 import { getFleetVehicle } from "@/lib/api/fleet";
 import { listAdminTransferProviders, listAdminTransferVehicles } from "@/lib/api/transfers";
 import { fleetFeatureLabels } from "@/lib/admin/fleet";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import { getI18n } from "@/lib/i18n/server";
-import { isAdmin } from "@/types/auth";
+import { can } from "@/types/auth";
 import type { FleetVehicleAdmin } from "@/types/driver";
 
 export const metadata: Metadata = { title: "Car" };
@@ -28,6 +28,7 @@ export const metadata: Metadata = { title: "Car" };
 export default async function AdminFleetVehiclePage({
   params,
 }: PageProps<"/[locale]/admin/transfers/fleet/[id]">) {
+  await requireScreen();
   const { id } = await params;
 
   let vehicle: FleetVehicleAdmin;
@@ -121,7 +122,7 @@ export default async function AdminFleetVehiclePage({
 
           <FleetVehicleDangerZone
             vehicle={vehicle}
-            canDelete={isAdmin(session)}
+            canDelete={can(session, "platform.admin")}
             listHref={path("/admin/transfers/fleet")}
           />
         </div>

@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
 import { CapabilityChecklist, capabilitiesForSide } from "./CapabilityChecklist";
+import { RolePreview } from "./RolePreview";
 import { FormError, SelectInput, SubmitButton, TextArea, TextInput } from "./FormControls";
 import { describeRbacError } from "@/lib/admin/rbacErrors";
 import { ApiError } from "@/lib/api/client";
@@ -132,6 +133,10 @@ export function NewRoleForm({ catalogue }: { catalogue: CapabilityCatalogue }) {
           protectedCapabilities={catalogue.protected}
         />
       </AdminPanel>
+
+      {/* The effect of the ticks, before anyone is given the role. Partner
+          roles have no sidebar here; the portal reads its own capabilities. */}
+      {side === "PLATFORM" && <RolePreview capabilities={capabilities} />}
 
       <FormError message={error} />
 

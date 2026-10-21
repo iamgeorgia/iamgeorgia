@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { setInventory, setRates } from "@/lib/api/inventory";
 import { ApiError, describeError } from "@/lib/api/client";
 import { addDaysISO, formatDayMonth, formatWeekday, weekdayOfISO } from "@/lib/admin/dates";
@@ -27,6 +29,10 @@ import type {
  *
  * Weekend columns are tinted, because Friday-to-Sunday pricing is the single
  * most common thing being checked when someone opens this screen.
+ *
+ * The two editors answer to two capabilities, as their endpoints do: how many
+ * rooms are open is `catalogue.write`, what a night costs is `pricing.write`.
+ * The grid itself is readable by anyone who can open the screen.
  */
 
 const field =
@@ -63,6 +69,9 @@ export function CalendarManager({
   const pathname = usePathname();
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const can = useCan();
+  const canInventory = can("catalogue.write");
+  const canPricing = can("pricing.write");
 
   const navigate = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params.toString());
@@ -117,8 +126,18 @@ export function CalendarManager({
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <InventoryEditor hotel={hotel} roomType={roomType} from={from} to={to} />
-        {ratePlans.length > 0 ? (
+        {canInventory ? (
+          <InventoryEditor hotel={hotel} roomType={roomType} from={from} to={to} />
+        ) : (
+          <AdminPanel title="Rooms open">
+            <ReadOnlyNote needs="catalogue.write" what="Opening or closing rooms for a range" />
+          </AdminPanel>
+        )}
+        {!canPricing ? (
+          <AdminPanel title="Prices">
+            <ReadOnlyNote needs="pricing.write" what="Setting nightly rates" />
+          </AdminPanel>
+        ) : ratePlans.length > 0 ? (
           <RatesEditor hotel={hotel} roomType={roomType} ratePlans={ratePlans} from={from} to={to} />
         ) : (
           <AdminPanel title="Prices">

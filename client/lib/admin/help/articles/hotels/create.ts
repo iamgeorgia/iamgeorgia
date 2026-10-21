@@ -13,7 +13,6 @@ export const article = {
   title: "Adding a property",
   summary: "Name it and place it: the six fields of a new draft, and the one of them you cannot change afterwards.",
   category: "hotels",
-  roles: ["ADMIN"],
   routes: ["/admin/hotels/new"],
   keywords: ["new hotel", "create property", "draft", "slug", "star rating", "supplier", "platform-managed", "destination"],
   related: ["ht-register", "ht-hub", "ds-editing", "pb-slugs-and-seo"],

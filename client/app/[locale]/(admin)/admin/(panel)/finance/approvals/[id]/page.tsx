@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
 
 import {
@@ -21,9 +21,8 @@ import {
 import { paymentMethodLabels } from "@/lib/admin/finance";
 import { getApproval } from "@/lib/api/approvals";
 import { ApiError } from "@/lib/api/client";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
 import { can } from "@/types/auth";
 import type { Approval } from "@/types/approval";
@@ -118,11 +117,8 @@ function requestedChange(approval: Approval): { label: string; value: React.Reac
 
 /** One approval request: what is asked, by whom, and the decision. */
 export default async function AdminApprovalPage({ params }: PageProps<"/[locale]/admin/finance/approvals/[id]">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, ...APPROVAL_SCREEN_CAPABILITIES)) {
-    redirect(localePath(await getLocale(), "/admin/finance"));
-  }
 
   const { id } = await params;
   const { path } = await getI18n();

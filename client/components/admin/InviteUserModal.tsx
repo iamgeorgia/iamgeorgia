@@ -7,11 +7,12 @@ import { useState } from "react";
 import { FormError, SelectInput, SubmitButton, TextInput } from "./FormControls";
 import { Modal } from "@/components/ui/Modal";
 import { formatPartnerDateTime } from "@/lib/admin/partners";
-import { roleLabel, staffRoleDescriptions, staffRoleLabels } from "@/lib/admin/users";
+import { roleLabel } from "@/lib/admin/users";
 import { ApiError, describeError } from "@/lib/api/client";
 import { inviteUser } from "@/lib/api/users";
 import { cn } from "@/lib/utils";
-import { STAFF_INVITE_ROLES, type IssuedActivation } from "@/types/user";
+import type { Role } from "@/types/rbac";
+import type { IssuedActivation } from "@/types/user";
 
 /**
  * The link an invitation or a resend produced, with a **Copy link** button.
@@ -74,13 +75,12 @@ export function ActivationLinkNotice({
   );
 }
 
-type InviteRole = (typeof STAFF_INVITE_ROLES)[number];
-
 interface InviteValues {
   firstName: string;
   lastName: string;
   email: string;
-  role: InviteRole | "";
+  /** A role key from the server's grantable list, or empty until chosen. */
+  role: string;
   position: string;
   phone: string;
 }
@@ -97,11 +97,14 @@ const empty: InviteValues = {
 /**
  * The Staff list's "Invite staff" button and the dialog behind it.
  *
- * Super admin is not on offer: an invitation never creates one. Promoting an
- * existing, activated account is a role change on that person's page, so the
- * top rank is only ever handed to someone who has already signed in.
+ * The roles on offer come from the server (`GET /admin/users/grantable`): the
+ * ones the caller dominates, custom roles included, so a role made in the
+ * Roles editor can be given to a new colleague at once. Super admin is never
+ * among them: an invitation never creates one. Promoting an existing,
+ * activated account is a role change on that person's page, so the top rank
+ * is only ever handed to someone who has already signed in.
  */
-export function InviteUserButton() {
+export function InviteUserButton({ roles }: { roles: Role[] }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -116,15 +119,16 @@ export function InviteUserButton() {
       </button>
 
       <Modal open={open} onClose={() => setOpen(false)} title="Invite a colleague" size="md">
-        {open && <InviteForm onClose={() => setOpen(false)} />}
+        {open && <InviteForm roles={roles} onClose={() => setOpen(false)} />}
       </Modal>
     </>
   );
 }
 
-function InviteForm({ onClose }: { onClose: () => void }) {
+function InviteForm({ roles, onClose }: { roles: Role[]; onClose: () => void }) {
   const router = useRouter();
   const [values, setValues] = useState<InviteValues>(empty);
+  const chosen = roles.find((role) => role.key === values.role);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -247,10 +251,10 @@ function InviteForm({ onClose }: { onClose: () => void }) {
         <SelectInput
           label="Role"
           value={values.role}
-          onChange={(event) => set("role", event.target.value as InviteRole)}
+          onChange={(event) => set("role", event.target.value)}
           placeholder="Choose a role"
-          options={STAFF_INVITE_ROLES.map((role) => ({ value: role, label: staffRoleLabels[role] }))}
-          hint={values.role ? staffRoleDescriptions[values.role] : "Decides what they can see and change."}
+          options={roles.map((role) => ({ value: role.key, label: role.name }))}
+          hint={chosen?.description || "Decides what they can see and change."}
           className="sm:col-span-2"
           error={fieldErrors.role || undefined}
         />

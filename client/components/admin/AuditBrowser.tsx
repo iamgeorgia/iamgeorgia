@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, History, Search, UserRound, X } from "lucide-react";
@@ -154,92 +155,97 @@ export function AuditBrowser({
   return (
     <section className="mt-8">
       <div className="rounded-sm border border-line bg-surface p-4 sm:p-5">
-        <div className="relative">
-          <Search
-            size={16}
-            className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Summary text, email address or record ID"
-            aria-label="Search the audit log"
-            className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
-          />
-        </div>
+        <FilterDisclosure
+          count={[entityType !== "all", action !== "all", from !== "", to !== ""].filter(Boolean).length}
+          lead={
+          <div className="relative min-w-[16rem] flex-1">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Summary text, email address or record ID"
+              aria-label="Search the audit log"
+              className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
+            />
+          </div>
+          }
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto]">
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[0.75rem] font-medium tracking-wide text-muted uppercase">Type</span>
+              <select
+                value={entityType}
+                onChange={(event) =>
+                  // A record filter belongs to one type; changing the type drops it.
+                  apply({ entityType: event.target.value, entityId: null })
+                }
+                className={cn(field, "w-full min-w-0")}
+              >
+                <option value="all">All types</option>
+                {AUDIT_ENTITY_TYPES.map((type) => (
+                  <option key={type} value={type}>
+                    {auditEntityLabels[type]}
+                  </option>
+                ))}
+                {entityType !== "all" && !auditEntityLabels[entityType] && (
+                  <option value={entityType}>{auditEntityLabel(entityType)}</option>
+                )}
+              </select>
+            </label>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_auto]">
-          <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[0.75rem] font-medium tracking-wide text-muted uppercase">Type</span>
-            <select
-              value={entityType}
-              onChange={(event) =>
-                // A record filter belongs to one type; changing the type drops it.
-                apply({ entityType: event.target.value, entityId: null })
-              }
-              className={cn(field, "w-full min-w-0")}
-            >
-              <option value="all">All types</option>
-              {AUDIT_ENTITY_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {auditEntityLabels[type]}
-                </option>
-              ))}
-              {entityType !== "all" && !auditEntityLabels[entityType] && (
-                <option value={entityType}>{auditEntityLabel(entityType)}</option>
-              )}
-            </select>
-          </label>
+            <label className="flex min-w-0 flex-col gap-1.5">
+              <span className="text-[0.75rem] font-medium tracking-wide text-muted uppercase">Action</span>
+              <select
+                value={action}
+                onChange={(event) => apply({ action: event.target.value })}
+                className={cn(field, "w-full min-w-0")}
+              >
+                <option value="all">All actions</option>
+                {AUDIT_ACTION_GROUPS.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    {group.actions.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
 
-          <label className="flex min-w-0 flex-col gap-1.5">
-            <span className="text-[0.75rem] font-medium tracking-wide text-muted uppercase">Action</span>
-            <select
-              value={action}
-              onChange={(event) => apply({ action: event.target.value })}
-              className={cn(field, "w-full min-w-0")}
-            >
-              <option value="all">All actions</option>
-              {AUDIT_ACTION_GROUPS.map((group) => (
-                <optgroup key={group.label} label={group.label}>
-                  {group.actions.map(([value, label]) => (
-                    <option key={value} value={value}>
-                      {label}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
-          </label>
-
-          <fieldset className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 xl:col-span-1">
-            <legend className="mb-1.5 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Dates <span className="normal-case tracking-normal">(Tbilisi time)</span>
-            </legend>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="date"
-                value={from}
-                max={to || undefined}
-                onChange={(event) => apply({ from: event.target.value || null })}
-                aria-label="On or after"
-                className={cn(field, "min-w-0 flex-1 sm:flex-none")}
-              />
-              <span aria-hidden className="text-muted">
-                –
-              </span>
-              <input
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={(event) => apply({ to: event.target.value || null })}
-                aria-label="On or before"
-                className={cn(field, "min-w-0 flex-1 sm:flex-none")}
-              />
-            </div>
-          </fieldset>
-        </div>
+            <fieldset className="flex min-w-0 flex-col gap-1.5 sm:col-span-2 xl:col-span-1">
+              <legend className="mb-1.5 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Dates <span className="normal-case tracking-normal">(Tbilisi time)</span>
+              </legend>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  value={from}
+                  max={to || undefined}
+                  onChange={(event) => apply({ from: event.target.value || null })}
+                  aria-label="On or after"
+                  className={cn(field, "min-w-0 flex-1 sm:flex-none")}
+                />
+                <span aria-hidden className="text-muted">
+                  –
+                </span>
+                <input
+                  type="date"
+                  value={to}
+                  min={from || undefined}
+                  onChange={(event) => apply({ to: event.target.value || null })}
+                  aria-label="On or before"
+                  className={cn(field, "min-w-0 flex-1 sm:flex-none")}
+                />
+              </div>
+            </fieldset>
+          </div>
+        </FilterDisclosure>
 
         {(actor || entityId) && (
           <ul className="mt-4 flex flex-wrap gap-2" aria-label="Narrowed to">

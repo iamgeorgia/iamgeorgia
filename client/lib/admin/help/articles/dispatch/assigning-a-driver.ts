@@ -15,7 +15,6 @@ export const article = {
   title: "Assigning or reassigning a driver",
   summary: "The assignment modal step by step: who is offered, what counts as a conflict, when a phone confirmation is safe to tick, and which refusals can and cannot be overridden.",
   category: "dispatch",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["assign", "reassign", "modal", "candidate", "free at this time", "conflict", "blocked", "confirmed by phone", "override", "say-so", "verified", "class", "usual car", "decide later", "offer the job"],
   related: ["dp-dispatch-board", "dp-leg-statuses", "dp-schedule", "dp-who-is-told-what", "fd-fleet-register", "fd-driver-detail", "fd-verification-documents"],
   blocks: [

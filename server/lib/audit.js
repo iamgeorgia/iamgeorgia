@@ -72,5 +72,9 @@ export const AUDIT_ENTITY = {
     paymentRecord: 'PaymentRecord',
     outboxEvent: 'OutboxEvent',
     invoice: 'Invoice',
-    invoicingCustomer: 'InvoicingCustomer'
+    invoicingCustomer: 'InvoicingCustomer',
+    customer: 'Customer',
+    bookingDeadline: 'BookingDeadline',
+    reminderPolicy: 'ReminderPolicy',
+    mailProvider: 'MailProviderCredential'
 };

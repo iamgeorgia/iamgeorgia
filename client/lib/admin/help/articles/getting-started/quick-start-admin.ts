@@ -10,7 +10,6 @@ export const article = {
   title: "Quick start for administrators",
   summary: "The eight things to learn first, in the order the panel requires them — from a destination to a published hotel, a working transfer network and an answered queue.",
   category: "getting-started",
-  roles: ["ADMIN"],
   keywords: ["quick start", "first day", "onboarding", "checklist", "tutorial", "begin", "new admin"],
   related: ["gs-what-is-the-panel", "rf-common-tasks-admin", "rf-dangerous-actions"],
   blocks: [

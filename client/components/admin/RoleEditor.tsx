@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
 import { CapabilityChecklist, capabilitiesForSide } from "./CapabilityChecklist";
+import { RolePreview } from "./RolePreview";
 import { FormError, SubmitButton, TextArea, TextInput } from "./FormControls";
 import { Badge } from "@/components/ui/Badge";
 import { describeRbacError } from "@/lib/admin/rbacErrors";
@@ -131,6 +132,10 @@ export function RoleEditor({ role, catalogue }: { role: Role; catalogue: Capabil
             />
           )}
         </AdminPanel>
+
+        {/* What an account with this role sees, from the ticks as they stand —
+            the super admin sees everything, so the preview is for the rest. */}
+        {role.side === "PLATFORM" && !everything && <RolePreview capabilities={capabilities} />}
 
         <FormError message={error} />
 

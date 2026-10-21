@@ -96,7 +96,8 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         assert.deepEqual(unread.body.data.map((row) => row.id), [mine.id]);
 
         const count = await request(app).get('/api/admin/notifications/unread-count').set('Cookie', cookies.ACCOUNTANT);
-        assert.deepEqual(count.body, { unreadCount: 1 });
+        assert.equal(count.body.unreadCount, 1);
+        assert.equal(count.body.byCategory.DEADLINE + count.body.byCategory.FINANCE + count.body.byCategory.BOOKING + count.body.byCategory.SYSTEM + count.body.byCategory.APPROVAL + count.body.byCategory.DISPATCH, 1);
     });
 
     it('marks one, then all, as read — and cannot touch another person’s', async () => {
@@ -118,7 +119,7 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         assert.ok((await prisma.notification.findUnique({ where: { id: other.id } })).readAt);
 
         const count = await request(app).get('/api/admin/notifications/unread-count').set('Cookie', cookies.ACCOUNTANT);
-        assert.deepEqual(count.body, { unreadCount: 0 });
+        assert.equal(count.body.unreadCount, 0);
     });
 
     it('keeps the admin bell for staff and the portal bell for partners', async () => {
@@ -133,7 +134,8 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         assert.deepEqual(portal.body.data.map((row) => row.id), [theirs.id]);
 
         const count = await request(app).get('/api/partner/notifications/unread-count').set('Cookie', cookies.OWNER);
-        assert.deepEqual(count.body, { unreadCount: 1 });
+        assert.equal(count.body.unreadCount, 1);
+        assert.equal(count.body.byCategory.DEADLINE + count.body.byCategory.FINANCE + count.body.byCategory.BOOKING + count.body.byCategory.SYSTEM + count.body.byCategory.APPROVAL + count.body.byCategory.DISPATCH, 1);
 
         const read = await request(app).post(`/api/partner/notifications/${theirs.id}/read`).set('Cookie', cookies.OWNER);
         assert.equal(read.status, 200);

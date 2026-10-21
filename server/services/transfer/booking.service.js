@@ -12,6 +12,15 @@ import { dateOnlyToUtc } from '../../lib/time.js';
 import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { buildCancellationSchedule, calculateRefund, freeCancellationUntil } from '../hotel/policy.service.js';
 import { revalidateQuote } from './quote.service.js';
+import { sourceFor } from '../../lib/booking/source.js';
+import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
+import { CANCELLABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
+import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { syncBookingIndexInTx } from '../booking/index.service.js';
+import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
+import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
+import { logger } from '../../lib/logger.js';
 import { ACTIVE_ASSIGNMENT_STATUSES } from '../../lib/transfer/machines.js';
 import { assignDriverInTx, cascadeBookingCancellation } from './dispatch.service.js';
 
@@ -58,7 +67,11 @@ const bookingInclude = {
     extras: true,
     vehicle: { select: { id: true, slug: true, name: true, partnerId: true } },
     route: { select: { id: true, slug: true } },
-    partner: { select: { id: true, reference: true, name: true } }
+    partner: { select: { id: true, reference: true, name: true } },
+    // Where the money stands: this booking's receivable, or its order's.
+    receivable: RECEIVABLE_SUMMARY_SELECT,
+    orderItem: ORDER_LINK_SELECT,
+    ...DESK_INCLUDE
 };
 
 /**
@@ -234,13 +247,16 @@ export const prepareTransferBooking = async (input, actor, { strict = true } = {
         decoded,
         schedule,
         leadPassenger: input.leadPassenger,
-        flightNumber: input.flightNumber ?? null,
+        flightNumber: input.flights?.outbound ?? input.flightNumber ?? null,
+        flights: input.flights ?? null,
         pickupAddress: input.pickupAddress ?? null,
         dropoffAddress: input.dropoffAddress ?? null,
         pickupPlace: input.pickupPlace ?? null,
         dropoffPlace: input.dropoffPlace ?? null,
         specialRequests: input.specialRequests ?? null,
-        source: input.source ?? 'web',
+        source: sourceFor(actor, input.channel ?? null),
+        approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
+        desk: deskFrom(input),
         preferredDriverId: input.preferredDriverId ?? null,
         preferredFleetVehicleId: input.preferredFleetVehicleId ?? null,
         priceChanged: quote.totals.sellCents !== decoded.quotedSellCents,
@@ -263,10 +279,16 @@ export const confirmTransferBookingInTx = async (tx, prepared, { idempotencyKey 
 
     const reference = await nextTransferBookingReference(tx);
 
+    // CONFIRMED, or PENDING_APPROVAL with the request stamped (OD1). A
+    // transfer claims no inventory, so waiting costs the fleet nothing; the
+    // partner's choice of driver is kept on the row and offered at approval.
+    const stamps = approvalStampsFor(prepared.approval ?? 'AUTO');
+    const awaitingApproval = stamps.status === 'PENDING_APPROVAL';
+
     const created = await tx.transferBooking.create({
         data: {
             reference,
-            status: 'CONFIRMED',
+            ...stamps,
             idempotencyKey: idempotencyKey ?? null,
             partnerId: actor?.partnerId ?? null,
             bookedByUserId: actor?.id ?? null,
@@ -297,8 +319,10 @@ export const confirmTransferBookingInTx = async (tx, prepared, { idempotencyKey 
             routeSnapshot: snapshotRoute(from, to, route, quote.legs),
             vehicleSnapshot: snapshotVehicle(vehicle),
             cancellationSchedule: schedule,
-            confirmedAt: new Date(),
             source: prepared.source,
+            ...deskColumns(prepared),
+            preferredDriverId: awaitingApproval ? prepared.preferredDriverId : null,
+            preferredFleetVehicleId: awaitingApproval ? prepared.preferredFleetVehicleId : null,
             legs: {
                 create: quote.legs.map((leg, index) => ({
                     legIndex: index,
@@ -308,6 +332,8 @@ export const confirmTransferBookingInTx = async (tx, prepared, { idempotencyKey 
                     fromPointName: leg.fromPointName,
                     toPointName: leg.toPointName,
                     pickupAt: leg.pickupAt,
+                    // The flight each leg meets or catches; the booking's own is the outbound's.
+                    flightNumber: index === 0 ? (prepared.flights?.outbound ?? prepared.flightNumber ?? null) : (prepared.flights?.return ?? null),
                     distanceKm: leg.distanceKm,
                     durationMinutes: leg.durationMinutes,
                     netCents: leg.netCents,
@@ -329,15 +355,20 @@ export const confirmTransferBookingInTx = async (tx, prepared, { idempotencyKey 
         actor,
         entityType: AUDIT_ENTITY.transferBooking,
         entityId: created.id,
-        summary: `Transfer ${created.reference} confirmed: ${from.name} to ${to.name}`,
-        metadata: { reference: created.reference, vehicle: vehicle.slug, totalCents: created.sellTotalCents },
+        summary: `Transfer ${created.reference} ${awaitingApproval ? 'requested' : 'confirmed'}: ${from.name} to ${to.name}`,
+        metadata: { reference: created.reference, vehicle: vehicle.slug, totalCents: created.sellTotalCents, status: created.status },
         req
     });
 
-    // What we now owe the transfer company, on its terms.
+    await auditPriceAdjustment(tx, { entityType: AUDIT_ENTITY.transferBooking, booking: created, prepared, catalogueCents: created.sellTotalCents }, actor, req);
+
+    // What we now owe the transfer company, on its terms (nothing yet while
+    // the booking waits for approval; the ledger reads the status).
     await syncPayableInTx(tx, 'TRANSFER', created.id, actor, req);
 
-    if (!prepared.preferredDriverId) {
+    // A driver is offered the job only once the booking stands: while it
+    // waits for approval the choice is kept on the row.
+    if (!prepared.preferredDriverId || awaitingApproval) {
         return created;
     }
 
@@ -412,14 +443,27 @@ export const confirmTransferBooking = async (input, actor, req) => {
 
     try {
         const booking = await prisma.$transaction(async (tx) => {
-            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.quote.totals.sellCents, currency: prepared.quote.currency }, actor, req);
+            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.quote.totals.sellCents + prepared.desk.priceAdjustmentCents, currency: prepared.quote.currency }, actor, req);
 
             const created = await confirmTransferBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
             // What the buyer owes; an order's transfer is owed through the order.
             await syncBookingReceivableInTx(tx, 'TRANSFER', created.id, actor, req);
 
-            return created;
+            // The voucher is the route's business once the row stands; a
+            // booking that waits for approval is told so from here instead.
+            if (created.status === 'PENDING_APPROVAL') {
+                await enqueueEvent(tx, {
+                    topic: TOPICS.BOOKING_AWAITING_APPROVAL,
+                    payload: { product: 'TRANSFER', bookingId: created.id },
+                    entityType: AUDIT_ENTITY.transferBooking,
+                    entityId: created.id
+                });
+            }
+
+            await enqueueEvent(tx, { topic: TOPICS.BOOKING_CREATED, payload: { product: 'TRANSFER', bookingId: created.id }, entityType: AUDIT_ENTITY.transferBooking, entityId: created.id });
+
+            return tx.transferBooking.findUnique({ where: { id: created.id }, include: bookingInclude });
         });
 
         return { booking, replayed: false };
@@ -546,7 +590,8 @@ export const listTransferBookings = async (query, viewer) => {
     const where = {
         // Scoped in the query rather than filtered after, so there is no path
         // by which one partner reads another's.
-        ...(readsAllTransfers(viewer) ? {} : { partnerId: viewer?.partnerId ?? '__none__' }),
+        ...(readsAllTransfers(viewer) ? { ...(query.partnerId ? { partnerId: query.partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
+        ...bookingWhere(query, { destination: (id) => ({ legs: { some: { fromPoint: { is: { destinationId: id } } } } }) }),
         ...(status ? { status: Array.isArray(status) ? { in: status } : status } : {}),
         ...(from || to
             ? {
@@ -572,7 +617,7 @@ export const listTransferBookings = async (query, viewer) => {
         prisma.transferBooking.findMany({
             where,
             include: bookingInclude,
-            orderBy: { pickupAt: 'desc' },
+            orderBy: bookingOrderBy(query.sort, { dateField: 'pickupAt', fallback: { pickupAt: 'desc' } }),
             skip: (page - 1) * pageSize,
             take: pageSize
         })
@@ -589,18 +634,184 @@ export const listTransferBookings = async (query, viewer) => {
  * change what a January traveller is owed.
  */
 export const quoteTransferCancellation = (booking, at = new Date()) => {
+    // A booking the platform has not yet said yes to costs nothing to withdraw.
+    if (booking.status === 'PENDING_APPROVAL') {
+        return {
+            chargeCents: 0,
+            refundCents: booking.sellTotalCents,
+            currency: booking.currency,
+            freeUntil: null,
+            asAt: (at instanceof Date ? at : new Date(at)).toISOString()
+        };
+    }
+
     const refund = calculateRefund(booking.cancellationSchedule, at);
 
-    return {
-        chargeCents: refund.chargeCents,
-        refundCents: refund.refundCents,
-        currency: refund.currency,
-        freeUntil: freeCancellationUntil(booking.cancellationSchedule),
-        asAt: (at instanceof Date ? at : new Date(at)).toISOString()
-    };
+    return applyAdjustmentToQuote(
+        {
+            chargeCents: refund.chargeCents,
+            refundCents: refund.refundCents,
+            currency: refund.currency,
+            freeUntil: freeCancellationUntil(booking.cancellationSchedule),
+            asAt: (at instanceof Date ? at : new Date(at)).toISOString()
+        },
+        booking
+    );
 };
 
-const CANCELLABLE_STATUSES = ['PENDING', 'CONFIRMED'];
+const CANCELLABLE_STATUSES = CANCELLABLE_BOOKING_STATUSES;
+
+const assertAwaitingApproval = (booking) => {
+    if (booking.status !== 'PENDING_APPROVAL') {
+        throw new ConflictError('That booking is not waiting for approval', { reason: 'NOT_PENDING_APPROVAL', status: booking.status });
+    }
+};
+
+const statusChanged = (err) => {
+    if (err?.code === 'P2025') {
+        throw new ConflictError('That booking has moved on since it was read', { reason: 'STATUS_CHANGED' });
+    }
+
+    throw err;
+};
+
+/**
+ * The platform says yes (OD1). The fare was frozen when the booking was
+ * written; this makes it owed and tells the traveller. The partner's chosen
+ * driver, if any, is offered afterwards by `offerPreferredDriver` — in its
+ * own transaction, so a driver taken meanwhile cannot undo the approval.
+ */
+export const approvePendingTransferBookingInTx = async (tx, booking, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+
+    const approved = await tx.transferBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: { status: 'CONFIRMED', confirmedAt: now, approvedAt: now, approvedByUserId: by.userId, approvedByName: by.name },
+            include: bookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: 'BOOKING_APPROVED',
+        actor,
+        entityType: AUDIT_ENTITY.transferBooking,
+        entityId: booking.id,
+        summary: `Approved ${booking.reference}`,
+        metadata: { reference: booking.reference, totalCents: booking.sellTotalCents, currency: booking.currency },
+        req
+    });
+
+    await syncBookingInTx(tx, 'TRANSFER', booking.id, actor, req);
+
+    // Re-read: the ledger has just written what the serializer shows as payment.
+    return tx.transferBooking.findUnique({ where: { id: booking.id }, include: bookingInclude });
+};
+
+/**
+ * Offers the job to the driver the partner chose at booking, once the
+ * booking is approved. Best effort: a driver no longer free leaves the legs
+ * for dispatch to assign, with an audit note, rather than failing the
+ * approval that has already been written.
+ */
+export const offerPreferredDriver = async (bookingId, actor, req) => {
+    const booking = await prisma.transferBooking.findUnique({
+        where: { id: bookingId },
+        include: { ...bookingInclude, vehicle: true }
+    });
+
+    if (!booking?.preferredDriverId || booking.status !== 'CONFIRMED') {
+        return { offered: false };
+    }
+
+    const input = { preferredDriverId: booking.preferredDriverId, preferredFleetVehicleId: booking.preferredFleetVehicleId };
+
+    try {
+        await prisma.$transaction(async (tx) => {
+            const chosen = await resolvePreferredDriver(tx, input, { vehicle: booking.vehicle, booking });
+
+            for (const leg of booking.legs) {
+                await assignDriverInTx(
+                    tx,
+                    leg.id,
+                    { ...chosen, acceptOnBehalf: false, requestedByPartner: true, note: 'Requested by the partner at booking' },
+                    actor,
+                    req
+                );
+            }
+        });
+
+        return { offered: true };
+    } catch (err) {
+        const conflict = driverConflictFor(err, input) ?? (err instanceof UnprocessableEntityError ? err : null);
+
+        if (!conflict) {
+            throw err;
+        }
+
+        logger.warn({ err: conflict, bookingId }, 'Preferred driver could not be offered after approval');
+
+        await recordAudit(prisma, {
+            action: 'TRANSFER_BOOKING_AMENDED',
+            actor,
+            entityType: AUDIT_ENTITY.transferBooking,
+            entityId: bookingId,
+            summary: `The driver requested at booking could not be offered ${booking.reference}`,
+            metadata: { reference: booking.reference, preferredDriverId: booking.preferredDriverId, reason: conflict.details?.reason ?? 'UNAVAILABLE' },
+            req
+        });
+
+        return { offered: false, reason: conflict.details?.reason ?? 'UNAVAILABLE' };
+    }
+};
+
+/**
+ * The platform says no, or the sweeper gives up on a booking whose pick-up
+ * has passed unanswered. Nothing is charged and nothing is owed; the legs
+ * are cancelled with the booking so dispatch never sees them.
+ */
+export const rejectPendingTransferBookingInTx = async (tx, booking, { reason, expired = false } = {}, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    await cascadeBookingCancellation(tx, booking.id, actor, req);
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+
+    const rejected = await tx.transferBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: {
+                status: 'CANCELLED',
+                cancelledAt: now,
+                cancellationChargeCents: 0,
+                cancellationReason: reason,
+                rejectedAt: now,
+                rejectedByUserId: by.userId,
+                rejectedByName: by.name,
+                rejectionReason: reason
+            },
+            include: bookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: expired ? 'BOOKING_APPROVAL_EXPIRED' : 'BOOKING_REJECTED',
+        actor,
+        entityType: AUDIT_ENTITY.transferBooking,
+        entityId: booking.id,
+        summary: `${expired ? 'Expired' : 'Rejected'} ${booking.reference}`,
+        metadata: { reference: booking.reference, reason },
+        req
+    });
+
+    await syncBookingInTx(tx, 'TRANSFER', booking.id, actor, req);
+
+    return rejected;
+};
 
 /**
  * Cancels an already-loaded booking inside the caller's transaction.
@@ -722,7 +933,7 @@ const AMENDABLE_STATUSES = ['PENDING', 'CONFIRMED'];
  * the driver re-rostered.
  */
 export const amendTransferBooking = async (reference, input, actor, req) => {
-    const { email, leadPassenger, ...rest } = input;
+    const { email, leadPassenger, flights, ...rest } = input;
     const booking = await findTransferBookingOr404(reference, actor, { email });
 
     assertMayMutate(booking, actor, { email, capability: CAPABILITIES.BOOKINGS_WRITE });
@@ -736,6 +947,9 @@ export const amendTransferBooking = async (reference, input, actor, req) => {
 
     const data = { ...rest };
 
+    // The flight per leg; the booking's own column stays the outbound's.
+    if (flights?.outbound !== undefined) data.flightNumber = flights.outbound;
+
     if (leadPassenger) {
         const firstName = leadPassenger.firstName ?? booking.leadPassengerName.split(' ')[0];
         const lastName =
@@ -748,6 +962,16 @@ export const amendTransferBooking = async (reference, input, actor, req) => {
     }
 
     return prisma.$transaction(async (tx) => {
+        if (flights?.outbound !== undefined) {
+            await tx.transferBookingLeg.updateMany({ where: { bookingId: booking.id, direction: 'OUTBOUND' }, data: { flightNumber: flights.outbound } });
+        }
+        if (flights?.return !== undefined) {
+            await tx.transferBookingLeg.updateMany({ where: { bookingId: booking.id, direction: 'RETURN' }, data: { flightNumber: flights.return } });
+        }
+        if (data.flightNumber !== undefined && flights?.outbound === undefined) {
+            await tx.transferBookingLeg.updateMany({ where: { bookingId: booking.id, direction: 'OUTBOUND' }, data: { flightNumber: data.flightNumber } });
+        }
+
         const updated = await tx.transferBooking.update({
             where: { id: booking.id },
             data,
@@ -763,6 +987,15 @@ export const amendTransferBooking = async (reference, input, actor, req) => {
             metadata: { fields: Object.keys(data) },
             req
         });
+
+        await enqueueEvent(tx, {
+            topic: TOPICS.BOOKING_MODIFIED,
+            payload: { product: 'TRANSFER', bookingId: booking.id, fields: Object.keys(data), byUserId: actor?.id ?? null },
+            entityType: AUDIT_ENTITY.transferBooking,
+            entityId: booking.id
+        });
+
+        await syncBookingIndexInTx(tx, 'TRANSFER', booking.id);
 
         return updated;
     });

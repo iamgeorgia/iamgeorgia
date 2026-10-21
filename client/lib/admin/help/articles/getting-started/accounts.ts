@@ -15,7 +15,6 @@ export const article = {
   summary:
     "Staff are invited from the Staff screen by a super admin; drivers get a login from their page; a partner's first user is invited here, the rest of its team by the partner itself.",
   category: "getting-started",
-  roles: ["ADMIN"],
   keywords: ["user", "users", "create account", "new admin", "invite", "activation link", "expired link", "resend", "deactivate", "team"],
   related: ["pp-staff", "gs-signing-in", "gs-roles", "fd-driver-detail", "pt-registering"],
   blocks: [

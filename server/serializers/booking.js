@@ -2,6 +2,16 @@ import { toDateOnly } from '../lib/time.js';
 import { canViewBuyer, canViewMargin, canViewNetRates } from '../middleware/auth.js';
 import { toBookingRequest } from './kosher.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
+import { approvalOf } from '../lib/booking/approval.js';
+import { receivableFor, toPaymentSummary } from '../lib/finance/paymentStatus.js';
+import { toDesk } from '../lib/booking/desk.js';
+
+/** Where the money stands, for whoever may read the booking: it is their own bill. */
+export const paymentBlock = (booking) => {
+    const { receivable, via } = receivableFor(booking);
+
+    return toPaymentSummary(receivable, { via });
+};
 
 /**
  * Booking responses.
@@ -22,6 +32,7 @@ const toNight = (night, viewer, hotel) => ({
 
 const toGuest = (guest) => ({
     type: guest.type,
+    title: guest.title ?? null,
     firstName: guest.firstName,
     lastName: guest.lastName,
     age: guest.age ?? null,
@@ -76,12 +87,15 @@ export const toBookingSummary = (booking, viewer) => {
         // rate — the figure checkout quoted, the hold froze and the voucher
         // prints. `sellTotalCents` alone is the room price before that tax,
         // and a booking page showing it read short of what was charged.
-        totalCents: booking.sellTotalCents + (booking.taxTotalCents ?? 0),
+        totalCents: booking.sellTotalCents + (booking.taxTotalCents ?? 0) + (booking.priceAdjustmentCents ?? 0),
         payableAtPropertyCents: booking.payableAtPropertyCents,
         createdAt: booking.createdAt,
         confirmedAt: booking.confirmedAt ?? null,
         cancelledAt: booking.cancelledAt ?? null,
         completedAt: booking.completedAt ?? null,
+        // The platform's yes (OD1), or null for a booking that never waited for one.
+        approval: approvalOf(booking),
+        payment: paymentBlock(booking),
         // A count, not the rows: a register needs to show which reservations
         // are still waiting on the property without a detail page's worth of
         // data per line. Zero when the booking carries no requirements at all,
@@ -105,6 +119,7 @@ export const toBookingSummary = (booking, viewer) => {
 
     if (canViewBuyer(viewer)) {
         summary.partner = booking.partner ?? null;
+        summary.desk = toDesk(booking);
     } else if (canViewNetRates(viewer, booking.hotel)) {
         summary.bookedVia = booking.partnerId ? 'AGENCY' : 'DIRECT';
     }

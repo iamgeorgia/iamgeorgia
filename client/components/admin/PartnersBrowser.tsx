@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Search, X } from "lucide-react";
@@ -110,61 +111,66 @@ export function PartnersBrowser({
   return (
     <section className="mt-8">
       <div className="rounded-sm border border-line bg-surface p-4 sm:p-5">
-        <div className="relative">
-          <Search
-            size={16}
-            className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Company name, Partner ID, registration number or email"
-            aria-label="Search partners"
-            className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
-          />
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
-          <fieldset>
-            <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Status
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              {(["all", ...statusOptions] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => apply({ status: value })}
-                  aria-pressed={status === value}
-                  className={chip(status === value)}
-                >
-                  {value === "all" ? "All" : partnerStatusLabels[value as PartnerStatus]}
-                </button>
-              ))}
+        <FilterDisclosure
+          count={(status !== "all" ? 1 : 0) + (kind !== "all" ? 1 : 0)}
+          lead={
+            <div className="relative min-w-[16rem] flex-1">
+              <Search
+                size={16}
+                className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Company name, Partner ID, registration number or email"
+                aria-label="Search partners"
+                className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
+              />
             </div>
-          </fieldset>
+          }
+        >
+          <div className="flex flex-wrap gap-x-8 gap-y-4">
+            <fieldset>
+              <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Status
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {(["all", ...statusOptions] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => apply({ status: value })}
+                    aria-pressed={status === value}
+                    className={chip(status === value)}
+                  >
+                    {value === "all" ? "All" : partnerStatusLabels[value as PartnerStatus]}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
 
-          <fieldset>
-            <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Type
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              {(["all", ...PARTNER_KINDS] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => apply({ kind: value })}
-                  aria-pressed={kind === value}
-                  className={chip(kind === value)}
-                >
-                  {value === "all" ? "All" : partnerKindLabels[value as PartnerKind]}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-        </div>
+            <fieldset>
+              <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Type
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {(["all", ...PARTNER_KINDS] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => apply({ kind: value })}
+                    aria-pressed={kind === value}
+                    className={chip(kind === value)}
+                  >
+                    {value === "all" ? "All" : partnerKindLabels[value as PartnerKind]}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+          </div>
+        </FilterDisclosure>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
           <p aria-live="polite" className={cn("text-[0.8125rem] text-muted", pending && "opacity-50")}>

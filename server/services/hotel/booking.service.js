@@ -18,6 +18,13 @@ import { addDays, dateOnlyToUtc, nightsBetween, toDateOnly } from '../../lib/tim
 import { readsAllBookings } from '../../middleware/auth.js';
 import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { readOfferToken } from '../../lib/hotel/offerToken.js';
+import { sourceFor } from '../../lib/booking/source.js';
+import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
+import { AMENDABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
+import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { syncBookingIndexInTx } from '../booking/index.service.js';
+import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { revalidateOffer } from './search.service.js';
 import { buildCancellationSchedule, calculateRefund } from './policy.service.js';
 import { categorise, DEFAULT_CHILD_POLICY } from './occupancy.service.js';
@@ -56,7 +63,11 @@ export const bookingInclude = {
             guests: true
         }
     },
-    requests: { orderBy: { createdAt: 'asc' } }
+    requests: { orderBy: { createdAt: 'asc' } },
+    // Where the money stands: this booking's receivable, or its order's.
+    receivable: RECEIVABLE_SUMMARY_SELECT,
+    orderItem: ORDER_LINK_SELECT,
+    ...DESK_INCLUDE
 };
 
 /**
@@ -131,6 +142,10 @@ const snapshotHotel = (hotel) => ({
     address: hotel.address ?? null,
     postalCode: hotel.postalCode ?? null,
     countryCode: hotel.countryCode,
+    // The city and country as they read on a document; the destination join
+    // is the fallback for rows snapshotted before these existed.
+    city: hotel.destination?.name ?? null,
+    country: hotel.destination?.countryCode ?? hotel.countryCode ?? null,
     phone: hotel.phone ?? null,
     email: hotel.email ?? null,
     timezone: hotel.timezone,
@@ -276,7 +291,11 @@ export const prepareHotelBooking = async (input, actor, { strict = true } = {}) 
         guests: input.guests ?? [],
         requests: input.requests ?? [],
         specialRequests: input.specialRequests ?? null,
-        source: input.source ?? 'web',
+        source: sourceFor(actor, input.channel ?? null),
+        // Whether this booking waits for the platform's yes (OD1), decided
+        // once here so the write below and the facade's email agree.
+        approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
+        desk: deskFrom(input),
         priceChanged,
         quotedCents,
         currentCents,
@@ -337,10 +356,17 @@ export const confirmHotelBookingInTx = async (
 
     const reference = await nextHotelBookingReference(tx);
 
+    // CONFIRMED with `confirmedAt`, or PENDING_APPROVAL with the request
+    // stamped (OD1). The rooms are claimed either way: a booking waiting for
+    // the platform's answer holds its inventory exactly as an on-request tour
+    // holds its seats, so that a yes never finds the room gone.
+    const stamps = approvalStampsFor(prepared.approval ?? 'AUTO');
+    const awaitingApproval = stamps.status === 'PENDING_APPROVAL';
+
     const created = await tx.hotelBooking.create({
         data: {
             reference,
-            status: 'CONFIRMED',
+            ...stamps,
             idempotencyKey: idempotencyKey ?? null,
             partnerId: actor?.partnerId ?? null,
             bookedByUserId: actor?.id ?? null,
@@ -374,8 +400,8 @@ export const confirmHotelBookingInTx = async (
                 }))
             },
             hotelSnapshot: snapshotHotel(hotel),
-            confirmedAt: new Date(),
             source: prepared.source,
+            ...deskColumns(prepared),
             rooms: {
                 // One row per room: two rooms on one booking are two
                 // rows, which is what makes cancelling one of them
@@ -405,12 +431,14 @@ export const confirmHotelBookingInTx = async (
                         create: [
                             {
                                 type: 'ADULT',
+                                title: prepared.leadGuest.title ?? null,
                                 firstName: prepared.leadGuest.firstName,
                                 lastName: prepared.leadGuest.lastName,
                                 isLead: true
                             },
                             ...prepared.guests.map((guest) => ({
                                 type: guest.type ?? 'ADULT',
+                                title: guest.title ?? null,
                                 firstName: guest.firstName,
                                 lastName: guest.lastName,
                                 age: guest.age ?? null
@@ -429,7 +457,7 @@ export const confirmHotelBookingInTx = async (
         actor,
         entityType: AUDIT_ENTITY.booking,
         entityId: created.id,
-        summary: `Booked ${hotel.name} for ${checkIn} to ${checkOut}`,
+        summary: `${awaitingApproval ? 'Requested' : 'Booked'} ${hotel.name} for ${checkIn} to ${checkOut}`,
         metadata: {
             reference,
             hotelId: hotel.id,
@@ -437,20 +465,21 @@ export const confirmHotelBookingInTx = async (
             rooms,
             nights: created.nights,
             totalCents: created.sellTotalCents,
-            currency: created.currency
+            currency: created.currency,
+            status: created.status
         },
         req
     });
 
+    await auditPriceAdjustment(tx, { entityType: AUDIT_ENTITY.booking, booking: created, prepared, catalogueCents: created.sellTotalCents + created.taxTotalCents }, actor, req);
+
     // The property hears about every reservation of its rooms, however it
-    // was sold. The guest's own email is the facade's business: a booking
-    // inside an order is described by the order's confirmation instead.
-    await enqueueEvent(tx, {
-        topic: TOPICS.SUPPLIER_BOOKING_RECEIVED,
-        payload: { product: 'hotel', bookingId: created.id, requested: false },
-        entityType: AUDIT_ENTITY.booking,
-        entityId: created.id
-    });
+    // was sold — once the platform has said yes. The guest's own email is
+    // the facade's business: a booking inside an order is described by the
+    // order's confirmation instead.
+    if (!awaitingApproval) {
+        await enqueueSupplierReceived(tx, created.id);
+    }
 
     // What we now owe the property, on its terms. In this transaction, so a
     // booking never exists without its payable.
@@ -494,7 +523,7 @@ export const confirmBooking = async (input, actor, req) => {
             await assertCreditInTx(
                 tx,
                 actor?.partnerId,
-                { addCents: prepared.priced.quote.totals.sellCents + prepared.priced.quote.totals.taxIncludedCents, currency: prepared.priced.quote.currency },
+                { addCents: prepared.priced.quote.totals.sellCents + prepared.priced.quote.totals.taxIncludedCents + prepared.desk.priceAdjustmentCents, currency: prepared.priced.quote.currency },
                 actor,
                 req
             );
@@ -507,15 +536,30 @@ export const confirmBooking = async (input, actor, req) => {
 
             // Written with the booking, sent after it: the voucher and the
             // row commit together, and a mail server having a bad afternoon
-            // cannot turn a confirmed room into a 500.
-            await enqueueEvent(tx, {
-                topic: TOPICS.HOTEL_BOOKING_CONFIRMED,
-                payload: { bookingId: created.id },
-                entityType: AUDIT_ENTITY.booking,
-                entityId: created.id
-            });
+            // cannot turn a confirmed room into a 500. A booking that waits
+            // for approval gets the "we have your request" note instead, and
+            // the voucher follows the yes.
+            await enqueueEvent(
+                tx,
+                created.status === 'PENDING_APPROVAL'
+                    ? {
+                          topic: TOPICS.BOOKING_AWAITING_APPROVAL,
+                          payload: { product: 'HOTEL', bookingId: created.id },
+                          entityType: AUDIT_ENTITY.booking,
+                          entityId: created.id
+                      }
+                    : {
+                          topic: TOPICS.HOTEL_BOOKING_CONFIRMED,
+                          payload: { bookingId: created.id },
+                          entityType: AUDIT_ENTITY.booking,
+                          entityId: created.id
+                      }
+            );
 
-            return created;
+            await enqueueEvent(tx, { topic: TOPICS.BOOKING_CREATED, payload: { product: 'HOTEL', bookingId: created.id }, entityType: AUDIT_ENTITY.booking, entityId: created.id });
+
+            // Re-read: the receivable the ledger just opened is part of the answer.
+            return tx.hotelBooking.findUnique({ where: { id: created.id }, include: bookingInclude });
         }, { timeout: config.order.txTimeoutMs });
 
         return { booking, replayed: false, party: prepared.party };
@@ -630,6 +674,8 @@ export const listBookings = async (query, viewer, { propertyScope = null } = {})
     const where = {
         // A partner's list is scoped in the query, not filtered afterwards.
         ...(readsAllBookings(viewer) || propertyScope ? {} : { partnerId: viewer?.partnerId ?? '__none__' }),
+        // The filters every register shares: payment, invoice, manager, customer, created, source, destination.
+        ...bookingWhere(query, { destination: (id) => ({ hotel: { destinationId: id } }) }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(propertyScope ? { hotelId: propertyScope } : hotelId ? { hotelId } : {}),
         ...(readsAllBookings(viewer) && partnerId ? { partnerId } : {}),
@@ -657,7 +703,7 @@ export const listBookings = async (query, viewer, { propertyScope = null } = {})
         prisma.hotelBooking.findMany({
             where,
             include: bookingInclude,
-            orderBy: { createdAt: 'desc' },
+            orderBy: bookingOrderBy(query.sort, { dateField: 'checkIn', fallback: { createdAt: 'desc' } }),
             skip: (page - 1) * pageSize,
             take: pageSize
         })
@@ -673,6 +719,11 @@ export const listBookings = async (query, viewer, { propertyScope = null } = {})
  * consulted and must not be: what the guest is owed was settled at booking.
  */
 export const quoteCancellation = (booking, at = new Date()) => {
+    // A booking the platform has not yet said yes to costs nothing to withdraw.
+    if (booking.status === 'PENDING_APPROVAL') {
+        return { chargeCents: 0, refundCents: booking.sellTotalCents + (booking.taxTotalCents ?? 0), currency: booking.currency, rooms: [] };
+    }
+
     const active = booking.rooms.filter((room) => room.status === 'CONFIRMED');
 
     const perRoom = active.map((room) => ({
@@ -680,12 +731,16 @@ export const quoteCancellation = (booking, at = new Date()) => {
         ...calculateRefund(room.cancellationSchedule, at)
     }));
 
-    return {
-        chargeCents: perRoom.reduce((sum, room) => sum + room.chargeCents, 0),
-        refundCents: perRoom.reduce((sum, room) => sum + room.refundCents, 0),
-        currency: booking.currency,
-        rooms: perRoom
-    };
+    return applyAdjustmentToQuote(
+        {
+            chargeCents: perRoom.reduce((sum, room) => sum + room.chargeCents, 0),
+            refundCents: perRoom.reduce((sum, room) => sum + room.refundCents, 0),
+            currency: booking.currency,
+            rooms: perRoom
+        },
+        booking,
+        { tax: true }
+    );
 };
 
 /**
@@ -795,6 +850,121 @@ export const cancelHotelBookingInTx = async (tx, booking, { reason, waiveCharges
     return { booking: cancelled, quote };
 };
 
+/** The property's "a reservation arrived" note, written once the booking stands. */
+const enqueueSupplierReceived = (tx, bookingId) =>
+    enqueueEvent(tx, {
+        topic: TOPICS.SUPPLIER_BOOKING_RECEIVED,
+        payload: { product: 'hotel', bookingId, requested: false },
+        entityType: AUDIT_ENTITY.booking,
+        entityId: bookingId
+    });
+
+const assertAwaitingApproval = (booking) => {
+    if (booking.status !== 'PENDING_APPROVAL') {
+        throw new ConflictError('That booking is not waiting for approval', { reason: 'NOT_PENDING_APPROVAL', status: booking.status });
+    }
+};
+
+const statusChanged = (err) => {
+    if (err?.code === 'P2025') {
+        throw new ConflictError('That booking has moved on since it was read', { reason: 'STATUS_CHANGED' });
+    }
+
+    throw err;
+};
+
+/**
+ * The platform says yes (OD1). The rooms were claimed and priced when the
+ * booking was written; this makes it owed — the property is told, the
+ * ledger opens the payable and (for a standalone booking) the receivable,
+ * which is what issues the proforma. The status is part of the WHERE, so
+ * two approvals racing past the check cannot both write.
+ */
+export const approvePendingHotelBookingInTx = async (tx, booking, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+
+    const approved = await tx.hotelBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: { status: 'CONFIRMED', confirmedAt: now, approvedAt: now, approvedByUserId: by.userId, approvedByName: by.name },
+            include: bookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: 'BOOKING_APPROVED',
+        actor,
+        entityType: AUDIT_ENTITY.booking,
+        entityId: booking.id,
+        summary: `Approved ${booking.reference}`,
+        metadata: { reference: booking.reference, totalCents: booking.sellTotalCents, currency: booking.currency },
+        req
+    });
+
+    await enqueueSupplierReceived(tx, booking.id);
+
+    // The yes is what makes it owed, on both sides. A booking inside an order
+    // is skipped on the buyer's side by the ledger itself.
+    await syncBookingInTx(tx, 'HOTEL', booking.id, actor, req);
+
+    // Re-read: the ledger has just written what the serializer shows as payment.
+    return tx.hotelBooking.findUnique({ where: { id: booking.id }, include: bookingInclude });
+};
+
+/**
+ * The platform says no, or the sweeper gives up on a booking whose stay has
+ * begun unanswered. The rooms go back and nothing is charged; the ledger
+ * writes nothing for a booking that was never confirmed.
+ */
+export const rejectPendingHotelBookingInTx = async (tx, booking, { reason, expired = false } = {}, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    for (const room of booking.rooms.filter((candidate) => candidate.status === 'CONFIRMED')) {
+        if (room.roomTypeId) {
+            await releaseBookedUnits(tx, { roomTypeId: room.roomTypeId, checkIn: booking.checkIn, checkOut: booking.checkOut, quantity: 1 });
+        }
+    }
+
+    await tx.hotelBookingRoom.updateMany({ where: { bookingId: booking.id, status: 'CONFIRMED' }, data: { status: 'CANCELLED' } });
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+
+    const rejected = await tx.hotelBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: {
+                status: 'CANCELLED',
+                cancelledAt: now,
+                cancellationChargeCents: 0,
+                cancellationReason: reason,
+                rejectedAt: now,
+                rejectedByUserId: by.userId,
+                rejectedByName: by.name,
+                rejectionReason: reason
+            },
+            include: bookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: expired ? 'BOOKING_APPROVAL_EXPIRED' : 'BOOKING_REJECTED',
+        actor,
+        entityType: AUDIT_ENTITY.booking,
+        entityId: booking.id,
+        summary: `${expired ? 'Expired' : 'Rejected'} ${booking.reference}`,
+        metadata: { reference: booking.reference, reason },
+        req
+    });
+
+    await syncBookingInTx(tx, 'HOTEL', booking.id, actor, req);
+
+    return rejected;
+};
+
 export const cancelBooking = async (reference, { reason, email } = {}, actor, req) =>
     prisma.$transaction(async (tx) => {
         const booking = await tx.hotelBooking.findFirst({
@@ -843,7 +1013,7 @@ export const cancelBooking = async (reference, { reason, email } = {}, actor, re
  * property works from. Both are updated in the same transaction; a correction
  * that reached only one of them would put the wrong name on the door.
  */
-const AMENDABLE_STATUSES = ['PENDING', 'CONFIRMED'];
+const AMENDABLE_STATUSES = AMENDABLE_BOOKING_STATUSES;
 
 export const amendBooking = async (reference, input, actor, req) =>
     prisma.$transaction(async (tx) => {
@@ -931,6 +1101,15 @@ export const amendBooking = async (reference, input, actor, req) =>
             },
             req
         });
+
+        await enqueueEvent(tx, {
+            topic: TOPICS.BOOKING_MODIFIED,
+            payload: { product: 'HOTEL', bookingId: booking.id, fields, byUserId: actor?.id ?? null },
+            entityType: AUDIT_ENTITY.booking,
+            entityId: booking.id
+        });
+
+        await syncBookingIndexInTx(tx, 'HOTEL', booking.id);
 
         return tx.hotelBooking.findUnique({ where: { id: booking.id }, include: bookingInclude });
     });

@@ -5,11 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Check, Loader2 } from "lucide-react";
 
+import { useRefreshLiveCounts } from "@/components/admin/LiveBadgesContext";
 import { describeError } from "@/lib/api/client";
 import {
   fetchNotifications,
+  hrefFor,
   markAllNotificationsRead,
-  notificationHref,
+  markNotificationRead,
+  notificationCategoryLabel,
   notificationsPath,
   type AppNotification,
   type NotificationScope,
@@ -25,8 +28,9 @@ const PREVIEW = 8;
  * The count comes from the server with the page (the badges request in the
  * admin panel, the layout in the portal), so the bell paints with the right
  * number at once; the list behind it is fetched only when it is opened.
- * Marking everything read refreshes the route, which is what brings the
- * count back down.
+ * Marking anything read asks the shell to re-read its counts, which is what
+ * brings the number down — or, in a panel that keeps no live counts,
+ * refreshes the route.
  */
 export function NotificationBell({
   scope,
@@ -40,6 +44,7 @@ export function NotificationBell({
   const router = useRouter();
   const pathname = usePathname();
   const path = useLocalePath();
+  const refreshCounts = useRefreshLiveCounts();
   const ref = useRef<HTMLDivElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -79,6 +84,12 @@ export function NotificationBell({
     };
   }, [open, setOpen]);
 
+  /** The number on the bell is the shell's; this tells it to look again. */
+  const countsChanged = () => {
+    if (refreshCounts) void refreshCounts();
+    else router.refresh();
+  };
+
   const toggle = async () => {
     const next = !open;
     setOpen(next);
@@ -100,12 +111,25 @@ export function NotificationBell({
       await markAllNotificationsRead(scope);
       const readAt = new Date().toISOString();
       setItems((current) => current?.map((item) => ({ ...item, readAt: item.readAt ?? readAt })) ?? null);
-      router.refresh();
+      countsChanged();
     } catch (caught) {
       setError(describeError(caught));
     } finally {
       setBusy(false);
     }
+  };
+
+  /**
+   * Opening a notice reads it. Optimistic: the row loses its weight at once
+   * and the navigation is not held for the round trip; a failure here is
+   * not worth stopping the person on their way to the booking.
+   */
+  const readOne = (item: AppNotification) => {
+    setOpen(false);
+    if (item.readAt) return;
+    const readAt = new Date().toISOString();
+    setItems((current) => current?.map((row) => (row.id === item.id ? { ...row, readAt } : row)) ?? null);
+    void markNotificationRead(scope, item.id).then(countsChanged, () => undefined);
   };
 
   const label = unreadCount === 0 ? "Notifications" : `Notifications, ${unreadCount} unread`;
@@ -162,21 +186,35 @@ export function NotificationBell({
             items && (
               <ul className="max-h-[60vh] divide-y divide-line overflow-y-auto">
                 {items.map((item) => {
-                  const target = notificationHref(scope, item);
+                  const target = hrefFor(scope, item);
+                  const unread = !item.readAt;
                   const inner = (
                     <>
-                      <span className={cn("block text-[0.8125rem]", item.readAt ? "text-body" : "font-semibold text-ink")}>{item.title}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="text-[0.625rem] font-semibold tracking-[0.12em] text-subtle uppercase">
+                          {notificationCategoryLabel(item.category)}
+                        </span>
+                        {unread && <span className="size-1.5 rounded-full bg-brand" aria-hidden />}
+                      </span>
+                      <span className={cn("mt-0.5 block text-[0.8125rem]", unread ? "font-semibold text-ink" : "text-body")}>
+                        {item.title}
+                        {unread && <span className="sr-only"> (unread)</span>}
+                      </span>
                       <span className="mt-0.5 block truncate text-[0.75rem] text-muted">{item.body}</span>
                     </>
                   );
-                  const rowClass = "block px-4 py-3 transition-colors hover:bg-surface-soft/60";
+                  const rowClass = "block w-full px-4 py-3 text-start transition-colors hover:bg-surface-soft/60";
 
                   return (
                     <li key={item.id}>
                       {target ? (
-                        <Link href={path(target)} prefetch={false} className={rowClass} onClick={() => setOpen(false)}>
+                        <Link href={path(target)} prefetch={false} className={rowClass} onClick={() => readOne(item)}>
                           {inner}
                         </Link>
+                      ) : unread ? (
+                        <button type="button" className={rowClass} onClick={() => readOne(item)}>
+                          {inner}
+                        </button>
                       ) : (
                         <div className={rowClass}>{inner}</div>
                       )}
@@ -194,7 +232,7 @@ export function NotificationBell({
               onClick={() => setOpen(false)}
               className="text-[0.8125rem] font-medium text-brand-text hover:text-brand-hover"
             >
-              View all notifications
+              See all notifications
             </Link>
           </div>
         </div>

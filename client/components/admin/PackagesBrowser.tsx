@@ -10,6 +10,7 @@ import { HotelStatusBadge } from "./HotelStatusBadge";
 import { PACKAGE_STATUSES, packageCardImage, packageStatusLabels } from "@/lib/admin/packages";
 import { formatMoney } from "@/lib/money";
 import { useLocalePath } from "@/lib/i18n/provider";
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import { cn } from "@/lib/utils";
 import type { PackageSummary } from "@/types/package";
 
@@ -80,7 +81,9 @@ export function PackagesBrowser({
 
   return (
     <div className={cn(pending && "opacity-60 transition-opacity")}>
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterDisclosure
+        count={["status", "kosher"].filter((key) => { const value = params.get(key); return value && value !== "all"; }).length}
+        lead={
         <label className="relative min-w-56 flex-1">
           <Search
             size={15}
@@ -96,32 +99,35 @@ export function PackagesBrowser({
             className={cn(field, "w-full ps-9")}
           />
         </label>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={params.get("status") ?? "all"}
+            onChange={(event) => apply({ status: event.target.value })}
+            aria-label="Status"
+            className={field}
+          >
+            <option value="all">Any status</option>
+            {PACKAGE_STATUSES.map((status) => (
+              <option key={status} value={status}>
+                {packageStatusLabels[status]}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={params.get("status") ?? "all"}
-          onChange={(event) => apply({ status: event.target.value })}
-          aria-label="Status"
-          className={field}
-        >
-          <option value="all">Any status</option>
-          {PACKAGE_STATUSES.map((status) => (
-            <option key={status} value={status}>
-              {packageStatusLabels[status]}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={params.get("kosher") ?? "all"}
-          onChange={(event) => apply({ kosher: event.target.value })}
-          aria-label="Kosher"
-          className={field}
-        >
-          <option value="all">Kosher and not</option>
-          <option value="true">Kosher only</option>
-          <option value="false">Not kosher</option>
-        </select>
-      </div>
+          <select
+            value={params.get("kosher") ?? "all"}
+            onChange={(event) => apply({ kosher: event.target.value })}
+            aria-label="Kosher"
+            className={field}
+          >
+            <option value="all">Kosher and not</option>
+            <option value="true">Kosher only</option>
+            <option value="false">Not kosher</option>
+          </select>
+        </div>
+      </FilterDisclosure>
 
       <div className="mt-5">
         <DataTable columns={columns} caption="Packages">

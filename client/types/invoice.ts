@@ -11,6 +11,28 @@ export type InvoiceStatus = "DRAFT" | "ISSUED" | "SENT" | "PAID" | "PARTIAL" | "
 /** Why a document exists: the booking flow, a payment, a cancellation, or a finance user. */
 export type InvoiceSource = "CONFIRM" | "PAYMENT" | "CANCELLATION" | "MANUAL" | "IMPORT";
 
+/** What a line stands for (owner decision OD4): one per room, per leg, per tour, per service. */
+export type InvoiceLineKind =
+  | "HOTEL_ROOM"
+  | "TRANSFER_LEG"
+  | "TOUR"
+  | "SERVICE"
+  | "EXTRA"
+  | "ADJUSTMENT"
+  | "CANCELLATION_CHARGE"
+  | "MANUAL";
+
+/**
+ * The structured fields behind a line, plus the multi-line `text` the
+ * provider prints under it. The other keys depend on `kind` (a hotel line
+ * carries `hotel`, `room`, `checkIn`, `pax`; a transfer leg `from`, `to`,
+ * `flightNumber`) and are read only for display.
+ */
+export interface InvoiceLineDetail {
+  text: string;
+  [key: string]: unknown;
+}
+
 export interface InvoiceLine {
   id: string;
   description: string;
@@ -20,6 +42,10 @@ export interface InvoiceLine {
   /** Gross, in minor units. Negative on a correction. */
   totalGrossCents: number;
   bookingReference: string | null;
+  kind?: InvoiceLineKind | null;
+  /** The gross price of one unit (a night, a leg) when the line has one. */
+  unitCents?: number | null;
+  detail?: InvoiceLineDetail | null;
 }
 
 /** Another document in the same chain: the proforma a VAT invoice came from, or the correction issued against it. */

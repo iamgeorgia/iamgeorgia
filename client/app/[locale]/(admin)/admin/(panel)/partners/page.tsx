@@ -8,12 +8,15 @@ import { StatCard } from "@/components/admin/StatCard";
 import { listPartners } from "@/lib/api/partners";
 import { APPLICATION_STATUSES, partnerQueryFromParams } from "@/lib/admin/partners";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Partners" };
 
 export default async function AdminPartnersPage({
   searchParams,
 }: PageProps<"/[locale]/admin/partners">) {
+  const session = await requireScreen();
   const { path } = await getI18n();
   const params = await searchParams;
 
@@ -48,13 +51,15 @@ export default async function AdminPartnersPage({
                 </span>
               )}
             </Link>
-            <Link
-              href={path("/admin/partners/new")}
-              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-            >
-              <UserPlus size={15} aria-hidden />
-              Add a partner
-            </Link>
+            {can(session, "partners.write") && (
+              <Link
+                href={path("/admin/partners/new")}
+                className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+              >
+                <UserPlus size={15} aria-hidden />
+                Add a partner
+              </Link>
+            )}
           </>
         }
       />

@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, Clock, Loader2 } from "lucide-react";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { OrderStatusBadge } from "./StatusBadge";
 import { cancelOrderAsAdmin } from "@/lib/api/orders";
 import { describeError } from "@/lib/api/client";
@@ -30,16 +32,21 @@ export function OrderActions({
   quote: OrderCancellationQuote | null;
 }) {
   const router = useRouter();
+  const can = useCan();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  // An order still waiting for the platform's yes can be cancelled too: the
+  // buyer may have changed their mind before anyone answered.
   const cancellable =
+    order.status === "PENDING_APPROVAL" ||
     order.status === "PENDING_CONFIRMATION" ||
     order.status === "CONFIRMED" ||
     order.status === "PARTIALLY_CANCELLED";
+  const canCancel = can("bookings.cancel");
   const overdue = isRequestOverdue(order.requestDeadlineAt);
 
   const cancel = async () => {
@@ -119,7 +126,11 @@ export function OrderActions({
         </p>
       )}
 
-      {cancellable && (
+      {cancellable && !canCancel && (
+        <ReadOnlyNote needs="bookings.cancel" what="Cancelling this order" className="mt-4" />
+      )}
+
+      {cancellable && canCancel && (
         <div className="mt-4">
           {confirming ? (
             <div className="rounded-sm border border-line p-3">

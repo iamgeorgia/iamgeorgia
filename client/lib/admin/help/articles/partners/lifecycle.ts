@@ -14,7 +14,6 @@ export const article = {
   title: "Partner statuses",
   summary: "The eight statuses a partner moves through, which action takes it where, and which of them send an email.",
   category: "partners",
-  roles: ["ADMIN"],
   keywords: ["status", "invited", "registration in progress", "pending approval", "approved", "rejected", "suspended", "transition", "email"],
   related: ["pt-detail-review", "pt-applications", "pt-registering", "pt-register", "pb-statuses"],
   blocks: [

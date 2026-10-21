@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AlertTriangle, Ban, Loader2 } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { BookingStatusBadge } from "./StatusBadge";
 import { cancelBookingAsAdmin } from "@/lib/api/bookings";
 import { describeError } from "@/lib/api/client";
@@ -18,11 +20,13 @@ import type { Booking, CancellationQuote } from "@/types/booking";
  * Only one thing, and deliberately: cancel. There is no "confirm" button
  * because a booking is confirmed the moment it is made — the rooms are already
  * committed — and no "mark completed" because that is a function of the date
- * rather than of anyone's opinion.
+ * rather than of anyone's opinion. Approving is the queue's job, not this
+ * panel's; a booking still waiting for approval can only be withdrawn here.
  *
  * Cancelling shows what it will cost *before* it happens. The figure comes from
  * the schedule frozen onto the booking at confirmation, so it is what the guest
- * was actually promised and not what the hotel's policy says today.
+ * was actually promised and not what the hotel's policy says today. A booking
+ * withdrawn before approval costs nothing: no supplier has been asked yet.
  */
 export function BookingActions({
   booking,
@@ -33,13 +37,17 @@ export function BookingActions({
   quote: CancellationQuote | null;
 }) {
   const router = useRouter();
+  const can = useCan();
   const [confirming, setConfirming] = useState(false);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const cancellable = booking.status === "PENDING" || booking.status === "CONFIRMED";
+  const awaitingApproval = booking.status === "PENDING_APPROVAL";
+  const cancellable = awaitingApproval || booking.status === "PENDING" || booking.status === "CONFIRMED";
+  // The server refuses the cancel without this; the button is simply not offered.
+  const canCancel = can("bookings.cancel");
 
   const run = async () => {
     setBusy(true);
@@ -74,7 +82,13 @@ export function BookingActions({
         <BookingStatusBadge status={booking.status} />
       </div>
 
-      {cancellable && quote && (
+      {awaitingApproval && (
+        <p className="mt-4 rounded-sm bg-surface-soft p-3 text-[0.8125rem] text-muted">
+          Nothing is charged for withdrawing a request before it is approved.
+        </p>
+      )}
+
+      {cancellable && !awaitingApproval && quote && (
         <dl className="mt-4 space-y-1.5 rounded-sm bg-surface-soft p-3 text-[0.8125rem]">
           <div className="flex justify-between gap-3">
             <dt className="text-muted">Cancelling now costs</dt>
@@ -91,24 +105,29 @@ export function BookingActions({
         </dl>
       )}
 
-      {cancellable && !confirming && (
+      {cancellable && !canCancel && (
+        <ReadOnlyNote needs="bookings.cancel" what="Cancelling this booking" className="mt-4" />
+      )}
+
+      {cancellable && canCancel && !confirming && (
         <button
           type="button"
           onClick={() => setConfirming(true)}
           className={cn(base, "mt-4 border border-error/40 text-error-text hover:bg-error/8")}
         >
           <Ban size={15} aria-hidden />
-          Cancel booking
+          {awaitingApproval ? "Withdraw request" : "Cancel booking"}
         </button>
       )}
 
-      {confirming && (
+      {canCancel && confirming && (
         <div className="mt-4 rounded-sm border border-error/40 p-3">
           <p className="flex items-start gap-2 text-[0.8125rem] text-error-text">
             <AlertTriangle size={15} className="mt-0.5 shrink-0" aria-hidden />
             <span>
-              This releases {booking.rooms} {booking.rooms === 1 ? "room" : "rooms"} back on sale
-              and cannot be undone.
+              {awaitingApproval
+                ? `This withdraws the request before anyone has approved it, releases the ${booking.rooms} held ${booking.rooms === 1 ? "room" : "rooms"} at no charge, and cannot be undone.`
+                : `This releases ${booking.rooms} ${booking.rooms === 1 ? "room" : "rooms"} back on sale and cannot be undone.`}
             </span>
           </p>
 
@@ -130,7 +149,7 @@ export function BookingActions({
               className={cn(base, "bg-error text-white hover:opacity-90")}
             >
               {busy && <Loader2 size={15} className="animate-spin" aria-hidden />}
-              Confirm cancellation
+              {awaitingApproval ? "Withdraw request" : "Confirm cancellation"}
             </button>
             <button
               type="button"

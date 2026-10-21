@@ -5,6 +5,8 @@ import { useState } from "react";
 import { BedDouble, Loader2, Plus, X } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   archiveRatePlan,
   archiveRoomType,
@@ -33,6 +35,12 @@ import type {
  * that could drift. The forms are small on purpose: a room needs a name and
  * what it sleeps; a rate plan needs a board and its terms. Everything else has
  * a sensible default and can be edited after.
+ *
+ * Two capabilities meet here, as they do on the server: the rooms themselves
+ * (name, occupancy, beds, archiving) are `catalogue.write`; the rate plans are
+ * `pricing.write`, because a plan carries a currency and its policies carry
+ * money. Each control follows its own, so a pricing desk can add an offer to a
+ * room it cannot rename and vice versa.
  */
 
 const BED_CODES: { code: BedTypeCode; label: string }[] = [
@@ -72,6 +80,9 @@ export function RoomsManager({
   payments: PaymentPolicy[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canContent = can("catalogue.write");
+  const canPricing = can("pricing.write");
   const [error, setError] = useState<string | null>(null);
 
   /** Wraps a mutation with the shared busy/error/refresh cycle. */
@@ -104,6 +115,18 @@ export function RoomsManager({
         </p>
       )}
 
+      {/* One line for what the viewer cannot do here, not one per card. */}
+      {!canContent && !canPricing ? (
+        <ReadOnlyNote
+          needs={["catalogue.write", "pricing.write"]}
+          what="Editing room types or rate plans"
+        />
+      ) : !canContent ? (
+        <ReadOnlyNote needs="catalogue.write" what="Adding, archiving or re-bedding room types" />
+      ) : !canPricing ? (
+        <ReadOnlyNote needs="pricing.write" what="Adding or archiving rate plans" />
+      ) : null}
+
       {hotel.roomTypes.map((room) => (
         <RoomCard
           key={room.id}
@@ -112,10 +135,12 @@ export function RoomsManager({
           cancellations={cancellations}
           payments={payments}
           useAction={useAction}
+          canContent={canContent}
+          canPricing={canPricing}
         />
       ))}
 
-      <NewRoomForm hotel={hotel} useAction={useAction} />
+      {canContent && <NewRoomForm hotel={hotel} useAction={useAction} />}
     </div>
   );
 }
@@ -128,12 +153,16 @@ function RoomCard({
   cancellations,
   payments,
   useAction,
+  canContent,
+  canPricing,
 }: {
   hotel: HotelWithChecklist;
   room: RoomType;
   cancellations: CancellationPolicy[];
   payments: PaymentPolicy[];
   useAction: ActionHook;
+  canContent: boolean;
+  canPricing: boolean;
 }) {
   const localePath = useLocalePath();
   const { busy, run } = useAction();
@@ -161,18 +190,20 @@ function RoomCard({
           >
             Calendar
           </Link>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              if (window.confirm(`Archive ${room.name}? Its bookings stay readable.`)) {
-                void run(() => archiveRoomType(hotel.id, room.id));
-              }
-            }}
-            className="text-[0.8125rem] font-medium text-error-text hover:underline"
-          >
-            Archive
-          </button>
+          {canContent && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                if (window.confirm(`Archive ${room.name}? Its bookings stay readable.`)) {
+                  void run(() => archiveRoomType(hotel.id, room.id));
+                }
+              }}
+              className="text-[0.8125rem] font-medium text-error-text hover:underline"
+            >
+              Archive
+            </button>
+          )}
         </div>
       }
       bodyClassName="p-0"
@@ -193,43 +224,51 @@ function RoomCard({
                 {plan.payment?.name ?? "No payment terms"} · {plan.currency}
               </p>
             </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                if (window.confirm(`Archive the "${plan.name}" rate?`)) {
-                  void run(() => archiveRatePlan(hotel.id, room.id, plan.id));
-                }
-              }}
-              aria-label={`Archive ${plan.name}`}
-              className="text-subtle hover:text-error-text"
-            >
-              <X size={15} aria-hidden />
-            </button>
+            {canPricing && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`Archive the "${plan.name}" rate?`)) {
+                    void run(() => archiveRatePlan(hotel.id, room.id, plan.id));
+                  }
+                }}
+                aria-label={`Archive ${plan.name}`}
+                className="text-subtle hover:text-error-text"
+              >
+                <X size={15} aria-hidden />
+              </button>
+            )}
           </li>
         ))}
       </ul>
 
-      <div className="flex flex-wrap gap-2 border-t border-line px-5 py-3">
-        <button
-          type="button"
-          onClick={() => setAddingPlan((open) => !open)}
-          className={cn(button, "border border-ink/20 text-ink hover:border-ink hover:bg-surface-soft")}
-        >
-          <Plus size={14} aria-hidden />
-          Rate plan
-        </button>
-        <button
-          type="button"
-          onClick={() => setEditingBeds((open) => !open)}
-          className={cn(button, "border border-ink/20 text-ink hover:border-ink hover:bg-surface-soft")}
-        >
-          <BedDouble size={14} aria-hidden />
-          Beds
-        </button>
-      </div>
+      {(canPricing || canContent) && (
+        <div className="flex flex-wrap gap-2 border-t border-line px-5 py-3">
+          {canPricing && (
+            <button
+              type="button"
+              onClick={() => setAddingPlan((open) => !open)}
+              className={cn(button, "border border-ink/20 text-ink hover:border-ink hover:bg-surface-soft")}
+            >
+              <Plus size={14} aria-hidden />
+              Rate plan
+            </button>
+          )}
+          {canContent && (
+            <button
+              type="button"
+              onClick={() => setEditingBeds((open) => !open)}
+              className={cn(button, "border border-ink/20 text-ink hover:border-ink hover:bg-surface-soft")}
+            >
+              <BedDouble size={14} aria-hidden />
+              Beds
+            </button>
+          )}
+        </div>
+      )}
 
-      {addingPlan && (
+      {addingPlan && canPricing && (
         <NewRatePlanForm
           hotel={hotel}
           room={room}
@@ -239,7 +278,7 @@ function RoomCard({
           onDone={() => setAddingPlan(false)}
         />
       )}
-      {editingBeds && (
+      {editingBeds && canContent && (
         <BedsForm hotel={hotel} room={room} useAction={useAction} onDone={() => setEditingBeds(false)} />
       )}
     </AdminPanel>

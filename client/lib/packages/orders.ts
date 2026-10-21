@@ -10,6 +10,7 @@ import type { OrderQuery, OrderStatus } from "@/types/order";
  */
 
 export const ORDER_STATUSES: OrderStatus[] = [
+  "PENDING_APPROVAL",
   "PENDING_CONFIRMATION",
   "CONFIRMED",
   "PARTIALLY_CANCELLED",

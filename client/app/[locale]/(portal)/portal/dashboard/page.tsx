@@ -117,7 +117,7 @@ export default async function PortalDashboardPage() {
             value: orders ? String(orders.awaiting) : "—",
           },
           { label: "Live listings", value: String(stats.listings) },
-          { label: "Commission", value: formatCommission(partner.commissionRateBps) },
+          { label: "Commission", value: partner.commissionRateBps === undefined ? "—" : formatCommission(partner.commissionRateBps) },
         ].map((item) => (
           <div key={item.label} className="rounded-sm border border-line bg-surface p-5">
             <dt className="text-[0.8125rem] text-muted">{item.label}</dt>

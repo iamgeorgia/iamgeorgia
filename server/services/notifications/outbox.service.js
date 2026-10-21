@@ -1,10 +1,9 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
-
 import { config } from '../../config.js';
 import { prisma } from '../../db/index.js';
 import { logger } from '../../lib/logger.js';
 import {
     adminApprovalUrl,
+    adminBookingUrl,
     adminInvoiceUrl,
     adminPayableUrl,
     adminReceivableUrl,
@@ -18,7 +17,7 @@ import {
     relativeDays,
     sendMail
 } from '../../lib/mailer/index.js';
-import { TOPICS } from '../../lib/outbox.js';
+import { TOPICS, outboxContext } from '../../lib/outbox.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
 import { CAPABILITIES } from '../../lib/permissions.js';
@@ -28,6 +27,8 @@ import { usersWithCapability } from '../rbac/access.js';
 import { APPROVE_CAPABILITY_FOR_KIND } from '../finance/approval.service.js';
 import { cancelInvoiceRemote, issueInvoice, recordProviderPayment, sendInvoice } from '../invoicing/invoice.service.js';
 import { contactRevealed } from '../../serializers/dispatch.js';
+import { sendTransferVoucher } from '../transfer/notify.service.js';
+import { categoryOf } from '../../lib/notifications/categories.js';
 import { sqlStateOf } from '../../middleware/errors.js';
 
 /**
@@ -61,7 +62,7 @@ const backoffMs = (attempts) => Math.min(60 * 60_000, 30_000 * 2 ** Math.max(0, 
  * by `notify`, which needs it to keep a retried handler from handing out the
  * same in-app notice twice.
  */
-const processing = new AsyncLocalStorage();
+const processing = outboxContext;
 const currentEvent = () => processing.getStore()?.event ?? null;
 
 // --- Lookups ---------------------------------------------------------------
@@ -112,7 +113,11 @@ const partnerFinanceUserIds = (partnerId) => usersWithCapability(CAPABILITIES.PA
 /** The partner-side person to tell: whoever booked, else the company's primary contact. */
 const partnerRecipient = async (booking) => {
     if (!booking.partnerId) return null;
-    if (booking.bookedByUser?.isActive) return booking.bookedByUser;
+    // Whoever booked, when they belong to the partner: a member of staff who
+    // booked on the partner's behalf is not the one to tell.
+    if (booking.bookedByUser?.isActive && (booking.bookedByUser.partnerId === undefined || booking.bookedByUser.partnerId === booking.partnerId)) {
+        return booking.bookedByUser;
+    }
 
     return prisma.user.findFirst({
         where: { partnerId: booking.partnerId, isActive: true },
@@ -129,7 +134,7 @@ const partnerRecipient = async (booking) => {
  * refuses the whole batch, so on that one failure the list is re-read and
  * the insert tried once more with whoever is still there.
  */
-const notify = async (recipients, { kind, title, body, payload = {}, entityType = null, entityId = null }) => {
+const notify = async (recipients, { kind, title, body, payload = {}, entityType = null, entityId = null, dedupeKey = null }) => {
     const event = currentEvent();
     const stamped = event ? { ...payload, outboxEventId: event.id } : payload;
 
@@ -137,9 +142,11 @@ const notify = async (recipients, { kind, title, body, payload = {}, entityType 
     // relay refused the email that follows the notice. The people already
     // told must not be told again, so on a retry (and only on a retry, which
     // is what keeps the first attempt cheap) the notice is checked for first.
+    // A notice with a dedupe key needs none of this: the unique index drops
+    // the second copy whoever writes it.
     let pending = recipients;
 
-    if (event && event.attempts > 0 && recipients.length > 0) {
+    if (!dedupeKey && event && event.attempts > 0 && recipients.length > 0) {
         const already = await prisma.notification.findMany({
             where: { kind, recipientUserId: { in: recipients }, payload: { path: ['outboxEventId'], equals: event.id } },
             select: { recipientUserId: true }
@@ -155,12 +162,15 @@ const notify = async (recipients, { kind, title, body, payload = {}, entityType 
                   data: ids.map((recipientUserId) => ({
                       recipientUserId,
                       kind,
+                      category: categoryOf(kind),
                       title,
                       body,
                       payload: stamped,
                       entityType,
-                      entityId
-                  }))
+                      entityId,
+                      dedupeKey
+                  })),
+                  skipDuplicates: Boolean(dedupeKey)
               });
 
     // Bounded, not once: the ops list can lose two accounts in the same
@@ -483,7 +493,10 @@ const handlers = {
     [TOPICS.ORDER_CANCELLED]: async ({ orderId, chargeCents, reason }) => {
         const order = await loadOrderForMail(orderId);
 
-        if (!order) return;
+        // A rejected order (OD1) was cancelled by the platform saying no;
+        // the rejection note covers it and a second "cancelled" mail would read
+        // as if the buyer had done it.
+        if (!order || order.rejectedAt) return;
 
         await sendMail({
             to: order.leadEmail,
@@ -707,6 +720,10 @@ const handlers = {
         const view = await supplierViews[product]?.(bookingId);
         if (!view) return;
 
+        // A booking the platform never approved was never put to the supplier
+        // (OD1); there is nothing for them to un-hear.
+        if (view.neverAnnounced) return;
+
         const to = await supplierAddress(view);
         if (!to) return;
 
@@ -715,6 +732,204 @@ const handlers = {
             template: 'supplierBookingCancelled',
             data: { ...view.data, reason: reason ?? view.data.reason ?? null, partnerName: to.name, url: portalUrl() }
         });
+    },
+
+    // --- booking approval (OD1) --------------------------------------------------
+    //
+    // `payload.product` says which table `bookingId` points into. The buyer
+    // is written to at every step; the operators who may decide get an in-app
+    // notice when something arrives or goes overdue; the partner's people
+    // get one when it is decided. The confirmation the buyer would have had
+    // at booking follows an approval, by the product's own handler.
+
+    [TOPICS.BOOKING_AWAITING_APPROVAL]: async ({ product, bookingId }) => {
+        const view = await approvalViews[product]?.(bookingId);
+        if (!view || view.status !== 'PENDING_APPROVAL') return;
+
+        const approvers = (await usersWithCapability(CAPABILITIES.BOOKINGS_APPROVE, { partnerId: null })).filter((id) => id !== view.bookedByUserId);
+
+        await notify(approvers, {
+            kind: 'BOOKING_AWAITING_APPROVAL',
+            title: `${view.reference} is waiting for approval`,
+            body: `${view.title} · ${view.leadName}${view.partnerName ? ` · ${view.partnerName}` : ''}`,
+            payload: { product, bookingId, bookingReference: view.reference, deadlineAt: view.deadlineAt },
+            entityType: view.entityType,
+            entityId: bookingId,
+            dedupeKey: `booking:${product}:${bookingId}:awaiting`
+        });
+
+        await sendMail({ to: view.leadEmail, template: 'bookingAwaitingApproval', data: view.mail });
+
+        if (config.booking.opsEmail) {
+            await sendMail({ to: config.booking.opsEmail, template: 'bookingApprovalQueue', data: view.mail });
+        }
+    },
+
+    [TOPICS.BOOKING_APPROVED]: async ({ product, bookingId }) => {
+        const view = await approvalViews[product]?.(bookingId);
+        if (!view || !view.approvedAt) return;
+
+        if (view.partnerId) {
+            await notify(await usersWithCapability(CAPABILITIES.PARTNER_BOOKINGS_READ, { partnerId: view.partnerId }), {
+                kind: 'BOOKING_APPROVED',
+                title: `${view.reference} is approved`,
+                body: `${view.title} · ${view.leadName}`,
+                payload: { product, bookingId, bookingReference: view.reference },
+                entityType: view.entityType,
+                entityId: bookingId,
+                dedupeKey: `booking:${product}:${bookingId}:approved`
+            });
+        }
+
+        // The confirmation (or "we have passed your request on") the buyer
+        // would have had at booking.
+        if (view.confirm) {
+            await handlers[view.confirm.topic](view.confirm.payload);
+        }
+    },
+
+    [TOPICS.BOOKING_REJECTED]: async ({ product, bookingId, reason, expired }) => {
+        const view = await approvalViews[product]?.(bookingId);
+        if (!view || !view.rejectedAt) return;
+
+        if (view.partnerId) {
+            await notify(await usersWithCapability(CAPABILITIES.PARTNER_BOOKINGS_READ, { partnerId: view.partnerId }), {
+                kind: 'BOOKING_REJECTED',
+                title: `${view.reference} was ${expired ? 'not approved in time' : 'rejected'}`,
+                body: `${view.title} · ${reason ?? view.reason ?? ''}`.trim(),
+                payload: { product, bookingId, bookingReference: view.reference, reason: reason ?? view.reason ?? null, expired: Boolean(expired) },
+                entityType: view.entityType,
+                entityId: bookingId,
+                dedupeKey: `booking:${product}:${bookingId}:rejected`
+            });
+        }
+
+        await sendMail({ to: view.leadEmail, template: 'bookingRejected', data: { ...view.mail, reason: reason ?? view.reason ?? null, expired: Boolean(expired) } });
+    },
+
+    [TOPICS.BOOKING_APPROVAL_OVERDUE]: async ({ product, bookingId }) => {
+        const view = await approvalViews[product]?.(bookingId);
+        if (!view || view.status !== 'PENDING_APPROVAL') return;
+
+        await notify(await usersWithCapability(CAPABILITIES.BOOKINGS_APPROVE, { partnerId: null }), {
+            kind: 'BOOKING_APPROVAL_OVERDUE',
+            title: `${view.reference} is still waiting for approval`,
+            body: `${view.title} · ${view.leadName} · past its answer deadline`,
+            payload: { product, bookingId, bookingReference: view.reference, deadlineAt: view.deadlineAt },
+            entityType: view.entityType,
+            entityId: bookingId,
+            dedupeKey: `booking:${product}:${bookingId}:approval_overdue`
+        });
+
+        if (config.booking.opsEmail) {
+            await sendMail({ to: config.booking.opsEmail, template: 'bookingApprovalOverdue', data: view.mail });
+        }
+    },
+
+    /**
+     * A booking arrived. The desk — whoever may change bookings — hears of
+     * every one made, however it was sold. A booking that waits for
+     * approval is announced by its awaiting-approval notice instead, so
+     * nobody reads the same arrival twice.
+     */
+    [TOPICS.BOOKING_CREATED]: async ({ product, bookingId }) => {
+        const view = await approvalViews[product]?.(bookingId);
+        if (!view || view.status === 'PENDING_APPROVAL') return;
+
+        const desk = (await usersWithCapability(CAPABILITIES.BOOKINGS_WRITE, { partnerId: null })).filter((id) => id !== view.bookedByUserId);
+
+        await notify(desk, {
+            kind: 'BOOKING_NEW',
+            title: `New booking ${view.reference}`,
+            body: `${view.title} · ${view.leadName}${view.partnerName ? ` · ${view.partnerName}` : ''}`,
+            payload: { product, bookingId, bookingReference: view.reference },
+            entityType: view.entityType,
+            entityId: bookingId,
+            dedupeKey: `booking:${product}:${bookingId}:new`
+        });
+    },
+
+    /** The paperwork on a booking changed: names, a flight, a request. The desk is told. */
+    [TOPICS.BOOKING_MODIFIED]: async ({ product, bookingId, fields = [], byUserId = null }) => {
+        const view = await approvalViews[product]?.(bookingId);
+        if (!view) return;
+
+        const event = currentEvent();
+        const desk = (await usersWithCapability(CAPABILITIES.BOOKINGS_WRITE, { partnerId: null })).filter((id) => id !== byUserId);
+
+        await notify(desk, {
+            kind: 'BOOKING_MODIFIED',
+            title: `${view.reference} was amended`,
+            body: `${view.title} · ${fields.length > 0 ? fields.join(', ') : 'paperwork changed'}`,
+            payload: { product, bookingId, bookingReference: view.reference, fields },
+            entityType: view.entityType,
+            entityId: bookingId,
+            // Once per amendment, not once per booking: keyed on the event.
+            dedupeKey: event ? `booking:${product}:${bookingId}:modified:${event.id}` : null
+        });
+    },
+
+    /**
+     * A deadline is N days away. Who is told and how comes from the policy
+     * that claimed it; the row is re-read first, so a deadline met or
+     * closed since the claim is left alone.
+     */
+    [TOPICS.DEADLINE_UPCOMING]: async ({ deadlineId, offsetDays, policyId }) => {
+        const deadline = await prisma.bookingDeadline.findUnique({ where: { id: deadlineId } });
+        if (!deadline || deadline.status !== 'OPEN') return;
+
+        const policy = policyId ? await prisma.reminderPolicy.findUnique({ where: { id: policyId } }) : null;
+        const channels = new Set(policy?.channels ?? ['IN_APP']);
+        const recipients = new Set(policy?.recipients ?? ['STAFF']);
+        const view = await approvalViews[deadline.product]?.(deadline.bookingId);
+        if (!view) return;
+
+        const kind = DEADLINE_NOTICE_KIND[deadline.kind];
+        const label = DEADLINE_LABEL[deadline.kind];
+        const when = formatLocal(deadline.dueAt, deadline.timezone);
+        const days = Number(offsetDays);
+        const inWords = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
+        const notice = {
+            kind,
+            title: `${label} for ${deadline.reference} ${inWords}`,
+            body: `${deadline.title} · ${when}`,
+            payload: { deadlineId, product: deadline.product, bookingId: deadline.bookingId, bookingReference: deadline.reference, kind: deadline.kind, dueAt: deadline.dueAt, offsetDays: days },
+            entityType: view.entityType,
+            entityId: deadline.bookingId,
+            dedupeKey: `deadline:${deadlineId}:${days}`
+        };
+        const mail = { ...view.mail, deadlineKind: deadline.kind, deadlineLabel: label, dueAt: deadline.dueAt, timezone: deadline.timezone, offsetDays: days };
+
+        if (recipients.has('STAFF') && channels.has('IN_APP')) {
+            const staff = deadline.kind === 'PAYMENT' ? await usersWithCapability(CAPABILITIES.FINANCE_RECEIVABLES_READ, { partnerId: null }) : await usersWithCapability(CAPABILITIES.BOOKINGS_WRITE, { partnerId: null });
+
+            await notify(staff, notice);
+        }
+
+        if (recipients.has('PARTNER') && deadline.partnerId) {
+            if (channels.has('IN_APP')) {
+                await notify(await usersWithCapability(CAPABILITIES.PARTNER_BOOKINGS_READ, { partnerId: deadline.partnerId }), notice);
+            }
+
+            if (channels.has('EMAIL')) {
+                const to = await partnerContactEmail(deadline.partnerId);
+                if (to) await sendMail({ to, template: 'deadlineReminder', data: { ...mail, forPartner: true } });
+            }
+        }
+
+        // The guest (or desk customer) is the lead on the booking; a partner's
+        // traveller is written to by the partner, not by us.
+        if (recipients.has('GUEST') && channels.has('EMAIL') && !deadline.partnerId && view.leadEmail) {
+            await sendMail({ to: view.leadEmail, template: 'deadlineReminder', data: mail });
+        }
+    },
+
+    /** The transfer voucher, when it follows an approval rather than the booking request. */
+    [TOPICS.TRANSFER_BOOKING_CONFIRMED]: async ({ bookingId }) => {
+        const booking = await prisma.transferBooking.findUnique({ where: { id: bookingId } });
+        if (!booking || booking.status !== 'CONFIRMED') return;
+
+        await sendTransferVoucher(booking);
     },
 
     // --- finance ----------------------------------------------------------------
@@ -819,13 +1034,20 @@ const handlers = {
         }
     },
 
-    /** A receipt to the agency whose money arrived. Nothing for the other directions: Finance recorded those itself. */
+    /**
+     * A receipt to whoever paid: the agency whose money arrived, or the
+     * guest who paid for their own booking. Nothing for the other
+     * directions: Finance recorded those itself.
+     */
     [TOPICS.PAYMENT_RECORDED]: async ({ paymentId }) => {
         const payment = await prisma.paymentRecord.findUnique({
             where: { id: paymentId },
             include: {
                 counterpartyPartner: { select: { id: true, name: true, email: true } },
-                allocations: { include: { receivable: { select: { reference: true } } }, orderBy: { createdAt: 'asc' } }
+                allocations: {
+                    include: { receivable: { select: { reference: true, debtorName: true, debtorEmail: true } } },
+                    orderBy: { createdAt: 'asc' }
+                }
             }
         });
         if (!payment || payment.direction !== 'IN' || payment.kind !== 'PAYMENT') return;
@@ -834,14 +1056,17 @@ const handlers = {
         // InvoiceOcean does not know about. Skips what it already posted.
         await recordProviderPayment(paymentId);
 
-        if (!payment.counterpartyPartnerId) return;
+        const partnerId = payment.counterpartyPartnerId;
+        // A guest's payment names its payer as Finance recorded it, or else
+        // as the debtor of the booking it settles.
+        const settled = payment.allocations.find((entry) => entry.receivable)?.receivable ?? null;
 
         const allocations = payment.allocations
             .filter((entry) => entry.receivable)
             .map((entry) => ({ reference: entry.receivable.reference, amountCents: entry.amountCents }));
         const allocatedCents = payment.allocations.reduce((sum, entry) => sum + Math.abs(entry.amountCents), 0);
         const data = {
-            partnerName: payment.counterpartyPartner.name,
+            partnerName: partnerId ? payment.counterpartyPartner.name : payment.counterpartyName || settled?.debtorName || null,
             amountCents: payment.amountCents,
             currency: payment.currency,
             paidAt: payment.paidAt,
@@ -849,19 +1074,24 @@ const handlers = {
             reference: payment.reference ?? null,
             allocations,
             unallocatedCents: Math.max(0, payment.amountCents - allocatedCents),
-            url: portalFinanceUrl()
+            // A guest has no statement page to open.
+            url: partnerId ? portalFinanceUrl() : null
         };
 
-        await notify(await partnerFinanceUserIds(payment.counterpartyPartnerId), {
-            kind: 'FINANCE_PAYMENT_RECEIVED',
-            title: `Payment received: ${formatMoney(payment.amountCents, payment.currency)}`,
-            body: allocations.length > 0 ? `Applied to ${allocations.map((entry) => entry.reference).join(', ')}` : 'Held on your account for your next open item',
-            payload: { paymentId, reference: payment.reference ?? null },
-            entityType: 'PaymentRecord',
-            entityId: paymentId
-        });
+        if (partnerId) {
+            await notify(await partnerFinanceUserIds(partnerId), {
+                kind: 'FINANCE_PAYMENT_RECEIVED',
+                title: `Payment received: ${formatMoney(payment.amountCents, payment.currency)}`,
+                body: allocations.length > 0 ? `Applied to ${allocations.map((entry) => entry.reference).join(', ')}` : 'Held on your account for your next open item',
+                payload: { paymentId, reference: payment.reference ?? null },
+                entityType: 'PaymentRecord',
+                entityId: paymentId
+            });
+        }
 
-        const to = payment.counterpartyPartner.email || (await partnerContactEmail(payment.counterpartyPartnerId));
+        const to = partnerId
+            ? payment.counterpartyPartner.email || (await partnerContactEmail(partnerId))
+            : payment.counterpartyEmail || settled?.debtorEmail || null;
 
         if (to) {
             await sendMail({ to, template: 'paymentReceipt', data });
@@ -968,7 +1198,8 @@ handlers[TOPICS.INVOICE_ISSUE_REQUESTED] = async ({ invoiceId }) => {
 };
 
 handlers[TOPICS.INVOICE_SEND_REQUESTED] = async ({ invoiceId, to }) => {
-    await sendInvoice(invoiceId, { to: to ?? null });
+    const event = currentEvent();
+    await sendInvoice(invoiceId, { to: to ?? null, finalAttempt: Boolean(event) && event.attempts + 1 >= MAX_ATTEMPTS });
 };
 
 handlers[TOPICS.INVOICE_CANCEL_REQUESTED] = async ({ invoiceId }) => {
@@ -1044,6 +1275,150 @@ handlers[TOPICS.INVOICE_SYNC_FAILED] = async ({ invoiceId }) => {
         });
     }
 };
+
+/**
+ * One booking as the approval notices read it, whichever table it lives in.
+ *
+ * `mail` is what the four approval templates take; `confirm` is the
+ * product's own confirmation handler and its payload, run after a yes.
+ */
+const approvalView = (row, { product, entityType, title, when, timezone, leadName, leadEmail, totalCents, url, confirm }) => ({
+    product,
+    status: row.status,
+    reference: row.reference,
+    title,
+    leadName,
+    leadEmail,
+    partnerId: row.partnerId ?? null,
+    partnerName: row.partner?.name ?? null,
+    bookedByUserId: row.bookedByUserId ?? null,
+    deadlineAt: row.approvalDeadlineAt ?? null,
+    approvedAt: row.approvedAt ?? null,
+    rejectedAt: row.rejectedAt ?? null,
+    reason: row.rejectionReason ?? null,
+    entityType,
+    confirm,
+    mail: {
+        product,
+        reference: row.reference,
+        title,
+        when,
+        timezone,
+        leadName,
+        leadEmail,
+        partnerName: row.partner?.name ?? null,
+        currency: row.currency,
+        totalCents,
+        requestedAt: row.approvalRequestedAt ?? null,
+        deadlineAt: row.approvalDeadlineAt ?? null,
+        url,
+        adminUrl: adminBookingUrl(product, row.reference)
+    }
+});
+
+const partnerName = { partner: { select: { name: true } } };
+
+const approvalViews = {
+    HOTEL: async (id) => {
+        const row = await prisma.hotelBooking.findUnique({ where: { id }, include: partnerName });
+        if (!row) return null;
+
+        return approvalView(row, {
+            product: 'HOTEL',
+            entityType: 'HotelBooking',
+            title: row.hotelSnapshot?.name ?? 'Hotel',
+            when: { from: row.checkIn, to: row.checkOut, kind: 'DATES' },
+            timezone: row.hotelSnapshot?.timezone ?? 'Asia/Tbilisi',
+            leadName: row.leadGuestName,
+            leadEmail: row.leadGuestEmail,
+            totalCents: row.sellTotalCents + (row.taxTotalCents ?? 0),
+            url: bookingManageUrl(row.reference, row.leadGuestEmail),
+            confirm: { topic: TOPICS.HOTEL_BOOKING_CONFIRMED, payload: { bookingId: row.id } }
+        });
+    },
+    TRANSFER: async (id) => {
+        const row = await prisma.transferBooking.findUnique({ where: { id }, include: partnerName });
+        if (!row) return null;
+
+        return approvalView(row, {
+            product: 'TRANSFER',
+            entityType: 'TransferBooking',
+            title: `${row.routeSnapshot?.fromName ?? 'Transfer'} → ${row.routeSnapshot?.toName ?? ''}`.trim(),
+            when: { from: row.pickupAt, to: row.returnPickupAt ?? null, kind: 'INSTANT' },
+            timezone: row.routeSnapshot?.fromTimezone ?? 'Asia/Tbilisi',
+            leadName: row.leadPassengerName,
+            leadEmail: row.leadPassengerEmail,
+            totalCents: row.sellTotalCents,
+            url: bookingManageUrl(row.reference, row.leadPassengerEmail),
+            confirm: { topic: TOPICS.TRANSFER_BOOKING_CONFIRMED, payload: { bookingId: row.id } }
+        });
+    },
+    TOUR: async (id) => {
+        const row = await prisma.tourBooking.findUnique({ where: { id }, include: partnerName });
+        if (!row) return null;
+
+        return approvalView(row, {
+            product: 'TOUR',
+            entityType: 'TourBooking',
+            title: `${row.tourSnapshot?.title ?? 'Tour'}${row.tourSnapshot?.option?.name ? ` · ${row.tourSnapshot.option.name}` : ''}`,
+            when: { from: row.date, to: row.endDate, kind: 'DATES' },
+            timezone: 'Asia/Tbilisi',
+            leadName: row.leadTravellerName,
+            leadEmail: row.leadTravellerEmail,
+            totalCents: row.sellTotalCents,
+            url: bookingManageUrl(row.reference, row.leadTravellerEmail),
+            confirm: {
+                topic: row.status === 'PENDING' ? TOPICS.TOUR_BOOKING_REQUESTED : TOPICS.TOUR_BOOKING_CONFIRMED,
+                payload: { bookingId: row.id }
+            }
+        });
+    },
+    SERVICE: async (id) => {
+        const row = await prisma.serviceBooking.findUnique({ where: { id }, include: partnerName });
+        if (!row) return null;
+
+        return approvalView(row, {
+            product: 'SERVICE',
+            entityType: 'ServiceBooking',
+            title: row.serviceSnapshot?.name ?? 'Service',
+            when: { from: row.date, to: row.endDate, kind: 'DATES' },
+            timezone: 'Asia/Tbilisi',
+            leadName: row.leadName,
+            leadEmail: row.leadEmail,
+            totalCents: row.sellTotalCents,
+            url: bookingManageUrl(row.reference, row.leadEmail),
+            confirm: {
+                topic: row.status === 'PENDING' ? TOPICS.SERVICE_BOOKING_REQUESTED : TOPICS.SERVICE_BOOKING_CONFIRMED,
+                payload: { bookingId: row.id }
+            }
+        });
+    },
+    ORDER: async (id) => {
+        const row = await prisma.order.findUnique({ where: { id }, include: partnerName });
+        if (!row) return null;
+
+        return approvalView(row, {
+            product: 'ORDER',
+            entityType: 'Order',
+            title: row.packageSnapshot?.name ?? (row.kind === 'CUSTOM' ? 'Your order' : 'Package'),
+            when: { from: row.startDate, to: row.endDate, kind: 'DATES' },
+            timezone: 'Asia/Tbilisi',
+            leadName: row.leadName,
+            leadEmail: row.leadEmail,
+            totalCents: row.sellTotalCents,
+            url: bookingManageUrl(row.reference, row.leadEmail),
+            confirm:
+                row.status === 'CONFIRMED'
+                    ? { topic: TOPICS.ORDER_CONFIRMED, payload: { orderId: row.id } }
+                    : row.status === 'PENDING_CONFIRMATION'
+                      ? { topic: TOPICS.ORDER_REQUESTED, payload: { orderId: row.id } }
+                      : null
+        });
+    }
+};
+
+const DEADLINE_NOTICE_KIND = { PAYMENT: 'DEADLINE_PAYMENT_UPCOMING', FREE_CANCELLATION: 'DEADLINE_CANCELLATION_UPCOMING', CONFIRMATION: 'DEADLINE_CONFIRMATION_UPCOMING' };
+const DEADLINE_LABEL = { PAYMENT: 'Payment due', FREE_CANCELLATION: 'Free cancellation ends', CONFIRMATION: 'Answer due' };
 
 const APPROVAL_KIND_LABELS = {
     REFUND: 'Refund',
@@ -1252,6 +1627,7 @@ const supplierViews = {
 
         return {
             supplierId: booking.hotel?.supplierId ?? null,
+            neverAnnounced: Boolean(booking.approvalRequestedAt) && !booking.approvedAt,
             directEmail: snapshot.email ?? booking.hotel?.email ?? null,
             data: {
                 product: 'hotel',
@@ -1286,6 +1662,7 @@ const supplierViews = {
 
         return {
             supplierId: booking.tour?.supplierId ?? null,
+            neverAnnounced: Boolean(booking.approvalRequestedAt) && !booking.approvedAt,
             directEmail: null,
             data: {
                 product: 'tour',
@@ -1316,6 +1693,7 @@ const supplierViews = {
 
         return {
             supplierId: booking.service?.supplierId ?? null,
+            neverAnnounced: Boolean(booking.approvalRequestedAt) && !booking.approvedAt,
             directEmail: null,
             data: {
                 product: 'service',

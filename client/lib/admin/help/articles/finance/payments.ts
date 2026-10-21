@@ -14,7 +14,6 @@ export const article = {
   title: "Recording payments and refunds",
   summary: "Money in and out, what it settled, and spreading what was left unallocated.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/payments", "/admin/finance/payments/[id]"],
   keywords: [
     "payment",

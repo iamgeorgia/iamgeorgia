@@ -13,7 +13,6 @@ export const article = {
   title: "Contract, terms, product access, block and terminate",
   summary: "File a partner's contract, what happens when the platform terms change, limit what a partner may sell, and the difference between blocking and terminating.",
   category: "partners",
-  roles: ["ADMIN"],
   keywords: ["contract", "pdf", "signed", "terms", "accept", "version", "product access", "allow", "deny", "block", "unblock", "terminate", "blocked", "terminated"],
   related: ["pt-lifecycle", "pt-detail-review"],
   blocks: [

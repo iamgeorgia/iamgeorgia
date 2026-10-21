@@ -4,6 +4,7 @@ import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/
 import { NewTransferRouteForm } from "@/components/admin/NewTransferRouteForm";
 import { listAdminTransferPoints } from "@/lib/api/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add a route" };
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = { title: "Add a route" };
  * created, and offering one in the dropdown is offering a mistake.
  */
 export default async function NewTransferRoutePage() {
+  await requireScreen();
   const [{ data: points }, { path }] = await Promise.all([
     listAdminTransferPoints(),
     getI18n(),

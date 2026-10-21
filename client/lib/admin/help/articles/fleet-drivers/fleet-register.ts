@@ -11,7 +11,6 @@ export const article = {
   title: "Fleet register",
   summary: "Every physical car on file — searching by plate, filtering by whether it is on the road, and what each column shows.",
   category: "fleet-drivers",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/fleet"],
   keywords: ["fleet", "cars", "vehicles", "plate", "registration", "on the road", "off the road", "archived", "seats", "drivers"],
   related: ["fd-add-car", "fd-car-detail", "fd-drivers-register", "dp-assigning-a-driver", "rf-search-filters"],

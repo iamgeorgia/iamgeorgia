@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { bookingFilterFields } from '../lib/listing/bookingFilters.js';
 
 import {
     currencyField,
@@ -33,7 +34,7 @@ const ROUTE_TIERS = ['TIER_1', 'TIER_2', 'TIER_3'];
 const ROUTE_CATEGORIES = ['AIRPORT', 'CITY', 'RESORT', 'TOURIST_ROUTE', 'COMBINED'];
 const TRANSFER_STATUSES = ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED'];
 const EXTRA_BASES = ['FIXED', 'PER_PASSENGER', 'PER_HOUR', 'PERCENT'];
-const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
+const BOOKING_STATUSES = ['PENDING_APPROVAL', 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
 
 const FEATURES = [
     'airConditioning',
@@ -190,6 +191,8 @@ export const confirmTransferSchema = z
             .strict(),
 
         flightNumber: z.string().trim().min(2).max(16).optional(),
+        /** The flight per leg; `flightNumber` alone is the outbound's. */
+        flights: z.object({ outbound: z.string().trim().min(2).max(16).nullish(), return: z.string().trim().min(2).max(16).nullish() }).strict().optional(),
         pickupAddress: textField(300).optional(),
         dropoffAddress: textField(300).optional(),
         // The same doors as a searched place, when the traveller picked one
@@ -240,6 +243,7 @@ export const amendTransferSchema = z
             .strict()
             .optional(),
         flightNumber: z.string().trim().min(2).max(16).nullish(),
+        flights: z.object({ outbound: z.string().trim().min(2).max(16).nullish(), return: z.string().trim().min(2).max(16).nullish() }).strict().optional(),
         pickupAddress: textField(300).nullish(),
         dropoffAddress: textField(300).nullish(),
         pickupPlace: placedLocationSchema.nullish(),
@@ -255,6 +259,8 @@ export const cancelTransferSchema = z
 
 export const transferBookingQuerySchema = z
     .object({
+        ...bookingFilterFields,
+        partnerId: z.string().min(1).optional(),
         status: z.union([z.enum(BOOKING_STATUSES), z.array(z.enum(BOOKING_STATUSES))]).optional(),
         from: dateOnlyField.optional(),
         to: dateOnlyField.optional(),

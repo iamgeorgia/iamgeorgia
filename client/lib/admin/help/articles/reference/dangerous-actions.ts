@@ -14,7 +14,6 @@ export const article = {
   title: "Dangerous actions — the do-not list",
   summary: "Every button that acts the moment it is clicked, every action that cannot be undone, and who is told when you use it.",
   category: "reference",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["dangerous", "irreversible", "undo", "confirm", "delete", "archive", "cancel", "permanent", "warning", "careful", "mistake"],
   related: ["rf-troubleshooting", "rf-common-tasks-dispatcher", "dp-who-is-told-what", "dp-assigning-a-driver"],
   blocks: [

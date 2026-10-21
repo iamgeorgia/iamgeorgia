@@ -7,9 +7,10 @@ import { Check, Loader2 } from "lucide-react";
 
 import { describeError } from "@/lib/api/client";
 import {
+  hrefFor,
   markAllNotificationsRead,
   markNotificationRead,
-  notificationHref,
+  notificationCategoryLabel,
   type AppNotification,
   type NotificationScope,
 } from "@/lib/api/notifications";
@@ -18,8 +19,9 @@ import { cn } from "@/lib/utils";
 
 /**
  * One person's notices, newest first, with a tick to mark each read and one
- * button for all of them. Shared by the three panels; `scope` picks the
- * router and decides where a row links.
+ * button for all of them. The driver panel's list; the admin panel and the
+ * portal browse theirs by tab in `NotificationsBrowser`. `scope` picks the
+ * router and the fallback for where a row links.
  */
 export function NotificationList({
   scope,
@@ -70,10 +72,13 @@ export function NotificationList({
       ) : (
         <ul className="space-y-2">
           {notifications.map((notification) => {
-            const target = notificationHref(scope, notification);
+            const target = hrefFor(scope, notification);
             const inner = (
               <>
-                <p className={cn("text-[0.9375rem]", notification.readAt ? "text-body" : "font-semibold text-ink")}>{notification.title}</p>
+                <p className="text-[0.6875rem] font-semibold tracking-[0.12em] text-subtle uppercase">
+                  {notificationCategoryLabel(notification.category)}
+                </p>
+                <p className={cn("mt-0.5 text-[0.9375rem]", notification.readAt ? "text-body" : "font-semibold text-ink")}>{notification.title}</p>
                 <p className="mt-0.5 text-[0.8125rem] text-muted">{notification.body}</p>
                 <p className="mt-1 text-[0.75rem] text-subtle">{new Date(notification.createdAt).toLocaleString("en-GB")}</p>
               </>

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import {
   AdminBreadcrumbs,
@@ -24,9 +24,8 @@ import { dueInWords, paymentKindLabel, paymentMethodLabels, subjectHref } from "
 import { ApiError } from "@/lib/api/client";
 import { getReceivable } from "@/lib/api/finance";
 import { getInvoicingSettings } from "@/lib/api/invoices";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { can } from "@/types/auth";
@@ -67,11 +66,8 @@ const ALLOCATION_COLUMNS: Column[] = [
 export default async function AdminReceivablePage({
   params,
 }: PageProps<"/[locale]/admin/finance/receivables/[id]">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.receivables.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { id } = await params;
   const { path } = await getI18n();

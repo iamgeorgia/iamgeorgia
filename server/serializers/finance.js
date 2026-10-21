@@ -128,6 +128,11 @@ export const toReceivable = (receivable) => ({
     subject: subjectOf(receivable),
     debtor: {
         partner: partnerRef(receivable.debtorPartner),
+        customer: receivable.debtorCustomer
+            ? { id: receivable.debtorCustomer.id, name: receivable.debtorCustomer.name }
+            : receivable.debtorCustomerId
+              ? { id: receivable.debtorCustomerId, name: receivable.debtorName }
+              : null,
         name: receivable.debtorName,
         email: receivable.debtorEmail
     },

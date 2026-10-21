@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError, UnprocessableEntityError } from '../../li
 import { lockRows } from '../../lib/locks.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { deriveStatus } from './ledger.service.js';
+import { syncIndexForReceivableInTx } from '../booking/index.service.js';
 import { onReceivablePaidInTx } from '../invoicing/invoice.service.js';
 
 /**
@@ -236,6 +237,9 @@ const applyPlan = async (tx, input, target, payment, plan) => {
 
         if (target === 'RECEIVABLE') {
             const updated = await tx.receivable.update({ where: { id: row.id }, data });
+
+            // The register shows what is paid: kept in step with the money.
+            await syncIndexForReceivableInTx(tx, row.id);
 
             // Paid in full: the VAT invoice is asked for in the same
             // transaction as the payment that earned it.

@@ -12,16 +12,32 @@ import {
   TextArea,
   TextInput,
 } from "./FormControls";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { updatePackage } from "@/lib/api/packages";
 import { adjustmentKindLabels, adjustmentScopeLabels, adjustmentValueUnit } from "@/lib/admin/packages";
-import { formatMoney, toMinorUnits } from "@/lib/money";
+import { formatBps, formatMoney, toMinorUnits } from "@/lib/money";
 import type { PackageAdjustmentKind, PackageWithChecklist } from "@/types/package";
 
 const KINDS: PackageAdjustmentKind[] = ["NONE", "DISCOUNT_BPS", "FIXED_SELL", "PER_PERSON_FIXED"];
 
 /** Basis points to a percentage string for the form, and back on save. */
 const bpsToPercent = (bps: number): string => String(bps / 100);
+
+/** The saved adjustment in one phrase, for a viewer who may not change it. */
+const adjustmentSummary = (pkg: PackageWithChecklist): string => {
+  const adjustment = pkg.adjustment;
+
+  if (!adjustment || adjustment.kind === "NONE") return "None";
+
+  const amount =
+    adjustment.kind === "DISCOUNT_BPS"
+      ? formatBps(adjustment.value)
+      : formatMoney(adjustment.value, pkg.currency);
+
+  return `${adjustmentKindLabels[adjustment.kind]} · ${amount} · ${adjustmentScopeLabels[adjustment.appliesTo]}`;
+};
 
 /**
  * Everything about a package that is not a slot: what it is called, when it
@@ -34,6 +50,13 @@ const bpsToPercent = (bps: number): string => String(bps / 100);
  */
 export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
+  // The adjustment reprices the hotel inside the package, so the server wants
+  // `pricing.write` on top of `catalogue.write` for those three fields and
+  // refuses the whole PATCH otherwise. Without it they are shown as text and
+  // left out of the body.
+  const canPrice = can("pricing.write");
 
   const [name, setName] = useState(pkg.name);
   const [summary, setSummary] = useState(pkg.summary ?? "");
@@ -97,9 +120,9 @@ export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
         validUntil: validUntil || null,
         sellableFrom: sellableFrom || null,
         sellableUntil: sellableUntil || null,
-        adjustmentKind: kind,
-        adjustmentValue,
-        adjustmentAppliesTo: appliesTo,
+        ...(canPrice
+          ? { adjustmentKind: kind, adjustmentValue, adjustmentAppliesTo: appliesTo }
+          : {}),
       });
 
       setSaved(true);
@@ -119,6 +142,7 @@ export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
       }}
       className="flex flex-col gap-8"
     >
+      <fieldset disabled={!canEdit} className="flex min-w-0 flex-col gap-8">
       <div className="grid gap-4 sm:grid-cols-2">
         <TextInput
           label="Name"
@@ -275,48 +299,55 @@ export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
           back across them so the lines add to the total exactly. A fixed price below the parts&rsquo;
           net cost makes the package unquotable rather than loss-making.
         </p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <SelectInput
-            label="Kind"
-            value={kind}
-            options={KINDS.map((option) => ({ value: option, label: adjustmentKindLabels[option] }))}
-            onChange={(event) => {
-              dirty();
-              setKind(event.target.value as PackageAdjustmentKind);
-              setValue("");
-            }}
-          />
-          {unit !== "none" && (
-            <TextInput
-              label={unit === "percent" ? "Discount (%)" : `Price (${pkg.currency})`}
-              hint={
-                unit === "percent"
-                  ? "10 means ten per cent off the eligible parts."
-                  : "The total the buyer pays, in major units."
-              }
-              inputMode="decimal"
-              value={value}
-              onChange={(event) => {
-                dirty();
-                setValue(event.target.value);
-              }}
-            />
-          )}
-          {kind !== "NONE" && (
+        {canPrice ? (
+          <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <SelectInput
-              label="Applies to"
-              value={appliesTo}
-              options={(["REQUIRED_ONLY", "ALL_ITEMS"] as const).map((scope) => ({
-                value: scope,
-                label: adjustmentScopeLabels[scope],
-              }))}
+              label="Kind"
+              value={kind}
+              options={KINDS.map((option) => ({ value: option, label: adjustmentKindLabels[option] }))}
               onChange={(event) => {
                 dirty();
-                setAppliesTo(event.target.value as "REQUIRED_ONLY" | "ALL_ITEMS");
+                setKind(event.target.value as PackageAdjustmentKind);
+                setValue("");
               }}
             />
-          )}
-        </div>
+            {unit !== "none" && (
+              <TextInput
+                label={unit === "percent" ? "Discount (%)" : `Price (${pkg.currency})`}
+                hint={
+                  unit === "percent"
+                    ? "10 means ten per cent off the eligible parts."
+                    : "The total the buyer pays, in major units."
+                }
+                inputMode="decimal"
+                value={value}
+                onChange={(event) => {
+                  dirty();
+                  setValue(event.target.value);
+                }}
+              />
+            )}
+            {kind !== "NONE" && (
+              <SelectInput
+                label="Applies to"
+                value={appliesTo}
+                options={(["REQUIRED_ONLY", "ALL_ITEMS"] as const).map((scope) => ({
+                  value: scope,
+                  label: adjustmentScopeLabels[scope],
+                }))}
+                onChange={(event) => {
+                  dirty();
+                  setAppliesTo(event.target.value as "REQUIRED_ONLY" | "ALL_ITEMS");
+                }}
+              />
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 flex flex-col gap-3">
+            <p className="text-[0.875rem] text-ink">{adjustmentSummary(pkg)}</p>
+            {canEdit && <ReadOnlyNote needs="pricing.write" what="Changing the adjustment" />}
+          </div>
+        )}
         {pkg.priceFrom && (
           <p className="mt-3 text-[0.75rem] text-subtle">
             Last sampled from price:{" "}
@@ -325,14 +356,19 @@ export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
           </p>
         )}
       </fieldset>
+      </fieldset>
 
       <FormError message={error} />
 
-      <div>
-        <SubmitButton type="submit" busy={busy} saved={saved}>
-          Save details
-        </SubmitButton>
-      </div>
+      {canEdit ? (
+        <div>
+          <SubmitButton type="submit" busy={busy} saved={saved}>
+            Save details
+          </SubmitButton>
+        </div>
+      ) : (
+        <ReadOnlyNote needs="catalogue.write" what="Editing this package" />
+      )}
     </form>
   );
 }

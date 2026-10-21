@@ -14,7 +14,6 @@ export const article = {
   title: "Editing, translating, publishing and deleting a service",
   summary: "The one page a service has: its five fieldsets, its translations, the buttons that put it on and off sale, and the two reasons a delete is refused.",
   category: "services",
-  roles: ["ADMIN"],
   routes: ["/admin/services/[id]"],
   keywords: ["edit service", "slug", "basis", "net", "fixed sell", "currency", "confirmation", "on request", "notice", "quantity", "cancellation terms", "kosher supervision", "certifying authority", "translation", "publish", "archive", "delete", "in package", "has bookings"],
   related: ["sv-services", "pk-parts", "pb-translations", "pb-slugs-and-seo", "rf-dangerous-actions"],

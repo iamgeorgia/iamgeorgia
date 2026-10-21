@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { createManualBooking, updateDesk } from '../services/booking/manual.service.js';
+import { deskUpdateSchema, manualTourBookingSchema } from '../validation/manualBooking.js';
 
 import {
     authenticate,
@@ -141,6 +143,28 @@ partnerTourBookingRoutes.get('/', validate({ query: tourBookingQuerySchema }), a
 export const adminTourBookingRoutes = Router();
 
 adminTourBookingRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ], write: [CAPABILITIES.BOOKINGS_WRITE] }));
+
+/**
+ * A booking made at the desk (manual bookings): by phone, by email, through
+ * another agency, or face to face. The same product, the same confirmation
+ * body, made as the buyer; see `services/booking/manual.service.js`.
+ */
+adminTourBookingRoutes.post('/manual', validate({ body: manualTourBookingSchema }), async (req, res) => {
+    const body = req.valid.body;
+    const result = await createManualBooking(
+        'TOUR',
+        { ...body, booking: { ...body.booking, idempotencyKey: idempotencyKeyFrom(req) ?? body.booking.idempotencyKey } },
+        req.user,
+        req
+    );
+
+    res.status(result.replayed ? 200 : 201).json(toTourBookingDetail(result.booking ?? result.order, req.user));
+});
+
+/** The desk's fields after the fact: who is looking after it, and the notes. */
+adminTourBookingRoutes.patch('/:reference/desk', validate({ params: tourReferenceParamSchema, body: deskUpdateSchema }), async (req, res) => {
+    res.json(toTourBookingDetail(await updateDesk('TOUR', req.valid.params.reference, req.valid.body, req.user, req), req.user));
+});
 
 adminTourBookingRoutes.get('/', validate({ query: tourBookingQuerySchema }), async (req, res) => {
     const { bookings, ...page } = await listTourBookings(req.valid.query, req.user);

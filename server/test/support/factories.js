@@ -1035,7 +1035,7 @@ export const makeTransferBooking = async (
                     windows: [{ fromAt: null, toAt: null, chargeCents: 0, basis: 'FREE', description: 'Free cancellation' }]
                 },
                 confirmedAt: new Date(),
-                source: 'admin',
+                source: 'ADMIN',
                 legs: {
                     create: {
                         legIndex: 0,

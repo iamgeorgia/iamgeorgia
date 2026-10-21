@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { calendarDay, endOfDay, startOfDay } from "@/components/admin/finance/PaymentFormat";
@@ -7,9 +6,7 @@ import { RefundApprovalRequestButton } from "@/components/admin/finance/Approval
 import { PaymentsBrowser } from "@/components/admin/finance/PaymentsBrowser";
 import { RecordPaymentButton } from "@/components/admin/finance/RecordPaymentModal";
 import { listPayments, type PaymentQuery } from "@/lib/api/finance";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 import type { PaymentDirection, PaymentKind, PaymentMethod } from "@/types/finance";
 
@@ -56,11 +53,8 @@ function paymentQueryFromParams(params: Record<string, string | string[] | undef
 
 /** Every payment and refund recorded, in and out, and what each one settled. */
 export default async function AdminPaymentsPage({ searchParams }: PageProps<"/[locale]/admin/finance/payments">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.payments.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const list = await listPayments(paymentQueryFromParams(await searchParams));
 

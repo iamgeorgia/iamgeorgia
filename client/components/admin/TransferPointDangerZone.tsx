@@ -5,6 +5,8 @@ import { AlertTriangle, Loader2, RotateCcw, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { retireTransferPoint, updateTransferPoint } from "@/lib/api/transfers";
 import type { TransferPoint } from "@/types/transfer";
@@ -26,12 +28,18 @@ import type { TransferPoint } from "@/types/transfer";
  */
 export function TransferPointDangerZone({ point }: { point: TransferPoint }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const retired = point.status === "INACTIVE" || point.status === "ARCHIVED";
+
+  // The retire panel is nothing but the action; the retired panel also
+  // explains the state, which a reader still needs.
+  if (!canEdit && !retired) return null;
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -63,19 +71,23 @@ export function TransferPointDangerZone({ point }: { point: TransferPoint }) {
           </p>
         )}
 
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => run(() => updateTransferPoint(point.id, { status: "ACTIVE" }))}
-          className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm border border-line bg-surface px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink/40 hover:text-ink disabled:opacity-60"
-        >
-          {busy ? (
-            <Loader2 size={15} className="animate-spin" aria-hidden />
-          ) : (
-            <RotateCcw size={15} aria-hidden />
-          )}
-          Put back in service
-        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => updateTransferPoint(point.id, { status: "ACTIVE" }))}
+            className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm border border-line bg-surface px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink/40 hover:text-ink disabled:opacity-60"
+          >
+            {busy ? (
+              <Loader2 size={15} className="animate-spin" aria-hidden />
+            ) : (
+              <RotateCcw size={15} aria-hidden />
+            )}
+            Put back in service
+          </button>
+        ) : (
+          <ReadOnlyNote className="mt-4" needs="catalogue.write" what="Putting this point back in service" />
+        )}
       </AdminPanel>
     );
   }

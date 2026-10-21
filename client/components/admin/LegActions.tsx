@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
 import { AssignDriverModal } from "./AssignDriverModal";
 import { describeError } from "@/lib/api/client";
 import { cancelLeg, setLegStatus, unassignLeg } from "@/lib/api/dispatch";
@@ -17,12 +18,18 @@ import type { TransferLegStatus } from "@/types/transfer";
  * The status menu lists only what the server says is allowed from here —
  * `allowedTransitions` comes from the same table the API enforces — minus the
  * three moves that have their own buttons.
+ *
+ * Renders nothing for a viewer without `dispatch.write`: every control here
+ * would answer 403, and the leg's status and driver are shown beside it anyway.
  */
 export function LegActions({ leg, compact = false }: { leg: DispatchLeg; compact?: boolean }) {
   const router = useRouter();
+  const can = useCan();
   const [assigning, setAssigning] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  if (!can("dispatch.write")) return null;
 
   const run = async (key: string, call: () => Promise<unknown>) => {
     setBusy(key);

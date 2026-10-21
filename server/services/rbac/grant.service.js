@@ -29,6 +29,8 @@ export const PROTECTED_CAPABILITIES = Object.freeze([
     CAPABILITIES.ROLES_MANAGE,
     CAPABILITIES.SETTINGS_WRITE,
     CAPABILITIES.PARTNER_TEAM_MANAGE,
+    // Selling below the catalogue price: a figure, not a task, and so handed out with a role alone.
+    CAPABILITIES.BOOKINGS_PRICE_OVERRIDE,
     // Deciding on money, and moving it with no second person.
     CAPABILITIES.FINANCE_REFUNDS_APPROVE,
     CAPABILITIES.FINANCE_REFUNDS_EXECUTE,

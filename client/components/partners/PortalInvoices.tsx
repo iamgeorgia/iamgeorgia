@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+import { InvoiceLineDescription } from "@/components/admin/finance/InvoiceLineDescription";
 import { invoiceKindLabels, invoiceStatusLabels, invoiceStatusTone } from "@/lib/admin/finance";
 import { ownInvoicePdfUrl } from "@/lib/api/invoices";
 import { dateTimeFormat } from "@/lib/intl";
@@ -96,6 +97,28 @@ export function PortalInvoices({
                   )}
                 </div>
               </div>
+
+              {invoice.lines.length > 0 && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-[0.8125rem] font-medium text-muted hover:text-ink">
+                    {invoice.lines.length} {invoice.lines.length === 1 ? "line" : "lines"}
+                  </summary>
+                  <ul className="mt-2 divide-y divide-line rounded-sm border border-line">
+                    {invoice.lines.map((line) => (
+                      <li key={line.id} className="flex items-start justify-between gap-3 px-3 py-2.5 text-[0.8125rem]">
+                        <div className="min-w-0">
+                          <InvoiceLineDescription line={line} />
+                          <p className="mt-0.5 text-muted">
+                            {line.quantity}
+                            {typeof line.unitCents === "number" ? ` × ${formatMoney(line.unitCents, invoice.currency)}` : " ×"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-medium text-ink tabular-nums">{formatMoney(line.totalGrossCents, invoice.currency)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </li>
           ))}
         </ul>

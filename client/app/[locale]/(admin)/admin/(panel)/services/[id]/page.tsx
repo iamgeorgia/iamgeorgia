@@ -21,7 +21,7 @@ import { getService, listServiceTranslations } from "@/lib/api/services";
 import { listTourCancellationPolicies } from "@/lib/api/tours";
 import { serviceBasisLabels, serviceCategoryLabels } from "@/lib/admin/services";
 import { getI18n } from "@/lib/i18n/server";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Service" };
@@ -37,6 +37,7 @@ export const metadata: Metadata = { title: "Service" };
 export default async function AdminServicePage({
   params,
 }: PageProps<"/[locale]/admin/services/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 

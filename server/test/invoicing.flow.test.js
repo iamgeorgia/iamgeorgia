@@ -626,12 +626,31 @@ describe('invoicing flows', { skip: dbAvailable ? false : 'Postgres is not reach
 
         const { invoice } = await issue(draft.id);
 
+        // The real API refuses a send with a 200 and an error body (an
+        // unverified sender, seen 2026-10-21): the document keeps its status
+        // and shows the provider's words; nothing is retried.
+        stub.failNext(200, {
+            body: { status: 'error', message: 'The sender’s email address has not been verified.' },
+            path: `/invoices/${invoice.externalId}/send_by_email.json`,
+            method: 'POST'
+        });
+        const refused = await request(app).post(`/api/admin/invoices/${draft.id}/send`).set('Cookie', cookies.ACCOUNTANT).send({});
+        assert.equal(refused.status, 202, JSON.stringify(refused.body));
+        const [handled] = await run(TOPICS.INVOICE_SEND_REQUESTED, draft.id);
+        assert.equal(handled, true, 'a refusal is final, not retried');
+        const after = await prisma.invoice.findUnique({ where: { id: draft.id } });
+        assert.equal(after.status, 'ISSUED');
+        assert.match(after.syncError, /sender’s email address has not been verified/);
+        assert.equal(stub.invoices.get(invoice.externalId).sent_to, undefined);
+
         const send = await request(app).post(`/api/admin/invoices/${draft.id}/send`).set('Cookie', cookies.ACCOUNTANT).send({ to: 'accounts@caucasus.test' });
         assert.equal(send.status, 202, JSON.stringify(send.body));
         const [sent] = await run(TOPICS.INVOICE_SEND_REQUESTED, draft.id);
         assert.equal(sent, true);
         assert.equal(stub.invoices.get(invoice.externalId).sent_to, 'accounts@caucasus.test');
-        assert.equal((await prisma.invoice.findUnique({ where: { id: draft.id } })).status, 'SENT');
+        const done = await prisma.invoice.findUnique({ where: { id: draft.id } });
+        assert.equal(done.status, 'SENT');
+        assert.equal(done.syncError, null, 'a send that went clears the refusal');
 
         const duplicate = await request(app).post(`/api/admin/finance/receivables/${booking.receivable.id}/invoices`).set('Cookie', cookies.ACCOUNTANT).send({ kind: 'PROFORMA' });
         assert.equal(duplicate.status, 409);

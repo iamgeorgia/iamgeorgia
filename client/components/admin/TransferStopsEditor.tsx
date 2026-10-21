@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowDown, ArrowUp, Check, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { apiFetch, describeError } from "@/lib/api/client";
 import type { TransferPoint, TransferRouteWithChecklist } from "@/types/transfer";
 
@@ -32,6 +34,8 @@ export function TransferStopsEditor({
   points: TransferPoint[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [stops, setStops] = useState<Draft[]>(() =>
     route.stops.map((stop) => ({ pointId: stop.point.id, dwellMinutes: stop.dwellMinutes })),
@@ -99,50 +103,58 @@ export function TransferStopsEditor({
               {byId.get(stop.pointId)?.name ?? stop.pointId}
             </span>
 
-            <label className="flex items-center gap-2">
-              <span className="text-[0.75rem] text-muted">Wait</span>
-              <input
-                type="number"
-                min={0}
-                max={1440}
-                value={stop.dwellMinutes}
-                onChange={(event) => {
-                  const next = [...stops];
-                  next[index] = {
-                    ...stop,
-                    dwellMinutes: Math.max(0, Number(event.target.value) || 0),
-                  };
-                  setStops(next);
-                  setSaved(false);
-                }}
-                aria-label={`Minutes waiting at ${byId.get(stop.pointId)?.name ?? "this stop"}`}
-                className="h-8 w-20 rounded-sm border border-line bg-surface px-2 text-end text-[0.8125rem] tabular-nums focus:border-ink focus:outline-none"
-              />
-              <span className="text-[0.75rem] text-muted">min</span>
-            </label>
+            {canEdit ? (
+              <>
+                <label className="flex items-center gap-2">
+                  <span className="text-[0.75rem] text-muted">Wait</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={stop.dwellMinutes}
+                    onChange={(event) => {
+                      const next = [...stops];
+                      next[index] = {
+                        ...stop,
+                        dwellMinutes: Math.max(0, Number(event.target.value) || 0),
+                      };
+                      setStops(next);
+                      setSaved(false);
+                    }}
+                    aria-label={`Minutes waiting at ${byId.get(stop.pointId)?.name ?? "this stop"}`}
+                    className="h-8 w-20 rounded-sm border border-line bg-surface px-2 text-end text-[0.8125rem] tabular-nums focus:border-ink focus:outline-none"
+                  />
+                  <span className="text-[0.75rem] text-muted">min</span>
+                </label>
 
-            <span className="flex items-center gap-1">
-              <IconButton
-                label="Move up"
-                icon={ArrowUp}
-                onClick={() => move(index, -1)}
-                disabled={index === 0}
-              />
-              <IconButton
-                label="Move down"
-                icon={ArrowDown}
-                onClick={() => move(index, 1)}
-                disabled={index === stops.length - 1}
-              />
-              <IconButton
-                label="Remove"
-                icon={Trash2}
-                onClick={() => {
-                  setStops(stops.filter((_, entry) => entry !== index));
-                  setSaved(false);
-                }}
-              />
-            </span>
+                <span className="flex items-center gap-1">
+                  <IconButton
+                    label="Move up"
+                    icon={ArrowUp}
+                    onClick={() => move(index, -1)}
+                    disabled={index === 0}
+                  />
+                  <IconButton
+                    label="Move down"
+                    icon={ArrowDown}
+                    onClick={() => move(index, 1)}
+                    disabled={index === stops.length - 1}
+                  />
+                  <IconButton
+                    label="Remove"
+                    icon={Trash2}
+                    onClick={() => {
+                      setStops(stops.filter((_, entry) => entry !== index));
+                      setSaved(false);
+                    }}
+                  />
+                </span>
+              </>
+            ) : (
+              <span className="text-[0.75rem] text-muted tabular-nums">
+                Wait {stop.dwellMinutes} min
+              </span>
+            )}
           </li>
         ))}
 
@@ -152,57 +164,65 @@ export function TransferStopsEditor({
         </li>
       </ol>
 
-      <div className="mt-5 flex flex-wrap items-end gap-3">
-        <label className="min-w-56 flex-1">
-          <span className="mb-1.5 block text-[0.75rem] font-semibold text-muted">Add a stop</span>
-          <select
-            value={adding}
-            onChange={(event) => setAdding(event.target.value)}
-            className="h-10 w-full rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
-          >
-            <option value="">Choose a place…</option>
-            {available.map((point) => (
-              <option key={point.id} value={point.id}>
-                {point.name} — {point.region}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button
-          type="button"
-          disabled={!adding}
-          onClick={() => {
-            setStops([...stops, { pointId: adding, dwellMinutes: 30 }]);
-            setAdding("");
-            setSaved(false);
-          }}
-          className="inline-flex h-10 items-center gap-2 rounded-sm border border-ink/25 px-4 text-[0.8125rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-surface-soft disabled:opacity-50"
-        >
-          <Plus size={15} aria-hidden />
-          Add
-        </button>
-      </div>
-
-      {error && (
-        <p
-          role="alert"
-          className="mt-4 flex items-start gap-2 rounded-sm border border-error/40 bg-surface px-4 py-3 text-[0.875rem] text-error-text"
-        >
-          <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-          {error}
-        </p>
+      {!canEdit && (
+        <ReadOnlyNote className="mt-5" needs="catalogue.write" what="Changing the stops" />
       )}
 
-      <button
-        type="button"
-        onClick={save}
-        disabled={saving}
-        className="mt-5 inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
-      >
-        {saved && <Check size={15} aria-hidden />}
-        {saving ? "Saving…" : saved ? "Saved" : "Save stops"}
-      </button>
+      {canEdit && (
+        <>
+          <div className="mt-5 flex flex-wrap items-end gap-3">
+            <label className="min-w-56 flex-1">
+              <span className="mb-1.5 block text-[0.75rem] font-semibold text-muted">Add a stop</span>
+              <select
+                value={adding}
+                onChange={(event) => setAdding(event.target.value)}
+                className="h-10 w-full rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
+              >
+                <option value="">Choose a place…</option>
+                {available.map((point) => (
+                  <option key={point.id} value={point.id}>
+                    {point.name} — {point.region}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              disabled={!adding}
+              onClick={() => {
+                setStops([...stops, { pointId: adding, dwellMinutes: 30 }]);
+                setAdding("");
+                setSaved(false);
+              }}
+              className="inline-flex h-10 items-center gap-2 rounded-sm border border-ink/25 px-4 text-[0.8125rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-surface-soft disabled:opacity-50"
+            >
+              <Plus size={15} aria-hidden />
+              Add
+            </button>
+          </div>
+
+          {error && (
+            <p
+              role="alert"
+              className="mt-4 flex items-start gap-2 rounded-sm border border-error/40 bg-surface px-4 py-3 text-[0.875rem] text-error-text"
+            >
+              <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
+              {error}
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="mt-5 inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
+          >
+            {saved && <Check size={15} aria-hidden />}
+            {saving ? "Saving…" : saved ? "Saved" : "Save stops"}
+          </button>
+        </>
+      )}
     </div>
   );
 }

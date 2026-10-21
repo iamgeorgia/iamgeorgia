@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { AlertTriangle, Clock, ListFilter, Wallet } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
@@ -7,10 +6,7 @@ import { StatCard } from "@/components/admin/StatCard";
 import { PayablesBrowser } from "@/components/admin/finance/PayablesBrowser";
 import { UNSETTLED, payableQueryFromParams } from "@/components/admin/finance/PayableFormat";
 import { listPayables } from "@/lib/api/finance";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Payables" };
 
@@ -22,11 +18,8 @@ export const metadata: Metadata = { title: "Payables" };
  * shown a screen of refusals.
  */
 export default async function AdminPayablesPage({ searchParams }: PageProps<"/[locale]/admin/finance/payables">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.payables.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const query = payableQueryFromParams(await searchParams);
 

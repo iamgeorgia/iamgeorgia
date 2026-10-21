@@ -11,7 +11,6 @@ export const article = {
   title: "Getting a package on sale",
   summary: "The four things a package must have before Publish will work, and the two buttons beside it that do not ask first.",
   category: "packages",
-  roles: ["ADMIN"],
   keywords: ["publish", "checklist", "not ready to publish", "go live", "on sale", "blocker", "cover", "required slot", "adjustment"],
   related: ["pk-hub", "pk-parts", "pk-details-pricing", "pk-preview-quote", "md-images", "pb-checklists"],
   blocks: [

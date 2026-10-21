@@ -9,16 +9,21 @@ import {
   AdminPageHeader,
   AdminPanel,
 } from "@/components/admin/AdminPage";
+import { BookingApprovalPanel } from "@/components/admin/BookingApprovalPanel";
+import { BookingDeadlinesPanel } from "@/components/admin/BookingDeadlinesPanel";
+import { BookingDeskPanel } from "@/components/admin/BookingDeskPanel";
+import { BookingPaymentPanel } from "@/components/admin/BookingPaymentPanel";
 import { Cell, DataTable, EmptyRow, Row } from "@/components/admin/DataTable";
 import { TourBookingStatusBadge } from "@/components/admin/StatusBadge";
 import { TourBookingActions } from "@/components/admin/TourBookingActions";
 import { getAdminTourBooking, getTourCancellationQuote } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
-import { formatInstant } from "@/lib/admin/bookings";
+import { bookingSourceLabel, formatInstant, guestTitleLabel } from "@/lib/admin/bookings";
 import { confirmationModeLabels, formatDeparture, formatTourParty } from "@/lib/admin/tours";
 import { formatBps, formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
 import type { TourCancellationQuote } from "@/types/tour";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Tour booking" };
 
@@ -29,6 +34,7 @@ const LINE_LABELS = { ADULT: "Adult", CHILD: "Child", INFANT: "Infant" } as cons
  * live thing on the page is the status, and the three answers beside it.
  */
 export default async function AdminTourBookingPage({ params }: PageProps<"/[locale]/admin/tours/bookings/[reference]">) {
+  await requireScreen();
   const { reference } = await params;
   const { path } = await getI18n();
 
@@ -103,6 +109,7 @@ export default async function AdminTourBookingPage({ params }: PageProps<"/[loca
                 booking.travellers.map((traveller) => (
                   <Row key={traveller.id}>
                     <Cell>
+                      {guestTitleLabel(traveller.title)}
                       {traveller.firstName} {traveller.lastName}
                       {traveller.isLead && <span className="ms-2 text-[0.75rem] text-muted">lead</span>}
                     </Cell>
@@ -172,7 +179,7 @@ export default async function AdminTourBookingPage({ params }: PageProps<"/[loca
                 { label: "Phone", value: booking.leadTravellerPhone ?? "—" },
                 { label: "Pick-up", value: booking.pickupNote ?? "—" },
                 { label: "Requests", value: booking.specialRequests ?? "None" },
-                { label: "Source", value: booking.source },
+                { label: "Source", value: bookingSourceLabel(booking.source) },
                 ...(booking.partner ? [{ label: "Partner", value: `${booking.partner.name} (${booking.partner.reference})` }] : []),
               ]}
             />
@@ -180,6 +187,26 @@ export default async function AdminTourBookingPage({ params }: PageProps<"/[loca
         </div>
 
         <div className="flex flex-col gap-6">
+          {/* The platform's own gate, before the operator is asked. Renders
+              nothing on a booking that never needed it. */}
+          <BookingApprovalPanel
+            product="TOUR"
+            reference={booking.reference}
+            approval={booking.approval}
+            partnerName={booking.partner?.name ?? null}
+          />
+
+          <BookingPaymentPanel payment={booking.payment} currency={booking.currency} />
+
+          <BookingDeadlinesPanel
+            product="TOUR"
+            reference={booking.reference}
+            lastDate={booking.endDate}
+          />
+
+          {/* The desk's fields: staff who may see the buyer only. */}
+          <BookingDeskPanel product="TOUR" reference={booking.reference} desk={booking.desk} currency={booking.currency} />
+
           <AdminPanel title="Actions">
             <TourBookingActions booking={booking} quote={quote} />
           </AdminPanel>

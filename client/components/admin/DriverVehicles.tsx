@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, SubmitButton } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { setDriverVehicles } from "@/lib/api/drivers";
 import { fleetVehicleLabel } from "@/lib/admin/fleet";
@@ -19,6 +21,8 @@ import type { DriverAdmin, FleetVehicleAdmin } from "@/types/driver";
  */
 export function DriverVehicles({ driver, fleet }: { driver: DriverAdmin; fleet: FleetVehicleAdmin[] }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("dispatch.write");
   const [selected, setSelected] = useState<Set<string>>(() => new Set(driver.vehicles.map((car) => car.id)));
   const [primary, setPrimary] = useState<string | null>(
     () => driver.vehicles.find((car) => car.isPrimary)?.id ?? null,
@@ -63,6 +67,7 @@ export function DriverVehicles({ driver, fleet }: { driver: DriverAdmin; fleet: 
       {cars.length === 0 ? (
         <p className="text-[0.875rem] text-muted">No cars in the fleet yet.</p>
       ) : (
+        <fieldset disabled={!canEdit} className="min-w-0">
         <ul className="divide-y divide-line">
           {cars.map((car) => {
             const on = selected.has(car.id);
@@ -95,13 +100,20 @@ export function DriverVehicles({ driver, fleet }: { driver: DriverAdmin; fleet: 
             );
           })}
         </ul>
+        </fieldset>
       )}
 
-      <FormError message={error} />
+      {canEdit ? (
+        <>
+          <FormError message={error} />
 
-      <SubmitButton className="mt-4" busy={busy} saved={saved} onClick={save}>
-        {busy ? "Saving…" : saved ? "Saved" : "Save cars"}
-      </SubmitButton>
+          <SubmitButton className="mt-4" busy={busy} saved={saved} onClick={save}>
+            {busy ? "Saving…" : saved ? "Saved" : "Save cars"}
+          </SubmitButton>
+        </>
+      ) : (
+        <ReadOnlyNote needs="dispatch.write" what="Changing which cars this driver takes" className="mt-4" />
+      )}
     </AdminPanel>
   );
 }

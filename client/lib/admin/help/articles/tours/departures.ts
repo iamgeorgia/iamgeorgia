@@ -12,7 +12,6 @@ export const article = {
   title: "Departures and capacity",
   summary: "Setting how many seats or groups each option has on each date, in ranges rather than one cell at a time.",
   category: "tours",
-  roles: ["ADMIN"],
   routes: ["/admin/tours/[slug]/departures"],
   keywords: ["capacity", "seats", "groups", "calendar", "availability", "blocked", "apply to range", "departure", "sold out", "overbooked"],
   related: ["tr-options-prices", "tr-publish-checklist", "tr-hub", "ht-inventory-pricing"],

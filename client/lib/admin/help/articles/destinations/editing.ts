@@ -18,7 +18,6 @@ export const article = {
   summary:
     "The one form behind a new place and an existing one: the fields, the map pin, what moving a place does to everything inside it, and how deletion is refused.",
   category: "destinations",
-  roles: ["ADMIN"],
   routes: [
     { pattern: "/admin/destinations/new", section: "create" },
     { pattern: "/admin/destinations/[id]", section: "edit" },

@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, Star } from "lucide-react";
@@ -87,7 +88,9 @@ export function DestinationsBrowser({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterDisclosure
+        count={["type", "featured"].filter((key) => { const value = searchParams.get(key); return value && value !== "all"; }).length}
+        lead={
         <label className="relative min-w-56 flex-1">
           <Search
             size={15}
@@ -103,32 +106,35 @@ export function DestinationsBrowser({
             className="h-10 w-full rounded-sm border border-line bg-surface ps-9 pe-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
           />
         </label>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={searchParams.get("type") ?? ""}
+            onChange={(event) => setParam("type", event.target.value)}
+            aria-label="Filter by type"
+            className="h-10 rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-body focus:border-ink focus:outline-none"
+          >
+            <option value="">All types</option>
+            {destinationTypeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={searchParams.get("type") ?? ""}
-          onChange={(event) => setParam("type", event.target.value)}
-          aria-label="Filter by type"
-          className="h-10 rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-body focus:border-ink focus:outline-none"
-        >
-          <option value="">All types</option>
-          {destinationTypeOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={searchParams.get("featured") ?? ""}
-          onChange={(event) => setParam("featured", event.target.value)}
-          aria-label="Filter by featured"
-          className="h-10 rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-body focus:border-ink focus:outline-none"
-        >
-          <option value="">Featured and not</option>
-          <option value="true">Featured only</option>
-          <option value="false">Not featured</option>
-        </select>
-      </div>
+          <select
+            value={searchParams.get("featured") ?? ""}
+            onChange={(event) => setParam("featured", event.target.value)}
+            aria-label="Filter by featured"
+            className="h-10 rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-body focus:border-ink focus:outline-none"
+          >
+            <option value="">Featured and not</option>
+            <option value="true">Featured only</option>
+            <option value="false">Not featured</option>
+          </select>
+        </div>
+      </FilterDisclosure>
 
       <div className="mt-6 rounded-sm border border-line bg-surface">
         <DataTable

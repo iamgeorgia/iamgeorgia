@@ -55,6 +55,7 @@ export async function BookingDetail({ booking }: BookingDetailProps) {
   const { hotelSnapshot: property, currency } = booking;
 
   const statusTone: Record<HotelBookingStatus, string> = {
+    PENDING_APPROVAL: "border-warning/40 bg-warning/10 text-warning-text",
     PENDING: "border-warning/40 bg-warning/10 text-warning-text",
     CONFIRMED: "border-success/40 bg-success/10 text-success",
     CANCELLED: "border-error/40 bg-error/10 text-error-text",
