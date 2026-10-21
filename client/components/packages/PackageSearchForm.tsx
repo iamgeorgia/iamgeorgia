@@ -2,7 +2,7 @@
 
 import { BedDouble, CalendarDays, Minus, Plus, Search, Users } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { todayISO } from "@/lib/booking/stay";
@@ -47,7 +47,7 @@ export function PackageSearchForm({ value, action, party, className }: PackageSe
 
   const [search, setSearch] = useState<PackageSearch>(() => value ?? defaultPackageSearch());
   const [partyOpen, setPartyOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, startTransition] = useTransition();
   const partyRef = useRef<HTMLDivElement>(null);
 
   /** The URL is the source of truth; compared by content, not identity. */
@@ -106,8 +106,11 @@ export function PackageSearchForm({ value, action, party, className }: PackageSe
     if (!isValidPackageSearch(search)) return;
 
     setPartyOpen(false);
-    setSubmitting(true);
-    router.push(path(`${action}${packageSearchQueryString(search)}`));
+    // A transition rather than a flag: the search lands on this same route, so
+    // the form stays mounted and a flag set here was never cleared — the button
+    // stayed disabled after the first search. `submitting` ends once the new
+    // page has rendered.
+    startTransition(() => router.push(path(`${action}${packageSearchQueryString(search)}`)));
   };
 
   const field = "flex flex-col gap-1.5 px-4 py-3.5";

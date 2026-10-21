@@ -45,6 +45,7 @@ export default async function AdminTransferBookingsPage({
   ]);
 
   // Summed in the database, per currency, largest first — not over a page.
+  // Absent for a role that may work the register but not see its totals.
   const [leading, ...otherCurrencies] = summary?.confirmedValue.byCurrency ?? [];
   const revenue = leading ?? { amountCents: 0, currency: "GEL" };
 

@@ -97,10 +97,15 @@ export function Modal({
     const handleKeyDown = (event: KeyboardEvent) => onKeyDown(event);
     document.addEventListener("keydown", handleKeyDown);
 
-    // Move focus into the dialog once it has mounted.
+    // Move focus into the dialog once it has mounted: to the field the caller
+    // marked with `data-autofocus` (a dialog that exists to collect one answer),
+    // otherwise to the first focusable element — the close button.
     const frame = requestAnimationFrame(() => {
+      const panel = panelRef.current;
       const target =
-        panelRef.current?.querySelector<HTMLElement>(FOCUSABLE) ?? panelRef.current;
+        panel?.querySelector<HTMLElement>("[data-autofocus]") ??
+        panel?.querySelector<HTMLElement>(FOCUSABLE) ??
+        panel;
       target?.focus();
     });
 

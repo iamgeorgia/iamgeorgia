@@ -109,11 +109,12 @@ export function matchesFilters(hotel: Hotel, filters: HotelFilterState): boolean
   if (filters.maxPrice !== null && hotel.priceFrom > 0 && hotel.priceFrom > filters.maxPrice) {
     return false;
   }
-  if (
-    filters.amenities.length &&
-    !filters.amenities.every((amenity) => hotel.amenities.includes(amenity))
-  ) {
-    return false;
+  // Matched on exact codes, against the unfiltered list. "Free parking" asks
+  // for `freeParking`; a property with only `parking` — a car park, usually
+  // paid — does not answer it, wherever either code sits in the array.
+  if (filters.amenities.length) {
+    const codes = hotel.amenityCodes ?? hotel.amenities;
+    if (!filters.amenities.every((amenity) => codes.includes(amenity))) return false;
   }
   // A property with no kosher record fails every kosher filter, which is the
   // point: absence of the record means the property does not offer kosher
@@ -135,7 +136,7 @@ export function matchesFilters(hotel: Hotel, filters: HotelFilterState): boolean
  *
  * A chip no property in the list satisfies is not a filter, it is a guaranteed
  * empty state — and the static vocabularies behind these rows are deliberately
- * wider than any one page: five property types, fourteen amenities, six kosher
+ * wider than any one page: five property types, eight amenity chips, six kosher
  * facilities. So each row is cut to what is in front of the visitor, and a row
  * left with nothing to choose between is not drawn at all.
  */
@@ -155,7 +156,6 @@ export interface HotelFilterFacets {
 export function buildFacets(hotels: Hotel[]): HotelFilterFacets {
   const destinations = new Map<string, string>();
   const types = new Set<string>();
-  const amenities = new Set<string>();
   const codes = new Set<string>();
   const prices: number[] = [];
   let offersKosher = false;
@@ -166,7 +166,6 @@ export function buildFacets(hotels: Hotel[]): HotelFilterFacets {
       destinations.set(hotel.destinationSlug, hotel.location || hotel.destinationSlug);
     }
     types.add(hotel.propertyType);
-    for (const amenity of hotel.amenities) amenities.add(amenity);
     for (const code of hotel.amenityCodes ?? hotel.amenities) codes.add(code);
     if (hotel.priceFrom > 0) prices.push(hotel.priceFrom);
     if (hotel.kosher?.offersKosher) offersKosher = true;
@@ -187,7 +186,7 @@ export function buildFacets(hotels: Hotel[]): HotelFilterFacets {
     // designed lists, and reshuffling them per page would make the panel feel
     // like it moves under the cursor.
     propertyTypes: propertyTypes.filter((type) => types.has(type)),
-    amenities: amenityFilters.filter((amenity) => amenities.has(amenity)),
+    amenities: amenityFilters.filter((amenity) => codes.has(amenity)),
     scores: SCORE_OPTIONS.filter((score) => straddles((hotel) => hotel.guestScore, score)),
     stars: STAR_OPTIONS.filter((star) => straddles((hotel) => hotel.starRating, star)),
     kosherFacilities: KOSHER_FACILITY_FILTERS.filter((code) => codes.has(code)),

@@ -154,70 +154,79 @@ function ItemActions({
           title={`Decline ${item.label}`}
           size="sm"
         >
-          {/*
-            Which of the two declines this is decides how much of the trip
-            survives, so it is stated before the reason box rather than after
-            it. The server applies the rule either way; the operator should
-            not learn which one they chose from the result screen.
-          */}
-          <p className="flex items-start gap-2.5 text-[0.875rem] text-body">
-            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning-text" aria-hidden />
-            {item.required ? (
-              <span>
-                This is a <span className="font-semibold text-ink">required</span> part. Declining
-                it cancels the whole order at no charge — the failure is the supplier&apos;s, not
-                the buyer&apos;s — and every other part is released with it.
-              </span>
-            ) : (
-              <span>
-                This is an <span className="font-semibold text-ink">optional</span> part. Declining
-                it drops this part at no charge and the order&apos;s total shrinks to what
-                survives. The rest of the trip is untouched.
-              </span>
-            )}
-          </p>
-
-          <label className="mt-5 block text-[0.8125rem] font-medium text-ink">
-            Why it cannot run
-            <textarea
-              value={reason}
-              rows={3}
-              maxLength={500}
-              onChange={(event) => setReason(event.target.value)}
-              className={area}
-            />
-          </label>
-          <p className="mt-1 text-[0.75rem] text-muted">
-            Required. The buyer and the agency see this word for word.
-          </p>
-
-          {error && (
-            <p role="alert" className="mt-4 flex items-start gap-2 text-[0.8125rem] text-error-text">
-              <AlertCircle size={15} className="mt-0.5 shrink-0" aria-hidden />
-              {error}
+          <div className="px-6 pt-4 pb-6">
+            {/*
+              Which of the two declines this is decides how much of the trip
+              survives, so it is stated before the reason box rather than
+              after it. The server applies the rule either way; the operator
+              should not learn which one they chose from the result screen.
+            */}
+            <p className="flex items-start gap-2.5 text-[0.875rem] text-body">
+              <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning-text" aria-hidden />
+              {item.required ? (
+                <span>
+                  This is a <span className="font-semibold text-ink">required</span> part.
+                  Declining it cancels the whole order at no charge — the failure is the
+                  supplier&apos;s, not the buyer&apos;s — and every other part is released with it.
+                </span>
+              ) : (
+                <span>
+                  This is an <span className="font-semibold text-ink">optional</span> part.
+                  Declining it drops this part at no charge and the order&apos;s total shrinks to
+                  what survives. The rest of the trip is untouched.
+                </span>
+              )}
             </p>
-          )}
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              disabled={busy !== null || reason.trim().length === 0}
-              onClick={() =>
-                run("decline", () => declineOrderItem(reference, item.slotIndex, reason.trim()))
-              }
-              className={cn(button, "h-10 border-transparent bg-error px-4 text-white hover:bg-error/90")}
-            >
-              {busy === "decline" && <Loader2 size={13} className="animate-spin" aria-hidden />}
-              {item.required ? "Decline and cancel the order" : "Decline this part"}
-            </button>
-            <button
-              type="button"
-              disabled={busy !== null}
-              onClick={() => setDialog(null)}
-              className={cn(button, "h-10 border-ink/20 px-4 text-ink hover:border-ink")}
-            >
-              Keep it
-            </button>
+            <label className="mt-5 block text-[0.8125rem] font-medium text-ink">
+              Why it cannot run
+              <textarea
+                value={reason}
+                rows={3}
+                maxLength={500}
+                onChange={(event) => setReason(event.target.value)}
+                className={area}
+                data-autofocus
+              />
+            </label>
+            <p className="mt-1 text-[0.75rem] text-muted">
+              Required. The buyer and the agency see this word for word.
+            </p>
+
+            {error && (
+              <p
+                role="alert"
+                className="mt-4 flex items-start gap-2 text-[0.8125rem] text-error-text"
+              >
+                <AlertCircle size={15} className="mt-0.5 shrink-0" aria-hidden />
+                {error}
+              </p>
+            )}
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                disabled={busy !== null || reason.trim().length === 0}
+                onClick={() =>
+                  run("decline", () => declineOrderItem(reference, item.slotIndex, reason.trim()))
+                }
+                className={cn(
+                  button,
+                  "h-10 border-transparent bg-error px-4 text-white hover:bg-error/90",
+                )}
+              >
+                {busy === "decline" && <Loader2 size={13} className="animate-spin" aria-hidden />}
+                {item.required ? "Decline and cancel the order" : "Decline this part"}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => setDialog(null)}
+                className={cn(button, "h-10 border-ink/20 px-4 text-ink hover:border-ink")}
+              >
+                Keep it
+              </button>
+            </div>
           </div>
         </Modal>
       </>
@@ -242,92 +251,100 @@ function ItemActions({
         title={`Cancel ${item.label}`}
         size="sm"
       >
-        {/*
-          A buyer is refused a required part (409 REQUIRED_COMPONENT) because
-          keeping the discounted extras without the hotel is the arbitrage the
-          package adjustment exists to prevent. Staff may override it, so the
-          button is here — with the sentence that says what it is.
-        */}
-        {item.required && (
-          <p className="flex items-start gap-2.5 text-[0.875rem] text-body">
-            <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning-text" aria-hidden />
-            <span>
-              This part is <span className="font-semibold text-ink">required</span>. A partner
-              cannot drop it on its own; you can. The rest of the trip stays sold, and its share of
-              the package discount is forfeited below.
-            </span>
-          </p>
-        )}
+        <div className="px-6 pt-4 pb-6">
+          {/*
+            A buyer is refused a required part (409 REQUIRED_COMPONENT) because
+            keeping the discounted extras without the hotel is the arbitrage
+            the package adjustment exists to prevent. Staff may override it, so
+            the button is here — with the sentence that says what it is.
+          */}
+          {item.required && (
+            <p className="mb-4 flex items-start gap-2.5 text-[0.875rem] text-body">
+              <TriangleAlert size={16} className="mt-0.5 shrink-0 text-warning-text" aria-hidden />
+              <span>
+                This part is <span className="font-semibold text-ink">required</span>. A partner
+                cannot drop it on its own; you can. The rest of the trip stays sold, and its share
+                of the package discount is forfeited below.
+              </span>
+            </p>
+          )}
 
-        {line ? (
-          <dl className="mt-4 space-y-1.5 rounded-sm bg-surface-soft p-3 text-[0.8125rem]">
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted">Cancellation charge</dt>
-              <dd className="font-medium text-ink tabular-nums">
-                {formatMoney(line.chargeCents, currency)}
-              </dd>
-            </div>
-            <div className="flex justify-between gap-3">
-              <dt className="text-muted">Refund to the buyer</dt>
-              <dd className="font-medium text-ink tabular-nums">
-                {formatMoney(line.refundCents, currency)}
-              </dd>
-            </div>
-            {line.clawbackCents > 0 && (
-              <div className="flex justify-between gap-3 border-t border-line pt-1.5">
-                <dt className="text-muted">Discount forfeited</dt>
-                <dd className="tabular-nums text-body">
-                  {formatMoney(line.clawbackCents, currency)}
+          {line ? (
+            <dl className="space-y-1.5 rounded-sm bg-surface-soft p-3 text-[0.8125rem]">
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Cancellation charge</dt>
+                <dd className="font-medium text-ink tabular-nums">
+                  {formatMoney(line.chargeCents, currency)}
                 </dd>
               </div>
-            )}
-          </dl>
-        ) : (
-          <p className="mt-4 text-[0.8125rem] text-muted">
-            Nothing is quoted for this part, so cancelling it charges nothing.
-          </p>
-        )}
+              <div className="flex justify-between gap-3">
+                <dt className="text-muted">Refund to the buyer</dt>
+                <dd className="font-medium text-ink tabular-nums">
+                  {formatMoney(line.refundCents, currency)}
+                </dd>
+              </div>
+              {line.clawbackCents > 0 && (
+                <div className="flex justify-between gap-3 border-t border-line pt-1.5">
+                  <dt className="text-muted">Discount forfeited</dt>
+                  <dd className="tabular-nums text-body">
+                    {formatMoney(line.clawbackCents, currency)}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          ) : (
+            <p className="text-[0.8125rem] text-muted">
+              Nothing is quoted for this part, so cancelling it charges nothing.
+            </p>
+          )}
 
-        <label className="mt-5 block text-[0.8125rem] font-medium text-ink">
-          Reason (optional)
-          <textarea
-            value={reason}
-            rows={3}
-            maxLength={500}
-            onChange={(event) => setReason(event.target.value)}
-            className={area}
-          />
-        </label>
+          <label className="mt-5 block text-[0.8125rem] font-medium text-ink">
+            Reason (optional)
+            <textarea
+              value={reason}
+              rows={3}
+              maxLength={500}
+              onChange={(event) => setReason(event.target.value)}
+              className={area}
+            />
+          </label>
 
-        {error && (
-          <p role="alert" className="mt-4 flex items-start gap-2 text-[0.8125rem] text-error-text">
-            <AlertCircle size={15} className="mt-0.5 shrink-0" aria-hidden />
-            {error}
-          </p>
-        )}
+          {error && (
+            <p
+              role="alert"
+              className="mt-4 flex items-start gap-2 text-[0.8125rem] text-error-text"
+            >
+              <AlertCircle size={15} className="mt-0.5 shrink-0" aria-hidden />
+              {error}
+            </p>
+          )}
 
-        <div className="mt-6 flex flex-wrap gap-3">
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() =>
-              run("cancel", () =>
-                cancelOrderItemAsAdmin(reference, item.slotIndex, reason.trim() || undefined),
-              )
-            }
-            className={cn(button, "h-10 border-transparent bg-error px-4 text-white hover:bg-error/90")}
-          >
-            {busy === "cancel" && <Loader2 size={13} className="animate-spin" aria-hidden />}
-            Cancel this part
-          </button>
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => setDialog(null)}
-            className={cn(button, "h-10 border-ink/20 px-4 text-ink hover:border-ink")}
-          >
-            Keep it
-          </button>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() =>
+                run("cancel", () =>
+                  cancelOrderItemAsAdmin(reference, item.slotIndex, reason.trim() || undefined),
+                )
+              }
+              className={cn(
+                button,
+                "h-10 border-transparent bg-error px-4 text-white hover:bg-error/90",
+              )}
+            >
+              {busy === "cancel" && <Loader2 size={13} className="animate-spin" aria-hidden />}
+              Cancel this part
+            </button>
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => setDialog(null)}
+              className={cn(button, "h-10 border-ink/20 px-4 text-ink hover:border-ink")}
+            >
+              Keep it
+            </button>
+          </div>
         </div>
       </Modal>
     </>

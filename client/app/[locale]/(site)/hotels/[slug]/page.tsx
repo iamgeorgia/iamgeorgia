@@ -8,6 +8,7 @@ import { RoomOffers } from "@/components/booking/RoomOffers";
 import { StayPanel } from "@/components/booking/StayPanel";
 import { StaySearchForm } from "@/components/booking/StaySearchForm";
 import { HotelAmenities } from "@/components/hotels/HotelAmenities";
+import { HotelLanguages } from "@/components/hotels/HotelLanguages";
 import { HotelPolicies } from "@/components/hotels/HotelPolicies";
 import { HotelReviews } from "@/components/hotels/HotelReviews";
 import { HotelSectionNav } from "@/components/hotels/HotelSectionNav";
@@ -40,6 +41,8 @@ import { socialImage } from "@/lib/seo/social";
 import { formatMoney } from "@/lib/money";
 import { formatPrice } from "@/lib/utils";
 import { adaptHotelDetail } from "@/lib/site/hotelAdapter";
+import { facilityViews } from "@/lib/hotels/facilities";
+import { staffLanguages } from "@/lib/hotels/languages";
 import { stayWindowIssue, type StayWindowIssue } from "@/lib/booking/errors";
 import type { HotelAvailability, Offer, StayQuery } from "@/types/booking";
 
@@ -47,10 +50,14 @@ import type { HotelAvailability, Offer, StayQuery } from "@/types/booking";
  * Live from the API, which decides the channel: a B2B-only property is a 404
  * on this page for an anonymous visitor and a normal page for a signed-in
  * partner. No static params — the catalogue changes under this route.
+ *
+ * In the page's locale, as the availability call and the catalogue already
+ * ask: the server merges its translations — prose and amenity names — over
+ * the English record and falls back to English field by field.
  */
-const loadHotel = cache(async (slug: string) => {
+const loadHotel = cache(async (slug: string, locale: string) => {
   try {
-    return await getPublicHotel(slug);
+    return await getPublicHotel(slug, { locale });
   } catch (error) {
     if (error instanceof ApiError && error.status === 404) return null;
     throw error;
@@ -104,8 +111,8 @@ const cheapestOffer = (availability: HotelAvailability | null): Offer | null =>
     ) ?? null;
 
 export async function generateMetadata(props: PageProps<"/[locale]/hotels/[slug]">): Promise<Metadata> {
-  const [{ slug }, { t }] = await Promise.all([props.params, getI18n()]);
-  const api = await loadHotel(slug);
+  const [{ slug }, { t, locale }] = await Promise.all([props.params, getI18n()]);
+  const api = await loadHotel(slug, locale);
   if (!api) return notFoundMetadata(t.hotels.notFound);
 
   const hotel = adaptHotelDetail(api);
@@ -144,7 +151,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
   // The certification *facts* are shown to everyone, because they are what the
   // traveller is deciding on.
   const [api, result, session] = await Promise.all([
-    loadHotel(slug),
+    loadHotel(slug, locale),
     stay ? loadAvailability(slug, stay, locale) : null,
     getSession(),
   ]);
@@ -172,6 +179,20 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
     : [];
 
   const hotel = adaptHotelDetail(api);
+
+  /*
+   * Every facility the API sent, labelled once for the grid and the JSON-LD
+   * alike, so the two cannot describe different properties.
+   *
+   * The grid leaves out what the kosher panel below already lists — the same
+   * facility twice on one page reads as two — but only when that panel is
+   * actually drawn; otherwise those rows belong here. The structured data
+   * keeps them: they are on the page either way.
+   */
+  const allFacilities = facilityViews(t, hotel.facilities ?? []);
+  const kosherPanelCodes = new Set(api.kosher?.offersKosher ? (api.kosher.features ?? []) : []);
+  const facilities = allFacilities.filter((facility) => !kosherPanelCodes.has(facility.code));
+  const languages = staffLanguages(hotel.languages, intlLocale);
   const destination = api.destination
     ? { slug: api.destination.slug, name: api.destination.name }
     : null;
@@ -245,7 +266,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
             latitude: api.latitude,
             longitude: api.longitude,
             telephone: api.phone,
-            amenities: api.amenities.map((amenity) => amenity.name),
+            amenities: [...new Set(allFacilities.map((facility) => facility.label))],
             checkIn: api.checkIn.from,
             checkOut: api.checkOut.until,
             // The ten-point guest score the badge shows, and only when there
@@ -317,7 +338,10 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
           `sticky` can only travel within its parent, and in a container of its
           own it had nowhere to go and scrolled away with the page. */}
       <Container className="pt-8 pb-28 lg:pb-32">
-        <HotelSectionNav hasKosher={Boolean(api.kosher?.offersKosher)} />
+        <HotelSectionNav
+          hasKosher={Boolean(api.kosher?.offersKosher)}
+          hasAmenities={facilities.length > 0 || languages.length > 0}
+        />
 
         <div className="mt-12 grid gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
           <div className="min-w-0 lg:col-span-8">
@@ -342,12 +366,32 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
               </ul>
             </section>
 
-            <section id="amenities" className="mt-16 scroll-mt-36 border-t border-line pt-12">
-              <h2 className="type-h2">{t.hotels.facilities}</h2>
-              <div className="mt-8">
-                <HotelAmenities amenities={hotel.amenities} />
-              </div>
-            </section>
+            {/*
+             * Facilities, then the languages the staff speak — each drawn only
+             * when it has something in it. Languages alone do not earn the
+             * Facilities heading: they stand as their own block instead.
+             */}
+            {(facilities.length > 0 || languages.length > 0) && (
+              <section id="amenities" className="mt-16 scroll-mt-36 border-t border-line pt-12">
+                {facilities.length > 0 && (
+                  <>
+                    <h2 className="type-h2">{t.hotels.facilities}</h2>
+                    <div className="mt-8">
+                      <HotelAmenities facilities={facilities} />
+                    </div>
+                  </>
+                )}
+                {languages.length > 0 && (
+                  <div className={facilities.length > 0 ? "mt-10" : undefined}>
+                    <HotelLanguages
+                      heading={t.hotels.staffSpeaks}
+                      languages={languages}
+                      level={facilities.length > 0 ? 3 : 2}
+                    />
+                  </div>
+                )}
+              </section>
+            )}
 
             {/*
              * Kosher, between the facilities and the map.

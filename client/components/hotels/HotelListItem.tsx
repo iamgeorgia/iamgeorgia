@@ -4,12 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { MapPin } from "lucide-react";
 
-import { amenityIcons } from "./amenityIcons";
+import { amenityIcon } from "./amenityIcons";
 import { KosherBadge } from "./KosherBadge";
 import { Button } from "@/components/ui/Button";
 import { ScoreBadge, Stars } from "@/components/ui/Rating";
-import { amenityLabels } from "@/data/amenities";
-import { useLocalePath } from "@/lib/i18n/provider";
+import { amenityLabel, cardAmenityCodes } from "@/lib/hotels/facilities";
+import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import type { Hotel } from "@/types";
 import { cn, formatPrice } from "@/lib/utils";
 
@@ -27,7 +27,11 @@ interface HotelListItemProps {
 export function HotelListItem({ hotel, className, eager }: HotelListItemProps) {
   // Locale-aware, or a Georgian or Hebrew reader is bounced to English on click.
   const path = useLocalePath();
+  const { t } = useI18n();
   const href = path(`/hotels/${hotel.slug}`);
+  // Codes the visitor's dictionary can name first; an unfamiliar one still
+  // fills a slot rather than vanishing. A list row has no API names or icons.
+  const amenityCodes = cardAmenityCodes(t, hotel.amenityCodes ?? hotel.amenities, 4);
 
   return (
     <article
@@ -76,12 +80,12 @@ export function HotelListItem({ hotel, className, eager }: HotelListItemProps) {
           <p className="type-body-sm mt-3 text-body line-clamp-2">{hotel.summary}</p>
 
           <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
-            {hotel.amenities.slice(0, 4).map((amenity) => {
-              const Icon = amenityIcons[amenity];
+            {amenityCodes.map((code) => {
+              const Icon = amenityIcon(code);
               return (
-                <li key={amenity} className="type-caption flex items-center gap-1.5 text-muted">
+                <li key={code} className="type-caption flex items-center gap-1.5 text-muted">
                   <Icon size={13} aria-hidden />
-                  {amenityLabels[amenity]}
+                  {amenityLabel(t, code)}
                 </li>
               );
             })}
