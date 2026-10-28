@@ -304,7 +304,9 @@ describe('orders', { skip: dbAvailable ? false : 'Postgres is not reachable' }, 
         assert.equal(created.status, 201, JSON.stringify(created.body));
 
         const order = await prisma.order.findUnique({ where: { reference: created.body.reference }, include: { items: true } });
-        const [stay, , trek] = order.items;
+        // By kind, not position: the items come back in no promised order.
+        const stay = order.items.find((item) => item.hotelBookingId);
+        const trek = order.items.find((item) => item.tourBookingId);
 
         await assert.rejects(
             prisma.orderItem.create({

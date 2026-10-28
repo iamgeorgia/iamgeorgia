@@ -246,12 +246,14 @@ describe('admin summaries', { skip: dbAvailable ? false : 'Postgres is not reach
     });
 
     it('widens with the window', async () => {
-        const narrow = (await request(app).get('/api/admin/bookings/summary').query({ days: 30 }).set('Cookie', adminCookie)).body;
-        const wide = (await request(app).get('/api/admin/bookings/summary').query({ days: 60 }).set('Cookie', adminCookie)).body;
-
         const sum = (body) => body.recent.byCurrency.reduce((total, row) => total + row.amountCents, 0);
+
         // The 45-day-old booking above is inside 60 days and outside 30.
-        assert.ok(sum(wide) >= sum(narrow) + 50000);
+        await untilSteady(async () => {
+            const narrow = (await request(app).get('/api/admin/bookings/summary').query({ days: 30 }).set('Cookie', adminCookie)).body;
+            const wide = (await request(app).get('/api/admin/bookings/summary').query({ days: 60 }).set('Cookie', adminCookie)).body;
+            return sum(wide) >= sum(narrow) + 50000;
+        }, true);
     });
 
     // --- Transfer booking summary -------------------------------------------

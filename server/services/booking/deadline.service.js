@@ -529,6 +529,12 @@ export const sweepDeadlineReminders = ({ now = new Date() } = {}) =>
                        AND ((d.due_at AT TIME ZONE 'UTC') AT TIME ZONE d.timezone)::date
                            - ((${nowIso}::timestamptz) AT TIME ZONE d.timezone)::date <= ${offsetDays}::int
                        ${scopeSql}
+                       -- A deadline whose booking is being deleted this
+                       -- moment holds its row FOR UPDATE: skipped, rather than
+                       -- read here and gone by the foreign-key check, which
+                       -- fails the whole sweep. KEY SHARE does not wait on a
+                       -- desk request merely updating the row.
+                       FOR KEY SHARE OF d SKIP LOCKED
                     ON CONFLICT (deadline_id, offset_days) DO NOTHING
                     RETURNING deadline_id, offset_days
                 `;

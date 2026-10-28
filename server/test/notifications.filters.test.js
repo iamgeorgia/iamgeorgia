@@ -132,12 +132,16 @@ describe('notification categories, links and dedupe', { skip: dbAvailable ? fals
         assert.ok(count.body.byCategory.FINANCE >= 1);
         assert.ok(count.body.byCategory.BOOKING >= 1);
 
+        const markedAt = new Date();
         const readFinance = await request(app).post('/api/admin/notifications/read-all').set('Cookie', adminCookie).send({ category: 'FINANCE' });
         assert.equal(readFinance.status, 200);
         assert.ok(readFinance.body.count >= 1);
 
+        // Nothing from before the click is left unread. Not the tab's count:
+        // an admin hears of other files' instalments and invoices too, and
+        // one can land a moment after the click.
         const after = await request(app).get('/api/admin/notifications/unread-count').set('Cookie', adminCookie);
-        assert.equal(after.body.byCategory.FINANCE, 0);
+        assert.equal(await prisma.notification.count({ where: { recipientUserId: admin.id, category: 'FINANCE', readAt: null, createdAt: { lte: markedAt } } }), 0);
         assert.ok(after.body.byCategory.BOOKING >= 1, 'the other tab is untouched');
 
         assert.equal((await request(app).get('/api/admin/notifications?category=NOPE').set('Cookie', adminCookie)).status, 400);
