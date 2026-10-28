@@ -56,10 +56,14 @@ describe('admin and partner notifications', { skip: dbAvailable ? false : 'Postg
         management = await makeAdmin(tracker, { role: 'TOUR_OPERATOR' });
 
         // These two must hear nothing but what this file writes for them:
-        // a tour operator dispatches, so the alerts another suite raises at
-        // the same moment would otherwise land in their counts.
+        // a tour operator dispatches, works the booking desk and approves,
+        // and each of those is told about another suite's legs, new bookings,
+        // approvals and deadlines at the same moment — which would otherwise
+        // land in their counts.
         await prisma.userCapabilityOverride.createMany({
-            data: [finance.id, management.id].map((userId) => ({ userId, capability: 'dispatch.write', effect: 'DENY', reason: 'Quiet in this suite' }))
+            data: [finance.id, management.id].flatMap((userId) =>
+                ['dispatch.write', 'bookings.write', 'bookings.approve'].map((capability) => ({ userId, capability, effect: 'DENY', reason: 'Quiet in this suite' }))
+            )
         });
         cookies.ACCOUNTANT = (await signIn(app, finance.email)).cookie;
         cookies.MANAGEMENT = (await signIn(app, management.email)).cookie;

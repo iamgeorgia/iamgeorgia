@@ -1804,7 +1804,12 @@ export const processEvent = async (event) => {
 
         // A cleared error is how a delivered event is told apart from one
         // that gave up: both are processed, both may carry attempts.
-        await prisma.outboxEvent.update({ where: { id: event.id }, data: { processedAt: new Date(), lastError: null } });
+        //
+        // updateMany, here and below: a row deleted while it was handled
+        // (its booking purged, say) updates nothing rather than throwing, so
+        // this keeps its promise not to throw and the drain carries on with
+        // the rest of what it claimed.
+        await prisma.outboxEvent.updateMany({ where: { id: event.id }, data: { processedAt: new Date(), lastError: null } });
 
         return true;
     } catch (err) {
@@ -1813,7 +1818,7 @@ export const processEvent = async (event) => {
 
         logger.error({ err, topic: event.topic, eventId: event.id, attempts }, 'Outbox handler failed');
 
-        await prisma.outboxEvent.update({
+        await prisma.outboxEvent.updateMany({
             where: { id: event.id },
             data: {
                 attempts,

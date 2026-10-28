@@ -548,7 +548,16 @@ export const sweepDeadlineReminders = ({ now = new Date() } = {}) =>
             await enqueueEvent(tx, { topic: TOPICS.DEADLINE_UPCOMING, payload: { deadlineId: claim.deadlineId, offsetDays: claim.offsetDays, policyId: claim.policyId }, entityType: 'BookingDeadline', entityId: claim.deadlineId });
         }
 
-        const missed = await tx.bookingDeadline.updateMany({ where: { status: 'OPEN', dueAt: { lt: now } }, data: { status: 'MISSED' } });
+        // SKIP LOCKED: a desk request closing or moving a deadline at this
+        // moment holds its row, and a plain bulk update would wait on it in
+        // whatever order it met the rows — the other side waiting on one this
+        // sweep already holds is a deadlock, and Postgres kills one of the
+        // two. A row skipped here is still OPEN and past due, so the next
+        // tick marks it, if the desk has not closed it first.
+        const missed = await tx.$executeRaw`
+            UPDATE booking_deadlines SET status = 'MISSED', updated_at = ${new Date()}::timestamp
+             WHERE id IN (SELECT id FROM booking_deadlines WHERE status = 'OPEN' AND due_at < ${now} FOR UPDATE SKIP LOCKED)
+        `;
 
-        return { skipped: false, events: smallest.size, missed: missed.count };
+        return { skipped: false, events: smallest.size, missed };
     });
