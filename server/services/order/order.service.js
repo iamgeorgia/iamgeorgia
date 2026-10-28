@@ -13,6 +13,12 @@ import { addDays, dateOnlyToUtc, toDateOnly, todayInTimezone } from '../../lib/t
 import { readPackageOfferToken } from '../../lib/package/offerToken.js';
 import { readOfferToken } from '../../lib/hotel/offerToken.js';
 import { readTourOfferToken } from '../../lib/tour/offerToken.js';
+import { sourceFor } from '../../lib/booking/source.js';
+import { approvalModeFor, approvalStampsFor } from '../../lib/booking/approval.js';
+import { RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
+import { DESK_INCLUDE, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { syncBookingIndexInTx } from '../booking/index.service.js';
+import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { impliedOrderStatus, LIVE_ITEM_STATUSES, orderMachine } from '../../lib/order/machines.js';
 import { ACTOR } from '../../lib/transfer/machines.js';
 import { isTrade, readsAllBookings } from '../../middleware/auth.js';
@@ -87,6 +93,8 @@ const { OPS, PARTNER, GUEST, SYSTEM } = ACTOR;
 export const orderInclude = {
     partner: { select: { id: true, reference: true, name: true } },
     package: { select: { id: true, slug: true, name: true } },
+    receivable: RECEIVABLE_SUMMARY_SELECT,
+    ...DESK_INCLUDE,
     items: {
         orderBy: { slotIndex: 'asc' },
         include: {
@@ -98,18 +106,19 @@ export const orderInclude = {
     }
 };
 
-const deriveIdempotencyKey = (input) =>
+export const deriveOrderIdempotencyKey = (input) =>
     input.idempotencyKey ??
     createHash('sha256')
         .update([input.packageToken, input.leadGuest.email.toLowerCase(), input.leadGuest.lastName.toLowerCase()].join('|'))
         .digest('base64url');
 
-const actorKind = (viewer) => (can(viewer, CAPABILITIES.BOOKINGS_WRITE) ? OPS : viewer?.partnerId ? PARTNER : viewer ? PARTNER : GUEST);
+export const actorKind = (viewer) =>
+    can(viewer, CAPABILITIES.BOOKINGS_WRITE, CAPABILITIES.BOOKINGS_APPROVE) ? OPS : viewer?.partnerId ? PARTNER : viewer ? PARTNER : GUEST;
 
 /** The child booking an item points at, whichever product it is. */
 export const childOf = (item) => item.hotelBooking ?? item.transferBooking ?? item.tourBooking ?? item.serviceBooking ?? null;
 
-const CHILD_KEY = {
+export const CHILD_KEY = {
     HOTEL_STAY: 'hotelBookingId',
     TRANSFER: 'transferBookingId',
     TOUR: 'tourBookingId',
@@ -118,16 +127,27 @@ const CHILD_KEY = {
 
 // --- prepare -----------------------------------------------------------------
 
-const isGone = (error) =>
+export const isGone = (error) =>
     error instanceof GoneError ||
     error instanceof NotFoundError ||
     (error instanceof ConflictError && ['UNAVAILABLE', 'ALREADY_COMMITTED', 'HOLD_INCONSISTENT', 'HOLD_EXPIRED', 'TOO_SOON'].includes(error.details?.reason)) ||
     (error instanceof UnprocessableEntityError && ['PARTY_SIZE', 'QUANTITY', 'PAST', 'BEYOND_HORIZON'].includes(error.details?.reason));
 
 /** Prepares one slot through its product's own `prepare`, price drift allowed. */
-const prepareSlot = async (slot, component, input, actor, lead) => {
+export const prepareSlot = async (slot, component, input, actor, lead) => {
     const hold = input.holdTokens?.[String(slot.slotIndex)] ?? null;
-    const shared = { specialRequests: input.specialRequests, source: input.source ?? 'web' };
+    // The children inherit the order's channel and its approval mode, so an
+    // order is approved as one: no child decides for itself.
+    const shared = {
+        specialRequests: input.specialRequests,
+        channel: input.channel ?? null,
+        manual: Boolean(input.manual),
+        confirmNow: Boolean(input.confirmNow),
+        // The children know their buyer and their manager; the adjustment, if
+        // any, is the order's business and lives on its items.
+        customerId: input.customerId ?? null,
+        assignedManagerUserId: input.assignedManagerUserId ?? null
+    };
 
     switch (component.componentType) {
         case 'HOTEL_STAY':
@@ -137,6 +157,7 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
                     leadGuest: lead,
                     guests: (input.travellers ?? []).map((traveller) => ({
                         type: traveller.type ?? 'ADULT',
+                        title: traveller.title,
                         firstName: traveller.firstName,
                         lastName: traveller.lastName,
                         age: traveller.age
@@ -153,8 +174,11 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
                     quoteToken: slot.token,
                     leadPassenger: lead,
                     flightNumber: input.flightNumber,
+                    flights: input.flights,
                     pickupAddress: input.pickupAddress,
+                    dropoffAddress: input.dropoffAddress,
                     pickupPlace: input.pickupPlace,
+                    dropoffPlace: input.dropoffPlace,
                     preferredDriverId: input.preferredDriverId,
                     preferredFleetVehicleId: input.preferredFleetVehicleId,
                     ...shared
@@ -185,7 +209,11 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
                     quotedSellCents: slot.sellCents,
                     lead,
                     notes: input.specialRequests,
-                    source: shared.source
+                    channel: shared.channel,
+                    manual: shared.manual,
+                    confirmNow: shared.confirmNow,
+                    customerId: shared.customerId,
+                    assignedManagerUserId: shared.assignedManagerUserId
                 },
                 actor,
                 { strict: false }
@@ -196,7 +224,7 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
 };
 
 /** The shape the kosher validator reads, from a prepared child. */
-const resolvedFromPrepared = async (component, prepared) => {
+export const resolvedFromPrepared = async (component, prepared) => {
     switch (component.componentType) {
         case 'HOTEL_STAY': {
             const hotel = await prisma.hotel.findUnique({ where: { id: prepared.hotel.id }, include: kosherHotelInclude });
@@ -220,7 +248,7 @@ const resolvedFromPrepared = async (component, prepared) => {
     }
 };
 
-const snapshotPackage = (pkg, decoded, slots, kosher) => ({
+export const snapshotPackage = (pkg, decoded, slots, kosher) => ({
     id: pkg.id,
     slug: pkg.slug,
     name: pkg.name,
@@ -259,7 +287,13 @@ const snapshotPackage = (pkg, decoded, slots, kosher) => ({
  * refusal: PRICE_CHANGED listing every drifted slot, UNAVAILABLE listing
  * every slot that went, KOSHER_INELIGIBLE listing every blocker.
  */
-export const prepareOrder = async (input, actor, { now = new Date() } = {}) => {
+/**
+ * One package, prepared: its slots through their products' own `prepare`,
+ * the adjustment allocated, the kosher profile checked. A package order is
+ * one group; a cart (`cart.service.js`) flattens several, beside standalone
+ * items, into one CUSTOM order.
+ */
+export const preparePackageGroup = async (input, actor, { now = new Date() } = {}) => {
     const decoded = readPackageOfferToken(input.packageToken);
     const trade = isTrade(actor);
     const pkg = await findPackageOr404(decoded.packageId, { statuses: ['ACTIVE'], b2cOnly: !trade, access: accessWhere(actor, 'PACKAGE') });
@@ -380,7 +414,7 @@ export const prepareOrder = async (input, actor, { now = new Date() } = {}) => {
     slots.sort((a, b) => rank[a.component.componentType] - rank[b.component.componentType] || String(a.prepared.lockKey ?? '').localeCompare(String(b.prepared.lockKey ?? '')));
 
     return {
-        idempotencyKey: deriveIdempotencyKey(input),
+        idempotencyKey: deriveOrderIdempotencyKey(input),
         pkg,
         decoded,
         party,
@@ -393,9 +427,11 @@ export const prepareOrder = async (input, actor, { now = new Date() } = {}) => {
     };
 };
 
+export const prepareOrder = preparePackageGroup;
+
 // --- confirm -----------------------------------------------------------------
 
-const confirmChildInTx = (tx, entry, childKey, actor, req) => {
+export const confirmChildInTx = (tx, entry, childKey, actor, req) => {
     const { component, prepared } = entry;
 
     switch (component.componentType) {
@@ -411,7 +447,7 @@ const confirmChildInTx = (tx, entry, childKey, actor, req) => {
     }
 };
 
-const childDeadline = (child) => child.requestDeadlineAt ?? null;
+export const childDeadline = (child) => child.requestDeadlineAt ?? null;
 
 /**
  * Recomputes the order's status and deadline from its items. Called after
@@ -465,7 +501,7 @@ export const confirmOrder = async (input, actor, req) => {
     // taken the inventory, so preparing it again would refuse it as
     // UNAVAILABLE — for an order that exists. A replay is a read of the
     // original, and must be answered as one whatever the catalogue says now.
-    const idempotencyKey = deriveIdempotencyKey(input);
+    const idempotencyKey = deriveOrderIdempotencyKey(input);
 
     const existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: orderInclude });
 
@@ -490,10 +526,15 @@ export const confirmOrder = async (input, actor, req) => {
                 await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.totals.sellTotalCents, currency: prepared.pkg.currency }, actor, req);
 
                 const reference = await nextOrderReference(tx);
+                // The platform's wait (OD1) is stamped on the order; the
+                // status itself is rolled up from the items below.
+                const approval = approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) });
+                const { status: _ignored, confirmedAt: _never, ...approvalStamps } = approvalStampsFor(approval);
                 const created = await tx.order.create({
                     data: {
                         reference,
                         status: 'PENDING_CONFIRMATION',
+                        ...approvalStamps,
                         idempotencyKey,
                         partnerId: actor?.partnerId ?? null,
                         bookedByUserId: actor?.id ?? null,
@@ -515,13 +556,15 @@ export const confirmOrder = async (input, actor, req) => {
                         leadPhone: prepared.lead.phone ?? null,
                         specialRequests: input.specialRequests ?? null,
                         packageSnapshot: prepared.snapshot,
-                        source: input.source ?? 'web'
+                        source: sourceFor(actor, input.channel ?? null),
+                        ...deskColumns({ desk: deskFrom(input) }, { adjustment: false })
                     }
                 });
 
                 for (const entry of prepared.slots) {
                     const child = await confirmChildInTx(tx, entry, `${idempotencyKey}:${entry.component.slotIndex}`, actor, req);
                     const requested = child.status === 'PENDING';
+                    const awaiting = child.status === 'PENDING_APPROVAL';
 
                     await tx.orderItem.create({
                         data: {
@@ -530,7 +573,8 @@ export const confirmOrder = async (input, actor, req) => {
                             componentType: entry.component.componentType,
                             label: entry.component.label,
                             required: entry.component.required,
-                            status: requested ? 'REQUESTED' : 'CONFIRMED',
+                            status: awaiting ? 'AWAITING_APPROVAL' : requested ? 'REQUESTED' : 'CONFIRMED',
+                            // Settled at approval for an item still waiting for it.
                             fulfilment: requested ? 'ON_REQUEST' : 'INTERNAL',
                             [CHILD_KEY[entry.component.componentType]]: child.id,
                             netCents: entry.netCents,
@@ -570,11 +614,18 @@ export const confirmOrder = async (input, actor, req) => {
                 await syncOrderReceivableInTx(tx, created.id, actor, req);
 
                 await enqueueEvent(tx, {
-                    topic: status === 'CONFIRMED' ? TOPICS.ORDER_CONFIRMED : TOPICS.ORDER_REQUESTED,
-                    payload: { orderId: created.id },
+                    topic:
+                        status === 'PENDING_APPROVAL'
+                            ? TOPICS.BOOKING_AWAITING_APPROVAL
+                            : status === 'CONFIRMED'
+                              ? TOPICS.ORDER_CONFIRMED
+                              : TOPICS.ORDER_REQUESTED,
+                    payload: status === 'PENDING_APPROVAL' ? { product: 'ORDER', bookingId: created.id } : { orderId: created.id },
                     entityType: AUDIT_ENTITY.order,
                     entityId: created.id
                 });
+
+                await enqueueEvent(tx, { topic: TOPICS.BOOKING_CREATED, payload: { product: 'ORDER', bookingId: created.id }, entityType: AUDIT_ENTITY.order, entityId: created.id });
 
                 return finished;
             },
@@ -660,7 +711,7 @@ export const releaseOrderHolds = async (holdTokens) => {
 
 // --- reads -------------------------------------------------------------------
 
-const assertMayRead = (order, viewer, { email } = {}) => {
+export const assertMayRead = (order, viewer, { email } = {}) => {
     if (readsAllBookings(viewer)) return;
 
     if (viewer?.partnerId) {
@@ -723,6 +774,7 @@ export const listOrders = async (query, viewer) => {
     const { page, pageSize, status, packageId, partnerId, from, to, search } = query;
 
     const where = {
+        ...bookingWhere(query, { order: true, destination: (id) => ({ package: { is: { destinationId: id } } }) }),
         ...(readsAllBookings(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(packageId ? { packageId } : {}),
@@ -743,7 +795,10 @@ export const listOrders = async (query, viewer) => {
         prisma.order.findMany({
             where,
             include: orderInclude,
-            orderBy: status === 'PENDING_CONFIRMATION' ? [{ requestDeadlineAt: 'asc' }, { createdAt: 'desc' }] : { createdAt: 'desc' },
+            orderBy: bookingOrderBy(query.sort, {
+                dateField: 'startDate',
+                fallback: status === 'PENDING_CONFIRMATION' ? [{ requestDeadlineAt: 'asc' }, { createdAt: 'desc' }] : { createdAt: 'desc' }
+            }),
             skip: (page - 1) * pageSize,
             take: pageSize
         })
@@ -1081,6 +1136,15 @@ export const amendOrder = (reference, input, actor, req) =>
             metadata: { fields: Object.keys(data) },
             req
         });
+
+        await enqueueEvent(tx, {
+            topic: TOPICS.BOOKING_MODIFIED,
+            payload: { product: 'ORDER', bookingId: order.id, fields: Object.keys(data), byUserId: actor?.id ?? null },
+            entityType: AUDIT_ENTITY.order,
+            entityId: order.id
+        });
+
+        await syncBookingIndexInTx(tx, 'ORDER', order.id);
 
         return updated;
     });

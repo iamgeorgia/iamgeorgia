@@ -1,5 +1,12 @@
+import { bookingFiltersFromParams } from "./bookingFilters";
 import type { AdminServiceQuery } from "@/lib/api/services";
-import type { ServiceBasis, ServiceCategory, ServiceStatus } from "@/types/service";
+import type {
+  ServiceBasis,
+  ServiceBookingQuery,
+  ServiceBookingStatus,
+  ServiceCategory,
+  ServiceStatus,
+} from "@/types/service";
 
 /**
  * Display vocabulary for the service screens, mirroring `lib/admin/tours.ts`.
@@ -95,6 +102,53 @@ const read = (params: Record<string, string | string[] | undefined>, key: string
 
   return Array.isArray(value) ? value[0] : value;
 };
+
+// --- bookings ---------------------------------------------------------------
+
+/**
+ * PENDING reads as "awaiting confirmation", as on the tour register: an
+ * on-request service the supplier has yet to answer.
+ */
+export const serviceBookingStatusLabels: Record<ServiceBookingStatus, string> = {
+  PENDING_APPROVAL: "Awaiting approval",
+  PENDING: "Awaiting confirmation",
+  CONFIRMED: "Confirmed",
+  CANCELLED: "Cancelled",
+  COMPLETED: "Completed",
+  NO_SHOW: "No show",
+};
+
+export const SERVICE_BOOKING_STATUSES: ServiceBookingStatus[] = [
+  "PENDING_APPROVAL",
+  "PENDING",
+  "CONFIRMED",
+  "CANCELLED",
+  "COMPLETED",
+  "NO_SHOW",
+];
+
+const SERVICE_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+/** "12 Aug 2027" or "12 – 14 Aug 2027 · 3 days" for a multi-day service. */
+export const formatServiceDates = (date: string, endDate: string, days: number): string => {
+  const start = SERVICE_DATE.format(new Date(`${date}T00:00:00Z`));
+  if (endDate === date || days <= 1) return start;
+  return `${start} – ${SERVICE_DATE.format(new Date(`${endDate}T00:00:00Z`))} · ${days} days`;
+};
+
+/** The service bookings register's query, from its URL: its statuses plus the shared keys. */
+export function serviceBookingQueryFromParams(
+  params: Record<string, string | string[] | undefined>,
+): ServiceBookingQuery {
+  const { status, ...shared } = bookingFiltersFromParams(params, { statuses: SERVICE_BOOKING_STATUSES });
+
+  return {
+    ...shared,
+    status: status as ServiceBookingStatus[] | undefined,
+    serviceId: read(params, "serviceId") || undefined,
+    pageSize: 25,
+  };
+}
 
 /** Reads the register query out of the URL, dropping anything unrecognised. */
 export function serviceQueryFromParams(

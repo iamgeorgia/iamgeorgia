@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import {
   AdminBreadcrumbs,
@@ -16,9 +16,9 @@ import { formatFinanceDate, formatFinanceDateTime } from "@/components/admin/fin
 import { invoiceKindLabels, invoiceLanguageLabel, invoiceSourceLabels, taxRateLabel } from "@/lib/admin/finance";
 import { ApiError } from "@/lib/api/client";
 import { getInvoice, getInvoicingSettings } from "@/lib/api/invoices";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { InvoiceLineDescription } from "@/components/admin/finance/InvoiceLineDescription";
+import { getI18n } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
 import { can } from "@/types/auth";
 import type { Invoice, InvoiceChainRef } from "@/types/invoice";
@@ -39,6 +39,7 @@ export async function generateMetadata({
 const LINE_COLUMNS: Column[] = [
   { label: "Description" },
   { label: "Qty", align: "end" },
+  { label: "Unit", align: "end", hideBelow: "lg" },
   { label: "VAT", align: "end" },
   { label: "Amount", align: "end" },
 ];
@@ -47,11 +48,8 @@ const dash = <span className="text-subtle">—</span>;
 
 /** One document: its lines, who it is addressed to, where it sits in its chain, and what can be done to it. */
 export default async function AdminInvoicePage({ params }: PageProps<"/[locale]/admin/finance/invoices/[id]">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "invoices.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { id } = await params;
   const { path } = await getI18n();
@@ -136,13 +134,13 @@ export default async function AdminInvoicePage({ params }: PageProps<"/[locale]/
                 {invoice.lines.map((line) => (
                   <Row key={line.id}>
                     <Cell>
-                      {line.description}
-                      {line.bookingReference && (
-                        <span className="block font-mono text-[0.75rem] text-muted">{line.bookingReference}</span>
-                      )}
+                      <InvoiceLineDescription line={line} />
                     </Cell>
                     <Cell align="end" className="tabular-nums">
                       {line.quantity}
+                    </Cell>
+                    <Cell align="end" hideBelow="lg" className="whitespace-nowrap text-muted tabular-nums">
+                      {typeof line.unitCents === "number" ? money(line.unitCents) : dash}
                     </Cell>
                     <Cell align="end" className="whitespace-nowrap tabular-nums">
                       {taxRateLabel(line.taxRateBps)}
@@ -153,7 +151,7 @@ export default async function AdminInvoicePage({ params }: PageProps<"/[locale]/
                   </Row>
                 ))}
                 <tr className="border-t border-line">
-                  <td colSpan={3} className="px-4 py-3 text-end text-[0.8125rem] font-medium text-muted">
+                  <td colSpan={4} className="px-4 py-3 text-end text-[0.8125rem] font-medium text-muted">
                     Total
                   </td>
                   <td className="px-4 py-3 text-end font-medium whitespace-nowrap text-ink tabular-nums">
@@ -170,13 +168,11 @@ export default async function AdminInvoicePage({ params }: PageProps<"/[locale]/
               {invoice.lines.map((line) => (
                 <li key={line.id} className="flex items-start justify-between gap-3 p-4">
                   <div className="min-w-0 text-[0.8125rem]">
-                    <p className="font-medium text-ink">{line.description}</p>
+                    <InvoiceLineDescription line={line} />
                     <p className="mt-0.5 text-muted">
-                      {line.quantity} × · VAT {taxRateLabel(line.taxRateBps)}
+                      {line.quantity}
+                      {typeof line.unitCents === "number" ? ` × ${money(line.unitCents)}` : " ×"} · VAT {taxRateLabel(line.taxRateBps)}
                     </p>
-                    {line.bookingReference && (
-                      <p className="mt-0.5 font-mono text-[0.75rem] text-muted">{line.bookingReference}</p>
-                    )}
                   </div>
                   <p className="shrink-0 text-[0.875rem] font-medium text-ink tabular-nums">
                     {money(line.totalGrossCents)}

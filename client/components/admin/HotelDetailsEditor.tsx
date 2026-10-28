@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { setHotelAmenities, updateHotel } from "@/lib/api/hotels";
 import { describeError } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
@@ -40,6 +42,8 @@ export function HotelDetailsEditor({
   vocabulary: CatalogueAmenity[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [checkInFrom, setCheckInFrom] = useState(hotel.checkIn.from ?? "");
   const [checkInUntil, setCheckInUntil] = useState(hotel.checkIn.until ?? "");
@@ -187,7 +191,10 @@ export function HotelDetailsEditor({
   const panel = "rounded-sm border border-line bg-surface p-5";
 
   return (
-    <div className="flex flex-col gap-6">
+    // A disabled fieldset switches off every input and amenity toggle beneath
+    // it at once, so a read-only viewer sees the record without being able to
+    // drift it; the Save button is replaced rather than greyed.
+    <fieldset disabled={!canEdit} className="flex min-w-0 flex-col gap-6">
       <section className={panel}>
         <h3 className="font-semibold text-ink">Check-in and check-out</h3>
         <p className={hint}>
@@ -333,28 +340,32 @@ export function HotelDetailsEditor({
         </div>
       </section>
 
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void save()}
-          className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:pointer-events-none disabled:opacity-50"
-        >
-          {busy ? (
-            <Loader2 size={15} className="animate-spin" aria-hidden />
-          ) : (
-            <Save size={15} aria-hidden />
-          )}
-          Save details
-        </button>
-        <p aria-live="polite" className="text-[0.75rem]">
-          {error ? (
-            <span className="text-error-text">{error}</span>
-          ) : (
-            <span className="text-muted">{message}</span>
-          )}
-        </p>
-      </div>
-    </div>
+      {canEdit ? (
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:pointer-events-none disabled:opacity-50"
+          >
+            {busy ? (
+              <Loader2 size={15} className="animate-spin" aria-hidden />
+            ) : (
+              <Save size={15} aria-hidden />
+            )}
+            Save details
+          </button>
+          <p aria-live="polite" className="text-[0.75rem]">
+            {error ? (
+              <span className="text-error-text">{error}</span>
+            ) : (
+              <span className="text-muted">{message}</span>
+            )}
+          </p>
+        </div>
+      ) : (
+        <ReadOnlyNote needs="catalogue.write" what="Editing descriptions, times, policies and amenities" />
+      )}
+    </fieldset>
   );
 }

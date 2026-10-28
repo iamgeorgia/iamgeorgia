@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { bookingFilterFields } from '../lib/listing/bookingFilters.js';
 
 import { amenityCodeField, emailField, nameField, phoneField, textField } from './normalize.js';
+import { titleField } from './normalize.js';
 import { dateOnlyField } from './ratePlan.js';
 
-const BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
+const BOOKING_STATUSES = ['PENDING_APPROVAL', 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
 const GUEST_TYPES = ['ADULT', 'CHILD', 'INFANT'];
 
 /**
@@ -74,6 +76,7 @@ export const confirmBookingSchema = z
 
         leadGuest: z
             .object({
+                title: titleField.optional(),
                 firstName: nameField,
                 lastName: nameField,
                 email: emailField,
@@ -88,6 +91,7 @@ export const confirmBookingSchema = z
                         type: z.enum(GUEST_TYPES).default('ADULT'),
                         firstName: nameField,
                         lastName: nameField,
+                        title: titleField.optional(),
                         age: z.number().int().min(0).max(120).optional()
                     })
                     .strict()
@@ -129,6 +133,7 @@ export const bookingSummaryQuerySchema = z.object({
 });
 
 export const bookingQuerySchema = z.object({
+    ...bookingFilterFields,
     status: z.union([z.enum(BOOKING_STATUSES), z.array(z.enum(BOOKING_STATUSES))]).optional(),
     hotelId: z.string().min(1).optional(),
     partnerId: z.string().min(1).optional(),

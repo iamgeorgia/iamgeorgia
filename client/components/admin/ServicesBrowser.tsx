@@ -6,6 +6,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Plus, Search } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { Cell, DataTable, EmptyRow, Row, type Column } from "./DataTable";
 import { HotelStatusBadge } from "./HotelStatusBadge";
 import { NewServiceForm } from "./NewServiceForm";
@@ -20,6 +21,7 @@ import {
 } from "@/lib/admin/services";
 import { formatMoney } from "@/lib/money";
 import { useLocalePath } from "@/lib/i18n/provider";
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import { cn } from "@/lib/utils";
 import type { CancellationPolicy, DestinationNode } from "@/types/catalogue";
 import type { PartnerSummary } from "@/types/partner";
@@ -68,6 +70,8 @@ export function ServicesBrowser({
   const params = useSearchParams();
   const localePath = useLocalePath();
   const [pending, startTransition] = useTransition();
+  const can = useCan();
+  const canCreate = can("catalogue.write");
   const [search, setSearch] = useState(params.get("search") ?? "");
   const [adding, setAdding] = useState(false);
 
@@ -122,7 +126,9 @@ export function ServicesBrowser({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterDisclosure
+        count={["status", "category"].filter((key) => { const value = params.get(key); return value && value !== "all"; }).length + (kosherOnly ? 1 : 0)}
+        lead={
         <div className="relative min-w-[16rem] flex-1">
           <Search
             size={15}
@@ -138,56 +144,61 @@ export function ServicesBrowser({
             className={cn(field, "w-full ps-9")}
           />
         </div>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={params.get("status") ?? "all"}
+            onChange={(event) => apply({ status: event.target.value })}
+            aria-label="Filter by status"
+            className={field}
+          >
+            <option value="all">All statuses</option>
+            {SERVICE_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {serviceStatusLabels[value]}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={params.get("status") ?? "all"}
-          onChange={(event) => apply({ status: event.target.value })}
-          aria-label="Filter by status"
-          className={field}
-        >
-          <option value="all">All statuses</option>
-          {SERVICE_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {serviceStatusLabels[value]}
-            </option>
-          ))}
-        </select>
+          <select
+            value={params.get("category") ?? "all"}
+            onChange={(event) => apply({ category: event.target.value })}
+            aria-label="Filter by category"
+            className={field}
+          >
+            <option value="all">All categories</option>
+            {SERVICE_CATEGORIES.map((value) => (
+              <option key={value} value={value}>
+                {serviceCategoryLabels[value]}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={params.get("category") ?? "all"}
-          onChange={(event) => apply({ category: event.target.value })}
-          aria-label="Filter by category"
-          className={field}
-        >
-          <option value="all">All categories</option>
-          {SERVICE_CATEGORIES.map((value) => (
-            <option key={value} value={value}>
-              {serviceCategoryLabels[value]}
-            </option>
-          ))}
-        </select>
+          {/* A chip rather than a third select: kosher is on or off, and a
+              two-option dropdown hides a switch behind a click. */}
+          <FilterChip
+            selected={kosherOnly}
+            onClick={() => apply({ kosher: kosherOnly ? null : "true" })}
+          >
+            Kosher only
+          </FilterChip>
 
-        {/* A chip rather than a third select: kosher is on or off, and a
-            two-option dropdown hides a switch behind a click. */}
-        <FilterChip
-          selected={kosherOnly}
-          onClick={() => apply({ kosher: kosherOnly ? null : "true" })}
-        >
-          Kosher only
-        </FilterChip>
+          {canCreate && (
+            <button
+              type="button"
+              onClick={() => setAdding((current) => !current)}
+              aria-expanded={adding}
+              className="ms-auto inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              New service
+            </button>
+          )}
+        </div>
+      </FilterDisclosure>
 
-        <button
-          type="button"
-          onClick={() => setAdding((current) => !current)}
-          aria-expanded={adding}
-          className="ms-auto inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-        >
-          <Plus size={15} aria-hidden />
-          New service
-        </button>
-      </div>
-
-      {adding && (
+      {canCreate && adding && (
         <AdminPanel className="mt-5" title="A new service">
           <NewServiceForm
             destinations={destinations}

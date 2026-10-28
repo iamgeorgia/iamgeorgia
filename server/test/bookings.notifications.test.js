@@ -126,7 +126,7 @@ describe('booking notifications', { skip: dbAvailable ? false : 'Postgres is not
         const queued = await eventsFor(id);
         assert.deepEqual(
             queued.map((event) => event.topic).sort(),
-            ['hotel.booking.confirmed', 'supplier.booking.received'],
+            ['booking.created', 'hotel.booking.confirmed', 'supplier.booking.received'],
             'the voucher and the supplier notice are written with the booking'
         );
         assert.ok(queued.every((event) => event.processedAt === null), 'nothing is sent inside the request');

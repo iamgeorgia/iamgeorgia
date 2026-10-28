@@ -33,6 +33,7 @@ import {
 import { formatBps, formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
 import type { PackageComponent } from "@/types/package";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Package" };
 
@@ -86,6 +87,7 @@ const adjustmentSummary = (pkg: {
 export default async function AdminPackagePage({
   params,
 }: PageProps<"/[locale]/admin/packages/[slug]">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

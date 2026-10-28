@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import {
   AdminBreadcrumbs,
@@ -19,9 +19,8 @@ import {
 import { instalmentKindLabels, paymentKindLabel, paymentMethodLabels, productLabels } from "@/lib/admin/finance";
 import { ApiError } from "@/lib/api/client";
 import { getPayment } from "@/lib/api/finance";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { can } from "@/types/auth";
@@ -48,11 +47,8 @@ const COLUMNS: Column[] = [
 
 /** One payment: every field, who recorded it, and what it settled. */
 export default async function AdminPaymentPage({ params }: PageProps<"/[locale]/admin/finance/payments/[id]">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.payments.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { id } = await params;
   const { path } = await getI18n();

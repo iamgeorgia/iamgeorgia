@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { FormError, SubmitButton } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   TransferVehicleFields,
   vehicleValuesError,
@@ -30,6 +32,8 @@ import type { TransferVehicle } from "@/types/transfer";
  */
 export function TransferVehicleEditor({ vehicle }: { vehicle: TransferVehicle }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [values, setValues] = useState<VehicleValues>(() => vehicleValuesFrom(vehicle));
   const [busy, setBusy] = useState(false);
@@ -71,7 +75,9 @@ export function TransferVehicleEditor({ vehicle }: { vehicle: TransferVehicle })
   };
 
   return (
-    <div>
+    // A disabled fieldset switches off every field at once for a read-only
+    // viewer; the Save button is replaced rather than greyed.
+    <fieldset disabled={!canEdit} className="min-w-0">
       <TransferVehicleFields
         values={values}
         onChange={set}
@@ -81,9 +87,13 @@ export function TransferVehicleEditor({ vehicle }: { vehicle: TransferVehicle })
 
       <FormError message={error} />
 
-      <SubmitButton className="mt-6" busy={busy} saved={saved} onClick={save}>
-        {busy ? "Saving…" : saved ? "Saved" : "Save vehicle class"}
-      </SubmitButton>
-    </div>
+      {canEdit ? (
+        <SubmitButton className="mt-6" busy={busy} saved={saved} onClick={save}>
+          {busy ? "Saving…" : saved ? "Saved" : "Save vehicle class"}
+        </SubmitButton>
+      ) : (
+        <ReadOnlyNote className="mt-6" needs="catalogue.write" what="Editing this vehicle class" />
+      )}
+    </fieldset>
   );
 }

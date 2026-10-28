@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { createManualBooking, updateDesk } from '../services/booking/manual.service.js';
+import { deskUpdateSchema, manualTransferBookingSchema } from '../validation/manualBooking.js';
 
 import {
     authenticate,
@@ -69,8 +71,9 @@ transferBookingRoutes.post('/', validate({ body: confirmTransferSchema }), async
 
     // After the commit, never inside it: the transaction should not be held
     // open for the length of an SMTP conversation, and a mail server that is
-    // down must not roll back a confirmed booking.
-    if (!replayed) {
+    // down must not roll back a confirmed booking. A booking that waits for
+    // approval gets its voucher from the outbox once it is approved.
+    if (!replayed && booking.status === 'CONFIRMED') {
         await sendTransferVoucher(booking);
     }
 
@@ -210,6 +213,33 @@ partnerTransferBookingRoutes.post(
 export const adminTransferBookingRoutes = Router();
 
 adminTransferBookingRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ, CAPABILITIES.DISPATCH_READ], write: [CAPABILITIES.BOOKINGS_CANCEL] }));
+
+/**
+ * A booking made at the desk (manual bookings): by phone, by email, through
+ * another agency, or face to face. The same product, the same confirmation
+ * body, made as the buyer; see `services/booking/manual.service.js`.
+ */
+adminTransferBookingRoutes.post('/manual', requireCapability(CAPABILITIES.BOOKINGS_WRITE), validate({ body: manualTransferBookingSchema }), async (req, res) => {
+    const body = req.valid.body;
+    const result = await createManualBooking(
+        'TRANSFER',
+        { ...body, booking: { ...body.booking, idempotencyKey: idempotencyKeyFrom(req) ?? body.booking.idempotencyKey } },
+        req.user,
+        req
+    );
+
+    // The voucher, as the public route sends it: after the commit, and only once confirmed.
+    if (!result.replayed && result.booking.status === 'CONFIRMED') {
+        await sendTransferVoucher(result.booking);
+    }
+
+    res.status(result.replayed ? 200 : 201).json(toTransferBooking(result.booking ?? result.order, req.user));
+});
+
+/** The desk's fields after the fact: who is looking after it, and the notes. */
+adminTransferBookingRoutes.patch('/:reference/desk', requireCapability(CAPABILITIES.BOOKINGS_WRITE), validate({ params: referenceParamSchema, body: deskUpdateSchema }), async (req, res) => {
+    res.json(toTransferBooking(await updateDesk('TRANSFER', req.valid.params.reference, req.valid.body, req.user, req), req.user));
+});
 
 adminTransferBookingRoutes.get(
     '/',

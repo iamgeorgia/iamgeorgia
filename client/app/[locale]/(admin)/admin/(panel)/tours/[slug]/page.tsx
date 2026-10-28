@@ -26,7 +26,7 @@ import {
 } from "@/lib/admin/tours";
 import { formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 import type { TourBookingSummary } from "@/types/tour";
 
@@ -40,6 +40,7 @@ export const metadata: Metadata = { title: "Tour" };
  * exactly what stands between a draft and going on sale.
  */
 export default async function AdminTourPage({ params }: PageProps<"/[locale]/admin/tours/[slug]">) {
+  await requireScreen();
   const { slug } = await params;
   const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 

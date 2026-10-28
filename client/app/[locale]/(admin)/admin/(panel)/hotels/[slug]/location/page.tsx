@@ -6,6 +6,7 @@ import { HotelLocationEditor } from "@/components/admin/HotelLocationEditor";
 import { getHotel } from "@/lib/api/hotels";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Location" };
 
@@ -20,6 +21,7 @@ export const metadata: Metadata = { title: "Location" };
 export default async function HotelLocationPage({
   params,
 }: PageProps<"/[locale]/admin/hotels/[slug]/location">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

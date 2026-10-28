@@ -14,7 +14,6 @@ export const article = {
   title: "Services register and creating one",
   summary: "What a service is, how to find one, and how a new one is created on the same screen without a page of its own.",
   category: "services",
-  roles: ["ADMIN"],
   routes: [{ pattern: "/admin/services", section: "register" }],
   keywords: ["service", "extra", "mashgiach", "guide", "equipment", "kosher meal", "new service", "create service", "basis", "per person", "per day", "per unit", "kosher only"],
   related: ["sv-editing", "pk-parts", "rf-search-filters", "pb-statuses"],

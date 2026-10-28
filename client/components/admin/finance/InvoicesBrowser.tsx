@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Search, X } from "lucide-react";
@@ -133,110 +134,115 @@ export function InvoicesBrowser({ invoices, total, page, pageSize, totalPages, p
   return (
     <section className="mt-8">
       <div className="rounded-sm border border-line bg-surface p-4 sm:p-5">
-        <div className="relative">
-          <Search
-            size={16}
-            className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Invoice number or booking reference"
-            aria-label="Search invoices"
-            className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
-          />
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
-          <fieldset>
-            <legend className={legend}>Kind</legend>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => apply({ kind: null })}
-                aria-pressed={kind === ""}
-                className={chip(kind === "")}
-              >
-                All
-              </button>
-              {KINDS.map((value) => (
+        <FilterDisclosure
+          count={Math.max(0, activeFilters - (query.trim() !== "" ? 1 : 0))}
+          lead={
+          <div className="relative min-w-[16rem] flex-1">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Invoice number or booking reference"
+              aria-label="Search invoices"
+              className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
+            />
+          </div>
+          }
+        >
+          <div className="flex flex-wrap gap-x-8 gap-y-4">
+            <fieldset>
+              <legend className={legend}>Kind</legend>
+              <div className="flex flex-wrap gap-2">
                 <button
-                  key={value}
                   type="button"
-                  onClick={() => apply({ kind: kind === value ? null : value })}
-                  aria-pressed={kind === value}
-                  className={chip(kind === value)}
+                  onClick={() => apply({ kind: null })}
+                  aria-pressed={kind === ""}
+                  className={chip(kind === "")}
                 >
-                  {invoiceKindLabels[value]}
+                  All
                 </button>
-              ))}
-            </div>
-          </fieldset>
+                {KINDS.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => apply({ kind: kind === value ? null : value })}
+                    aria-pressed={kind === value}
+                    className={chip(kind === value)}
+                  >
+                    {invoiceKindLabels[value]}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
 
-          <fieldset>
-            <legend className={legend}>Status</legend>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => apply({ status: null })}
-                aria-pressed={statuses.length === 0}
-                className={chip(statuses.length === 0)}
-              >
-                All
-              </button>
-              {STATUSES.map((value) => (
+            <fieldset>
+              <legend className={legend}>Status</legend>
+              <div className="flex flex-wrap gap-2">
                 <button
-                  key={value}
                   type="button"
-                  onClick={() => toggleStatus(value)}
-                  aria-pressed={statuses.includes(value)}
-                  className={chip(statuses.includes(value))}
+                  onClick={() => apply({ status: null })}
+                  aria-pressed={statuses.length === 0}
+                  className={chip(statuses.length === 0)}
                 >
-                  {invoiceStatusLabels[value]}
+                  All
                 </button>
-              ))}
-            </div>
-          </fieldset>
+                {STATUSES.map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleStatus(value)}
+                    aria-pressed={statuses.includes(value)}
+                    className={chip(statuses.includes(value))}
+                  >
+                    {invoiceStatusLabels[value]}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
 
-          <fieldset>
-            <legend className={legend}>Issued between</legend>
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                type="date"
-                value={from}
-                max={to || undefined}
-                onChange={(event) => apply({ from: event.target.value || null })}
-                aria-label="Issued from"
-                className={dateInput}
-              />
-              <span className="text-[0.8125rem] text-muted">and</span>
-              <input
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={(event) => apply({ to: event.target.value || null })}
-                aria-label="Issued until"
-                className={dateInput}
-              />
-            </div>
-          </fieldset>
+            <fieldset>
+              <legend className={legend}>Issued between</legend>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  value={from}
+                  max={to || undefined}
+                  onChange={(event) => apply({ from: event.target.value || null })}
+                  aria-label="Issued from"
+                  className={dateInput}
+                />
+                <span className="text-[0.8125rem] text-muted">and</span>
+                <input
+                  type="date"
+                  value={to}
+                  min={from || undefined}
+                  onChange={(event) => apply({ to: event.target.value || null })}
+                  aria-label="Issued until"
+                  className={dateInput}
+                />
+              </div>
+            </fieldset>
 
-          <fieldset>
-            <legend className={legend}>Show</legend>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => apply({ guests: guests ? null : "true", partner: null })}
-                aria-pressed={guests}
-                className={chip(guests)}
-              >
-                Guests only
-              </button>
-            </div>
-          </fieldset>
-        </div>
+            <fieldset>
+              <legend className={legend}>Show</legend>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => apply({ guests: guests ? null : "true", partner: null })}
+                  aria-pressed={guests}
+                  className={chip(guests)}
+                >
+                  Guests only
+                </button>
+              </div>
+            </fieldset>
+          </div>
+        </FilterDisclosure>
 
         {partner && (
           <ul className="mt-4 flex flex-wrap gap-2" aria-label="Narrowed to">

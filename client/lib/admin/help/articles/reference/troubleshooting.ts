@@ -17,7 +17,6 @@ export const article = {
   title: "When something goes wrong",
   summary: "The messages the panel shows when something fails, what each one means, and what to do — including when to ask the developer.",
   category: "reference",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["error", "troubleshooting", "problem", "failed", "could not", "403", "409", "422", "timeout", "signed out", "not found", "permissions", "refused"],
   related: ["gs-signing-in", "gs-roles", "rf-dangerous-actions", "dp-assigning-a-driver", "fd-driver-detail"],
   blocks: [

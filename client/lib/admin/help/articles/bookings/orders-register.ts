@@ -12,7 +12,6 @@ export const article = {
   title: "Orders register",
   summary: "Packages sold whole, and the parts of them still waiting for a supplier's answer — how to read and filter the on-request queue.",
   category: "bookings",
-  roles: ["ADMIN"],
   routes: ["/admin/orders"],
   keywords: ["ORD", "package", "on request", "pending confirmation", "overdue", "deadline", "buyer", "travelling", "chips", "margin"],
   related: ["bk-order-detail", "bk-statuses-glossary", "pk-register", "rf-search-filters"],

@@ -9,6 +9,7 @@ import { getKosher, listHotelDocuments } from "@/lib/api/kosher";
 import { ApiError } from "@/lib/api/client";
 import { KOSHER_AMENITY_CATEGORIES } from "@/types/catalogue";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Kosher" };
 
@@ -29,6 +30,7 @@ export const metadata: Metadata = { title: "Kosher" };
 export default async function HotelKosherPage({
   params,
 }: PageProps<"/[locale]/admin/hotels/[slug]/kosher">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

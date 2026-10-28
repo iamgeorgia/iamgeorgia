@@ -5,7 +5,9 @@ import { useState } from "react";
 import { Check, Copy, MailPlus, RotateCcw } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, SubmitButton, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import {
   createDriverAccount,
@@ -25,6 +27,8 @@ import type { DriverAdmin } from "@/types/driver";
  */
 export function DriverAccount({ driver }: { driver: DriverAdmin }) {
   const router = useRouter();
+  const can = useCan();
+  const canManage = can("dispatch.write");
   const [email, setEmail] = useState(driver.email ?? "");
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<DriverAccountResult | null>(null);
@@ -50,24 +54,30 @@ export function DriverAccount({ driver }: { driver: DriverAdmin }) {
   if (!driver.user) {
     return (
       <AdminPanel title="Login" description="Not created yet. The driver can still be dispatched to by phone.">
-        <TextInput
-          label="Login email"
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          error={fieldError}
-          hint="They will receive a link to choose a password."
-        />
-        <FormError message={error} />
-        <SubmitButton
-          className="mt-4"
-          busy={busy}
-          disabled={!email.trim()}
-          onClick={() => run(() => createDriverAccount(driver.id, email.trim()))}
-        >
-          <MailPlus size={14} aria-hidden />
-          {busy ? "Creating…" : "Create login and send the link"}
-        </SubmitButton>
+        {!canManage ? (
+          <ReadOnlyNote needs="dispatch.write" what="Creating a login" />
+        ) : (
+          <>
+            <TextInput
+              label="Login email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              error={fieldError}
+              hint="They will receive a link to choose a password."
+            />
+            <FormError message={error} />
+            <SubmitButton
+              className="mt-4"
+              busy={busy}
+              disabled={!email.trim()}
+              onClick={() => run(() => createDriverAccount(driver.id, email.trim()))}
+            >
+              <MailPlus size={14} aria-hidden />
+              {busy ? "Creating…" : "Create login and send the link"}
+            </SubmitButton>
+          </>
+        )}
       </AdminPanel>
     );
   }
@@ -83,7 +93,11 @@ export function DriverAccount({ driver }: { driver: DriverAdmin }) {
         </dd>
       </dl>
 
-      {driver.user.isPending && driver.user.isActive && (
+      {driver.user.isPending && driver.user.isActive && !canManage && (
+        <ReadOnlyNote needs="dispatch.write" what="Sending a new activation link" className="mt-4" />
+      )}
+
+      {driver.user.isPending && driver.user.isActive && canManage && (
         <>
           <FormError message={error} />
           <SubmitButton

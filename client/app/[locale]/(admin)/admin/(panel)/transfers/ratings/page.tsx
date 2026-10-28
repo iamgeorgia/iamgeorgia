@@ -4,6 +4,7 @@ import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { RatingsQueue } from "@/components/admin/RatingsQueue";
 import { listRatings } from "@/lib/api/ratings";
 import type { RatingStatus } from "@/types/driver";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Driver ratings" };
 
@@ -13,6 +14,7 @@ const first = (value: string | string[] | undefined) => (Array.isArray(value) ? 
 export default async function AdminRatingsPage({
   searchParams,
 }: PageProps<"/[locale]/admin/transfers/ratings">) {
+  await requireScreen();
   const params = await searchParams;
   const requested = first(params.status);
   const status = STATUSES.includes(requested as RatingStatus) ? (requested as RatingStatus) : "PENDING";

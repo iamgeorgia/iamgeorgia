@@ -14,6 +14,8 @@ import { articles as reference } from "./articles/reference";
 import { articles as services } from "./articles/services";
 import { articles as tours } from "./articles/tours";
 import { articles as transfersCatalogue } from "./articles/transfers-catalogue";
+import { canOpenPattern } from "../access";
+import { adminGroupItems, adminNavigation, canOpen } from "../navigation";
 import { helpCategories, helpCategoryById } from "./categories";
 import { helpArticlePath, resolveHelpFallback, resolveHelpForPath } from "./routes";
 import type {
@@ -22,7 +24,6 @@ import type {
   HelpCategoryId,
   HelpLinkTargets,
   HelpMatch,
-  HelpRole,
 } from "./types";
 
 /**
@@ -59,17 +60,44 @@ const byId = new Map(helpArticles.map((article) => [article.id, article]));
 
 export const helpArticleById = (id: string): HelpArticle | undefined => byId.get(id);
 
-/** Which of the two audiences a signed-in role reads as. */
-export const helpRoleOf = (role: string): HelpRole => (role === "DISPATCHER" ? "DISPATCHER" : "ADMIN");
+/**
+ * Who may read an article: whoever is offered the screen it explains.
+ *
+ * Resolved from the article's `routes`: each pattern is matched to the
+ * sidebar item it sits under (the longest `href` that prefixes it), and the
+ * article is readable when any of those items is offered to the viewer —
+ * the same rule that puts the screen in their sidebar. A pattern no sidebar
+ * item claims (a detail page under a redirect, a terms screen) falls back to
+ * the screen table. An article with no routes is background reading and is
+ * open to everyone.
+ */
+const navItems = adminNavigation.flatMap(adminGroupItems).filter((item) => item.href !== "/admin");
 
-export const helpArticlesFor = (role: HelpRole): HelpArticle[] =>
-  helpArticles.filter((article) => article.roles.includes(role));
+const itemFor = (pattern: string) =>
+  navItems
+    .filter((item) => pattern === item.href || pattern.startsWith(`${item.href}/`))
+    .sort((a, b) => b.href.length - a.href.length)[0];
 
-export const helpCategoriesFor = (role: HelpRole): HelpCategory[] =>
-  helpCategories.filter((category) => category.roles.includes(role));
+const patternOffered = (pattern: string, capabilities: readonly string[]): boolean => {
+  const item = itemFor(pattern);
+  return item ? canOpen(item, capabilities) : canOpenPattern(capabilities, pattern);
+};
 
-export const helpArticlesIn = (category: HelpCategoryId, role: HelpRole): HelpArticle[] =>
-  helpArticlesFor(role).filter((article) => article.category === category);
+export const helpReadable = (article: HelpArticle, capabilities: readonly string[]): boolean =>
+  !article.routes?.length ||
+  article.routes.some((route) => patternOffered(typeof route === "string" ? route : route.pattern, capabilities));
+
+export const helpArticlesFor = (capabilities: readonly string[]): HelpArticle[] =>
+  helpArticles.filter((article) => helpReadable(article, capabilities));
+
+/** The areas with at least one article this viewer may read, in hub order. */
+export const helpCategoriesFor = (capabilities: readonly string[]): HelpCategory[] => {
+  const readable = helpArticlesFor(capabilities);
+  return helpCategories.filter((category) => readable.some((article) => article.category === category.id));
+};
+
+export const helpArticlesIn = (category: HelpCategoryId, capabilities: readonly string[]): HelpArticle[] =>
+  helpArticlesFor(capabilities).filter((article) => article.category === category);
 
 /**
  * Every article this one links to — its `related` list and the `articleId`s
@@ -77,7 +105,7 @@ export const helpArticlesIn = (category: HelpCategoryId, role: HelpRole): HelpAr
  * reader may open. An id that resolves to nothing is dropped rather than
  * rendered as a dead link; the registry test reports it separately.
  */
-export function helpLinkTargets(article: HelpArticle, role: HelpRole): HelpLinkTargets {
+export function helpLinkTargets(article: HelpArticle, capabilities: readonly string[]): HelpLinkTargets {
   const ids = new Set<string>(article.related ?? []);
   for (const block of article.blocks) {
     if (block.type !== "links") continue;
@@ -87,7 +115,7 @@ export function helpLinkTargets(article: HelpArticle, role: HelpRole): HelpLinkT
   const targets: HelpLinkTargets = {};
   for (const id of ids) {
     const target = byId.get(id);
-    if (!target || !target.roles.includes(role)) continue;
+    if (!target || !helpReadable(target, capabilities)) continue;
     targets[id] = { id, title: target.title, href: helpArticlePath({ article: target }) };
   }
   return targets;
@@ -104,5 +132,5 @@ export const helpFallbackForPath = (canonical: string): HelpCategory =>
 export { helpCategories, helpCategoryById };
 export { helpArticlePath };
 export { HELP_ROUTE_EXEMPTIONS } from "./routes";
-export { quickStartFor } from "./quickStart";
+export { quickStartFor, quickStartTitle } from "./quickStart";
 export type * from "./types";

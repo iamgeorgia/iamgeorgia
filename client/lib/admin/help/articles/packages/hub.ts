@@ -13,7 +13,6 @@ export const article = {
   title: "The package hub, publishing and kosher eligibility",
   summary: "Where every part of a package is reached from, what the Publishing panel does without asking, and how to read the kosher eligibility panel.",
   category: "packages",
-  roles: ["ADMIN"],
   routes: ["/admin/packages/[slug]"],
   keywords: ["publish", "take off sale", "archive", "delete", "feature", "featured", "sell to the public", "b2c", "status", "kosher eligibility", "cannot be sold as kosher", "worth knowing", "tiles"],
   related: ["pk-publish-checklist", "pk-parts", "pk-details-pricing", "pk-preview-quote", "pk-kosher", "md-images", "pb-translations", "pb-statuses", "rf-dangerous-actions"],

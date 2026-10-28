@@ -16,7 +16,6 @@ export const article = {
   title: "The property hub, publishing and statuses",
   summary: "The screen a property is run from: the six tiles, the publishing panel, what each status means, and which buttons can be undone.",
   category: "hotels",
-  roles: ["ADMIN"],
   routes: ["/admin/hotels/[slug]"],
   keywords: ["property page", "publish", "take off sale", "archive", "delete hotel", "status", "draft", "on sale", "off sale", "suspended", "b2c", "public sale", "checklist"],
   related: ["ht-publish-checklist", "pb-statuses", "pb-b2c-vs-trade", "ht-rooms-rates", "rf-dangerous-actions"],

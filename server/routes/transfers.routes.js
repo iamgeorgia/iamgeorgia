@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { optionalAuthenticate } from '../middleware/auth.js';
+import { actAsPartner } from '../lib/booking/onBehalf.js';
 import { validate } from '../middleware/validate.js';
 import {
     localeQuerySchema,
@@ -32,7 +33,7 @@ import { toRatingPublic } from '../serializers/rating.js';
  */
 export const transferRoutes = Router();
 
-transferRoutes.use(optionalAuthenticate);
+transferRoutes.use(optionalAuthenticate, actAsPartner);
 
 /** The location picker. Searches base names and every translation of them. */
 transferRoutes.get('/points', validate({ query: pointQuerySchema }), async (req, res) => {

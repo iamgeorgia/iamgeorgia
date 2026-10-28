@@ -21,9 +21,9 @@ import { getDriver } from "@/lib/api/drivers";
 import { listFleetVehicles } from "@/lib/api/fleet";
 import { listAdminTransferProviders } from "@/lib/api/transfers";
 import { driverDisplayName, languageLabels } from "@/lib/admin/fleet";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import { getI18n } from "@/lib/i18n/server";
-import { isAdmin } from "@/types/auth";
+import { can } from "@/types/auth";
 import type { DriverAdmin, DriverLanguage } from "@/types/driver";
 
 export const metadata: Metadata = { title: "Driver" };
@@ -31,6 +31,7 @@ export const metadata: Metadata = { title: "Driver" };
 export default async function AdminDriverPage({
   params,
 }: PageProps<"/[locale]/admin/transfers/drivers/[id]">) {
+  await requireScreen();
   const { id } = await params;
 
   let driver: DriverAdmin;
@@ -106,7 +107,7 @@ export default async function AdminDriverPage({
 
           <DriverDangerZone
             driver={driver}
-            canDelete={isAdmin(session)}
+            canDelete={can(session, "platform.admin")}
             listHref={path("/admin/transfers/drivers")}
           />
         </div>

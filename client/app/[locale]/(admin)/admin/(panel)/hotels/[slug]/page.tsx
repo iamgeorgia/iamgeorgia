@@ -32,7 +32,7 @@ import { formatStay } from "@/lib/admin/bookings";
 import { cardImage } from "@/lib/admin/hotels";
 import { formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Property" };
@@ -69,6 +69,7 @@ function kosherSummary(kosher: HotelWithChecklist["kosher"]): string {
 export default async function AdminHotelPage({
   params,
 }: PageProps<"/[locale]/admin/hotels/[slug]">) {
+  await requireScreen();
   const { slug } = await params;
   const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
@@ -84,18 +85,26 @@ export default async function AdminHotelPage({
   const recent = await bookingsForHotel(hotel.id);
   const cover = cardImage(hotel.coverImage);
 
+  // The tiles stay for everyone — each screen opens read-only — but a tile
+  // should not promise editors to a viewer who will not find any.
+  const canContent = can(session, "catalogue.write");
+  const canPricing = can(session, "pricing.write");
+
   const subScreens = [
     {
       href: `/admin/hotels/${hotel.id}/rooms`,
       icon: BedDouble,
       title: "Rooms & rates",
-      description: `${hotel.roomTypes.length} room ${hotel.roomTypes.length === 1 ? "type" : "types"}, with their rate plans`,
+      description: `${canContent || canPricing ? "" : "View "}${hotel.roomTypes.length} room ${hotel.roomTypes.length === 1 ? "type" : "types"}, with their rate plans`,
     },
     {
       href: `/admin/hotels/${hotel.id}/calendar`,
       icon: CalendarDays,
       title: "Inventory & pricing",
-      description: "The nightly calendar and the bulk editors",
+      description:
+        canContent || canPricing
+          ? "The nightly calendar and the bulk editors"
+          : "View the nightly calendar",
     },
     {
       href: `/admin/hotels/${hotel.id}/images`,

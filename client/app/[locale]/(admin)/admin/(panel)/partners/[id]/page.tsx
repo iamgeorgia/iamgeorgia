@@ -22,7 +22,7 @@ import { getPartnerTerms } from "@/lib/api/finance";
 import { getPartnerCredit } from "@/lib/api/finance-controls";
 import { getInvoicingSettings } from "@/lib/api/invoices";
 import { getPartner, getPartnerAudit, getPartnerInvitations, getProductAccessServer } from "@/lib/api/partners";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import {
   auditActionLabels,
   formatCommission,
@@ -63,6 +63,7 @@ export async function generateMetadata({
 export default async function AdminPartnerPage({
   params,
 }: PageProps<"/[locale]/admin/partners/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
@@ -164,7 +165,10 @@ export default async function AdminPartnerPage({
                     "—"
                   ),
                 },
-                { label: "Commission", value: formatCommission(partner.commissionRateBps) },
+                // Absent when the viewer's role does not read the rate; the row goes with it.
+                ...(partner.commissionRateBps === undefined
+                  ? []
+                  : [{ label: "Commission", value: formatCommission(partner.commissionRateBps) }]),
               ]}
             />
 

@@ -1,4 +1,8 @@
 import { Router } from 'express';
+import { createManualBooking, updateDesk } from '../services/booking/manual.service.js';
+import { listBookingIndex, toIndexEntry } from '../services/booking/index.service.js';
+import { bookingIndexQuerySchema } from '../validation/bookingList.js';
+import { deskUpdateSchema, manualHotelBookingSchema } from '../validation/manualBooking.js';
 
 import {
     authenticate,
@@ -165,6 +169,13 @@ export const partnerBookingRoutes = Router();
 // listing below still works.
 partnerBookingRoutes.use(authenticate, requirePartner, requireApprovedPartner);
 
+/** The partner's own bookings of every product in one list, scoped on the session. */
+partnerBookingRoutes.get('/all', validate({ query: bookingIndexQuerySchema }), async (req, res) => {
+    const { rows, names, ...page } = await listBookingIndex(req.valid.query, req.user);
+
+    res.json({ data: rows.map((row) => toIndexEntry(row, { names, scope: 'partner' })), ...page });
+});
+
 partnerBookingRoutes.get('/', validate({ query: bookingQuerySchema }), async (req, res) => {
     const { bookings, ...page } = await listBookings(req.valid.query, req.user);
 
@@ -175,6 +186,28 @@ partnerBookingRoutes.get('/', validate({ query: bookingQuerySchema }), async (re
 export const adminBookingRoutes = Router();
 
 adminBookingRoutes.use(authenticate, requireCapabilityByMethod({ read: [CAPABILITIES.BOOKINGS_READ], write: [CAPABILITIES.BOOKINGS_WRITE] }));
+
+/**
+ * A booking made at the desk (manual bookings): by phone, by email, through
+ * another agency, or face to face. The same product, the same confirmation
+ * body, made as the buyer; see `services/booking/manual.service.js`.
+ */
+adminBookingRoutes.post('/manual', validate({ body: manualHotelBookingSchema }), async (req, res) => {
+    const body = req.valid.body;
+    const result = await createManualBooking(
+        'HOTEL',
+        { ...body, booking: { ...body.booking, idempotencyKey: idempotencyKeyFrom(req) ?? body.booking.idempotencyKey } },
+        req.user,
+        req
+    );
+
+    res.status(result.replayed ? 200 : 201).json(toBookingDetail(result.booking ?? result.order, req.user));
+});
+
+/** The desk's fields after the fact: who is looking after it, and the notes. */
+adminBookingRoutes.patch('/:reference/desk', validate({ params: referenceParamSchema, body: deskUpdateSchema }), async (req, res) => {
+    res.json(toBookingDetail(await updateDesk('HOTEL', req.valid.params.reference, req.valid.body, req.user, req), req.user));
+});
 
 adminBookingRoutes.get('/', validate({ query: bookingQuerySchema }), async (req, res) => {
     const { bookings, ...page } = await listBookings(req.valid.query, req.user);
@@ -187,6 +220,16 @@ adminBookingRoutes.get('/', validate({ query: bookingQuerySchema }), async (req,
  * rows in the panel. Declared before `/:reference` so the word is a route,
  * not a booking that does not exist.
  */
+/**
+ * Every booking of every product in one register, from the booking index.
+ * Declared before `/:reference` so the word is a route, not a booking.
+ */
+adminBookingRoutes.get('/all', validate({ query: bookingIndexQuerySchema }), async (req, res) => {
+    const { rows, names, ...page } = await listBookingIndex(req.valid.query, req.user);
+
+    res.json({ data: rows.map((row) => toIndexEntry(row, { names })), ...page });
+});
+
 adminBookingRoutes.get('/summary', validate({ query: bookingSummaryQuerySchema }), async (req, res) => {
     res.json(await summarizeBookings(req.valid.query));
 });

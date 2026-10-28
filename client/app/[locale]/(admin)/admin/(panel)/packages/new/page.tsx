@@ -4,6 +4,7 @@ import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/
 import { NewPackageForm } from "@/components/admin/NewPackageForm";
 import { getDestinationTree } from "@/lib/api/hotels";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add package" };
 
@@ -13,6 +14,7 @@ export const metadata: Metadata = { title: "Add package" };
  * whose publish checklist walks the operator through the rest.
  */
 export default async function NewPackagePage() {
+  await requireScreen();
   const { path } = await getI18n();
   const tree = await getDestinationTree();
 

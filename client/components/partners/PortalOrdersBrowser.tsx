@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState, useTransition } from "react";
-import { Clock, Search } from "lucide-react";
+import { Clock } from "lucide-react";
 
 import { Cell, DataTable, EmptyRow, Row, type Column } from "@/components/admin/DataTable";
+import { PaymentCell, PaymentStatusBadge } from "@/components/admin/PaymentStatusBadge";
+import { BookingFilters } from "@/components/admin/filters/BookingFilters";
+import { Pager } from "@/components/admin/filters/Pager";
+import { useFilterUrl } from "@/components/admin/filters/useFilterUrl";
 import { Badge } from "@/components/ui/Badge";
 import { formatInstant, formatStayDate } from "@/lib/booking/stay";
 import { fill } from "@/lib/i18n/fill";
@@ -19,9 +21,9 @@ import type { OrderStatus, OrderSummary } from "@/types/order";
 /**
  * A partner's own trips.
  *
- * The same URL-driven filtering as the hotel and tour registers beside it, so
- * a partner with four thousand orders costs what one with four costs, and a
- * filtered view survives a reload.
+ * The same URL-driven filtering as the hotel and tour registers beside it,
+ * through the shared filter kit, so a partner with four thousand orders
+ * costs what one with four costs, and a filtered view survives a reload.
  *
  * An order is not one booking, and the register has to say so: `pendingCount`
  * is parts the operator has not answered yet, and those hold real capacity
@@ -37,6 +39,7 @@ import type { OrderStatus, OrderSummary } from "@/types/order";
  */
 
 const TONES: Record<OrderStatus, "neutral" | "outline" | "nature"> = {
+  PENDING_APPROVAL: "outline",
   PENDING_CONFIRMATION: "outline",
   CONFIRMED: "nature",
   PARTIALLY_CANCELLED: "neutral",
@@ -51,6 +54,7 @@ const columns: Column[] = [
   { label: "Dates" },
   { label: "Party", hideBelow: "xl" },
   { label: "Status" },
+  { label: "Payment", hideBelow: "xl" },
   { label: "Total", align: "end" },
 ];
 
@@ -59,53 +63,18 @@ export function PortalOrdersBrowser({
   total,
   page,
   totalPages,
+  today,
 }: {
   data: OrderSummary[];
   total: number;
   page: number;
   totalPages: number;
+  /** `YYYY-MM-DD` from the server render. */
+  today: string;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
   const path = useLocalePath();
   const { t, locale, intlLocale } = useI18n();
-  const [pending, startTransition] = useTransition();
-
-  const [search, setSearch] = useState(params.get("search") ?? "");
-
-  const apply = (changes: Record<string, string | null>) => {
-    const next = new URLSearchParams(params.toString());
-
-    for (const [key, value] of Object.entries(changes)) {
-      if (value === null || value === "" || value === "all") next.delete(key);
-      else next.set(key, value);
-    }
-
-    // A changed filter invalidates the page number, but not the tab: dropping
-    // `product` here would throw the partner back to the hotel register.
-    if (!("page" in changes)) next.delete("page");
-
-    const query = next.toString();
-    startTransition(() => router.replace(query ? `${pathname}?${query}` : pathname));
-  };
-
-  // Debounced, so typing a reference does not fire a request per keystroke.
-  useEffect(() => {
-    const current = params.get("search") ?? "";
-    if (search === current) return;
-
-    const timer = setTimeout(() => apply({ search: search || null }), 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
-
-  const status = params.get("status") ?? "all";
-  const from = params.get("from") ?? "";
-  const to = params.get("to") ?? "";
-
-  const field =
-    "h-10 rounded-sm border border-line bg-surface px-3 text-[0.8125rem] text-ink outline-none focus:border-ink";
+  const url = useFilterUrl();
 
   const dates = (order: OrderSummary) =>
     `${formatStayDate(order.startDate, intlLocale)} – ${formatStayDate(order.endDate, intlLocale)}`;
@@ -130,62 +99,23 @@ export function PortalOrdersBrowser({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[15rem] flex-1">
-          <Search
-            size={15}
-            aria-hidden
-            className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-subtle"
-          />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Reference, traveller name or email"
-            aria-label="Search your orders"
-            className={cn(field, "w-full ps-9")}
-          />
-        </div>
-
-        <select
-          value={status}
-          onChange={(event) => apply({ status: event.target.value })}
-          aria-label="Filter by status"
-          className={field}
-        >
-          <option value="all">All statuses</option>
-          {ORDER_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {t.orders.status[value]}
-            </option>
-          ))}
-        </select>
-
-        <label className="flex items-center gap-2 text-[0.8125rem] text-muted">
-          Starting
-          <input
-            type="date"
-            value={from}
-            onChange={(event) => apply({ from: event.target.value || null })}
-            aria-label="Starting on or after"
-            className={field}
-          />
-          <span aria-hidden>–</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(event) => apply({ to: event.target.value || null })}
-            aria-label="Starting on or before"
-            className={field}
-          />
-        </label>
-      </div>
+      <BookingFilters
+        url={url}
+        statuses={ORDER_STATUSES.map((value) => ({ value, label: t.orders.status[value] }))}
+        statusLabel={(status) => t.orders.status[status as OrderStatus] ?? status}
+        dateLabel="Starting"
+        searchPlaceholder="Reference, traveller name or email"
+        searchLabel="Search your orders"
+        today={today}
+        keep={["product"]}
+        excludePresets={["upcoming"]}
+      />
 
       <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
         {total === 0 ? "No orders match these filters." : `${total} order${total === 1 ? "" : "s"}`}
       </p>
 
-      <div className={cn("mt-4 transition-opacity", pending && "opacity-60")}>
+      <div className={cn("mt-4 transition-opacity", url.pending && "opacity-60")}>
         {/* Desktop: a real table. Below lg the same rows render as cards. */}
         <div className="hidden rounded-sm border border-line bg-surface lg:block">
           <DataTable columns={columns} caption="Your orders">
@@ -215,6 +145,9 @@ export function PortalOrdersBrowser({
                   <Cell>
                     <Badge tone={TONES[order.status]}>{t.orders.status[order.status]}</Badge>
                   </Cell>
+                  <Cell hideBelow="xl">
+                    <PaymentCell payment={order.payment} />
+                  </Cell>
                   <Cell align="end" className="tabular-nums">
                     {formatMoney(order.totalCents, order.currency, intlLocale)}
                   </Cell>
@@ -237,7 +170,10 @@ export function PortalOrdersBrowser({
                 >
                   {order.reference}
                 </Link>
-                <Badge tone={TONES[order.status]}>{t.orders.status[order.status]}</Badge>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  <Badge tone={TONES[order.status]}>{t.orders.status[order.status]}</Badge>
+                  <PaymentStatusBadge status={order.payment.status} />
+                </div>
               </div>
               {awaiting(order)}
               <p className="mt-2 text-[0.875rem] text-body">{order.leadName}</p>
@@ -253,29 +189,7 @@ export function PortalOrdersBrowser({
         </ul>
       </div>
 
-      {totalPages > 1 && (
-        <nav className="mt-6 flex items-center justify-between" aria-label="Pagination">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => apply({ page: String(page - 1) })}
-            className="inline-flex h-10 items-center rounded-sm border border-ink/20 px-4 text-[0.8125rem] font-semibold text-ink hover:border-ink hover:bg-surface-soft disabled:pointer-events-none disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <span className="text-[0.8125rem] text-muted">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => apply({ page: String(page + 1) })}
-            className="inline-flex h-10 items-center rounded-sm border border-ink/20 px-4 text-[0.8125rem] font-semibold text-ink hover:border-ink hover:bg-surface-soft disabled:pointer-events-none disabled:opacity-40"
-          >
-            Next
-          </button>
-        </nav>
-      )}
+      <Pager page={page} totalPages={totalPages} onPage={(next) => url.apply({ page: String(next) })} />
     </div>
   );
 }

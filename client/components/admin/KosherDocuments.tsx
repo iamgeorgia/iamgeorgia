@@ -5,7 +5,9 @@ import { useRef, useState } from "react";
 import { ExternalLink, FileText, Trash2, Upload } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { attachHotelDocument, detachHotelDocument } from "@/lib/api/kosher";
 import { getSignedUrl, uploadMedia } from "@/lib/api/media";
 import { describeError } from "@/lib/api/client";
@@ -36,6 +38,9 @@ export function KosherDocuments({
 }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
+  const can = useCan();
+  // Opening a file is a read; attaching and detaching are catalogue writes.
+  const canEdit = can("catalogue.write");
 
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -134,44 +139,50 @@ export function KosherDocuments({
                   <ExternalLink size={13} aria-hidden />
                   Open
                 </button>
-                <button
-                  type="button"
-                  disabled={busy !== null}
-                  onClick={() => void remove(document)}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line px-3 text-[0.75rem] font-medium text-body transition-colors hover:border-error/50 hover:text-error-text disabled:opacity-50"
-                >
-                  <Trash2 size={13} aria-hidden />
-                  Remove
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    disabled={busy !== null}
+                    onClick={() => void remove(document)}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-sm border border-line px-3 text-[0.75rem] font-medium text-body transition-colors hover:border-error/50 hover:text-error-text disabled:opacity-50"
+                  >
+                    <Trash2 size={13} aria-hidden />
+                    Remove
+                  </button>
+                )}
               </div>
             </li>
           ))}
         </ul>
       )}
 
-      <div className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-[1fr_auto] sm:items-end">
-        <TextInput
-          label="Label"
-          hint="Optional. How this file is named in the certificate picker."
-          value={label}
-          onChange={(event) => setLabel(event.target.value)}
-        />
-        <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-sm border border-line px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink hover:text-ink">
-          <Upload size={14} aria-hidden />
-          {busy === "upload" ? "Uploading…" : "Upload"}
-          <input
-            ref={fileInput}
-            type="file"
-            accept={ACCEPT}
-            disabled={busy !== null}
-            className="sr-only"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              if (file) void upload(file);
-            }}
+      {canEdit ? (
+        <div className="mt-5 grid gap-3 border-t border-line pt-5 sm:grid-cols-[1fr_auto] sm:items-end">
+          <TextInput
+            label="Label"
+            hint="Optional. How this file is named in the certificate picker."
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
           />
-        </label>
-      </div>
+          <label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-sm border border-line px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink hover:text-ink">
+            <Upload size={14} aria-hidden />
+            {busy === "upload" ? "Uploading…" : "Upload"}
+            <input
+              ref={fileInput}
+              type="file"
+              accept={ACCEPT}
+              disabled={busy !== null}
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void upload(file);
+              }}
+            />
+          </label>
+        </div>
+      ) : (
+        <ReadOnlyNote className="mt-5" needs="catalogue.write" what="Uploading or removing a certificate file" />
+      )}
 
       <FormError message={error} />
     </AdminPanel>

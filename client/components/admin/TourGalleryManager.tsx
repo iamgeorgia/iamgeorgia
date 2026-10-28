@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { Loader2, Star, Trash2, Upload } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { attachTourImage, detachTourImage, updateTourImage } from "@/lib/api/tours";
 import { uploadMedia } from "@/lib/api/media";
 import { describeError } from "@/lib/api/client";
@@ -21,6 +23,8 @@ import type { TourWithChecklist } from "@/types/tour";
 export function TourGalleryManager({ tour }: { tour: TourWithChecklist }) {
   const router = useRouter();
   const fileInput = useRef<HTMLInputElement>(null);
+  const can = useCan();
+  const canEdit = can("catalogue.write", "tours.write");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,29 +62,39 @@ export function TourGalleryManager({ tour }: { tour: TourWithChecklist }) {
   return (
     <div>
       <div className="flex flex-wrap items-center gap-3 rounded-sm border border-line bg-surface p-4">
-        <input
-          ref={fileInput}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/avif"
-          multiple
-          onChange={(event) => void upload(event.target.files)}
-          className="sr-only"
-          id="tour-gallery-upload"
-        />
-        <label
-          htmlFor="tour-gallery-upload"
-          className={cn(
-            "inline-flex h-10 cursor-pointer items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover",
-            busy?.startsWith("upload") && "pointer-events-none opacity-50",
-          )}
-        >
-          {busy?.startsWith("upload") ? (
-            <Loader2 size={15} className="animate-spin" aria-hidden />
-          ) : (
-            <Upload size={15} aria-hidden />
-          )}
-          Upload images
-        </label>
+        {canEdit ? (
+          <>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/avif"
+              multiple
+              onChange={(event) => void upload(event.target.files)}
+              className="sr-only"
+              id="tour-gallery-upload"
+            />
+            <label
+              htmlFor="tour-gallery-upload"
+              className={cn(
+                "inline-flex h-10 cursor-pointer items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover",
+                busy?.startsWith("upload") && "pointer-events-none opacity-50",
+              )}
+            >
+              {busy?.startsWith("upload") ? (
+                <Loader2 size={15} className="animate-spin" aria-hidden />
+              ) : (
+                <Upload size={15} aria-hidden />
+              )}
+              Upload images
+            </label>
+          </>
+        ) : (
+          <ReadOnlyNote
+            needs={["catalogue.write", "tours.write"]}
+            what="Adding, removing or re-covering images"
+            className="w-full"
+          />
+        )}
 
         {tour.image && tour.images.length === 0 && (
           <p className="text-[0.8125rem] text-muted">
@@ -113,6 +127,7 @@ export function TourGalleryManager({ tour }: { tour: TourWithChecklist }) {
                   </span>
                 )}
               </div>
+              {canEdit && (
               <div className="flex items-center justify-between gap-2 px-3 py-2">
                 <button
                   type="button"
@@ -140,6 +155,7 @@ export function TourGalleryManager({ tour }: { tour: TourWithChecklist }) {
                   )}
                 </button>
               </div>
+              )}
             </li>
           ))}
         </ul>

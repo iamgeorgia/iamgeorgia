@@ -13,7 +13,6 @@ export const article = {
   title: "The tour hub, publishing and statuses",
   summary: "Where every part of a tour is reached from, what each status means, and which buttons in the Publishing panel cannot be undone.",
   category: "tours",
-  roles: ["ADMIN"],
   routes: ["/admin/tours/[slug]"],
   keywords: ["publish", "take off sale", "archive", "delete", "featured", "public sale", "b2c", "status", "on sale", "off sale", "view live page", "tiles"],
   related: ["tr-publish-checklist", "tr-options-prices", "tr-departures", "tr-details-itinerary", "md-images", "pb-translations", "pb-statuses", "rf-dangerous-actions"],

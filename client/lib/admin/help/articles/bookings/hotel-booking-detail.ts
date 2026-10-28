@@ -15,7 +15,6 @@ export const article = {
   title: "A hotel booking: cancelling and answering requirements",
   summary: "What one booking shows, how to cancel it and what that sends, and how to confirm or decline a requirement the guest asked for.",
   category: "bookings",
-  roles: ["ADMIN"],
   routes: ["/admin/bookings/[id]"],
   keywords: ["cancel", "refund", "cancellation terms", "requirement", "kosher", "shabbat", "decline", "confirm", "supplier cost", "margin", "rooms released"],
   related: ["bk-hotel-bookings-register", "bk-statuses-glossary", "rf-dangerous-actions", "dp-who-is-told-what"],

@@ -14,7 +14,6 @@ export const article = {
   title: "Payment terms",
   summary: "When each supplier is paid, what it is owed after a cancellation, and how long partners have to pay.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/terms/[kind]/[id]"],
   keywords: [
     "finance",

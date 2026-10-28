@@ -5,7 +5,9 @@ import { useState } from "react";
 import { Check, Clock, X } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, SubmitButton, TextArea } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { answerBookingRequest } from "@/lib/api/kosher";
 import { describeError } from "@/lib/api/client";
 import type { Booking, BookingRequestStatus } from "@/types/booking";
@@ -68,12 +70,16 @@ const LABELS: Record<string, string> = {
 
 export function BookingRequests({ booking }: { booking: Booking }) {
   const router = useRouter();
+  const can = useCan();
 
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [declining, setDeclining] = useState<{ id: string; note: string } | null>(null);
 
   if (booking.requests.length === 0) return null;
+
+  // Answering on the property's behalf is a change to the booking.
+  const canAnswer = can("bookings.write");
 
   const answer = async (
     requestId: string,
@@ -130,7 +136,7 @@ export function BookingRequests({ booking }: { booking: Booking }) {
                 <div className="flex shrink-0 items-center gap-2">
                   <span className={cn("text-[0.75rem] font-semibold", tone)}>{label}</span>
 
-                  {open && (
+                  {open && canAnswer && (
                     <>
                       <button
                         type="button"
@@ -190,6 +196,10 @@ export function BookingRequests({ booking }: { booking: Booking }) {
           );
         })}
       </ul>
+
+      {!canAnswer && booking.requestsPending > 0 && (
+        <ReadOnlyNote needs="bookings.write" what="Answering a requirement" className="mt-4" />
+      )}
 
       <FormError message={error} />
     </AdminPanel>

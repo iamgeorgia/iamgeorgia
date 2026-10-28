@@ -13,7 +13,6 @@ export const article = {
   title: "Options, seasons and price tiers",
   summary: "How a tour is sold: the options it offers, the seasons each option is priced in, and the per-party tiers that set the net and the sell.",
   category: "tours",
-  roles: ["ADMIN"],
   routes: ["/admin/tours/[slug]/options"],
   keywords: ["option", "price", "pricing", "season", "price sheet", "tier", "net", "sell", "markup", "on request", "instant", "private", "shared", "per group", "per person", "cancellation", "notice", "horizon", "archive option"],
   related: ["tr-departures", "tr-hub", "tr-publish-checklist", "pb-b2c-vs-trade", "tc-pricing-model"],

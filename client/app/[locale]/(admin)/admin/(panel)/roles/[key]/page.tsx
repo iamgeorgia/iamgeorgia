@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { RoleEditor } from "@/components/admin/RoleEditor";
 import { Badge } from "@/components/ui/Badge";
 import { ApiError } from "@/lib/api/client";
 import { getRole, listCapabilities } from "@/lib/api/roles";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import type { Role } from "@/types/rbac";
 
 export async function generateMetadata({
@@ -27,11 +25,8 @@ export async function generateMetadata({
 
 /** One role: edit what it is called and what it may do, or delete it. */
 export default async function AdminRolePage({ params }: PageProps<"/[locale]/admin/roles/[key]">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "roles.manage")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { key } = await params;
   const { path } = await getI18n();

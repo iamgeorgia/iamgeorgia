@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { ApiError, describeError } from "@/lib/api/client";
 import { deleteService } from "@/lib/api/services";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -25,10 +26,15 @@ import type { Service } from "@/types/service";
 export function ServiceDangerZone({ service }: { service: Service }) {
   const router = useRouter();
   const path = useLocalePath();
+  const can = useCan();
 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The panel is nothing but the delete action, so a viewer who cannot
+  // delete (`catalogue.write`) sees no panel rather than a disabled one.
+  if (!can("catalogue.write")) return null;
 
   const remove = async () => {
     setBusy(true);

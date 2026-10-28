@@ -6,6 +6,8 @@ import { Ban, Check, Copy, Loader2, MailPlus, PauseCircle, RotateCcw, ShieldBan,
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import { blockPartner, resendInvitation, reviewPartner, terminatePartner, unblockPartner, type ReviewAction } from "@/lib/api/partners";
 import { cn } from "@/lib/utils";
@@ -47,6 +49,7 @@ const CAN: Record<ReviewAction | "resend" | "block" | "unblock" | "terminate", P
 
 export function PartnerActions({ partner }: { partner: Partner }) {
   const router = useRouter();
+  const can = useCan();
   const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -172,6 +175,16 @@ export function PartnerActions({ partner }: { partner: Partner }) {
 
   const spinner = (action: Pending) =>
     pending === action ? <Loader2 size={15} className="animate-spin" aria-hidden /> : null;
+
+  // Every button in this panel is a `partners.write` call, so a viewer without
+  // it sees the one line instead of a panel of promises the server would refuse.
+  if (!can("partners.write")) {
+    return (
+      <AdminPanel title="Review">
+        <ReadOnlyNote needs="partners.write" what="Reviewing this partner" />
+      </AdminPanel>
+    );
+  }
 
   return (
     <AdminPanel title="Review">

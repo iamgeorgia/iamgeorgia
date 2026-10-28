@@ -2,6 +2,9 @@ import { toDateOnly } from '../lib/time.js';
 import { canViewBuyer, canViewMargin, isStaff } from '../middleware/auth.js';
 import { toLegAssignmentFor } from './dispatch.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
+import { approvalOf } from '../lib/booking/approval.js';
+import { paymentBlock } from './booking.js';
+import { toDesk } from '../lib/booking/desk.js';
 
 /**
  * Transfer responses.
@@ -223,6 +226,7 @@ export const toQuoteResult = (result, viewer) => ({
 const toBookingLeg = (leg, viewer, vehicle, { guest = false } = {}) => ({
     id: leg.id,
     legIndex: leg.legIndex,
+    flightNumber: leg.flightNumber ?? null,
     direction: leg.direction,
     from: leg.fromPointName,
     to: leg.toPointName,
@@ -243,6 +247,7 @@ const toBookingLeg = (leg, viewer, vehicle, { guest = false } = {}) => ({
 export const toTransferBookingSummary = (booking, viewer) => ({
     reference: booking.reference,
     status: booking.status,
+    source: booking.source,
     tripType: booking.tripType,
     pickupAt: booking.pickupAt.toISOString(),
     returnPickupAt: booking.returnPickupAt?.toISOString() ?? null,
@@ -255,9 +260,11 @@ export const toTransferBookingSummary = (booking, viewer) => ({
     leadPassengerName: booking.leadPassengerName,
     leadPassengerEmail: booking.leadPassengerEmail,
     currency: booking.currency,
-    totalCents: booking.sellTotalCents,
+    totalCents: booking.sellTotalCents + (booking.priceAdjustmentCents ?? 0),
     createdAt: booking.createdAt.toISOString(),
     legStatuses: (booking.legs ?? []).map((leg) => leg.status ?? 'UNASSIGNED'),
+    approval: approvalOf(booking),
+    payment: paymentBlock(booking),
     ...(canViewMargin(viewer)
         ? {
               netTotalCents: booking.netTotalCents,
@@ -269,7 +276,8 @@ export const toTransferBookingSummary = (booking, viewer) => ({
         ? {
               partner: booking.partner
                   ? { id: booking.partner.id, reference: booking.partner.reference, name: booking.partner.name }
-                  : null
+                  : null,
+              desk: toDesk(booking)
           }
         : {})
 });

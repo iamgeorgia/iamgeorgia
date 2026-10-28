@@ -210,7 +210,9 @@ export const partnerTermsSchema = z
     .object({
         paymentDueDays: z.number().int().min(0).max(365).optional(),
         paymentDueAnchor: z.enum(['CONFIRMATION', 'ARRIVAL']).optional(),
-        paymentTermsNote: textField(1000).nullable().optional()
+        paymentTermsNote: textField(1000).nullable().optional(),
+        /** OD1: REQUIRED for everyone; AUTO is the exception for a trusted agency. */
+        bookingApproval: z.enum(['AUTO', 'REQUIRED']).optional()
     })
     .strict()
     .refine((body) => Object.keys(body).length > 0, { message: 'Nothing to change' });

@@ -179,8 +179,11 @@ export const invoiceBody = (input) => {
         issue_date: input.issueDate,
         sell_date: input.sellDate,
         payment_type: 'transfer',
+        // `description` is printed under the line (owner decision OD4):
+        // the room, the dates, the names; the route, the flight, the car.
         positions: input.lines.map((line) => ({
             name: line.description,
+            description: line.detail?.text ?? '',
             quantity: line.quantity,
             tax: taxFor(line.taxRateBps),
             total_price_gross: toMajor(line.totalGrossCents)
@@ -427,8 +430,20 @@ export const createInvoiceOceanAdapter = (getSettings = () => config.finance.inv
             return invoiceOf(payload);
         },
 
+        // `email_pdf` attaches the document; without it the message carries
+        // only a link. The reply is `{ status: 'ok' }`; anything else on a 2xx
+        // is a refusal worded in the body, which the caller must not take as
+        // "sent".
         async sendByEmail(externalId, { to } = {}) {
-            await json(await call('POST', `/invoices/${encodeURIComponent(externalId)}/send_by_email.json`, { body: to ? { email_to: to } : {} }));
+            const reply = await json(await call('POST', `/invoices/${encodeURIComponent(externalId)}/send_by_email.json`, { body: { email_pdf: true, ...(to ? { email_to: to } : {}) } }));
+
+            logger.info({ vendor: 'invoiceocean', externalId, to: to ?? null, reply }, 'invoicing.send reply');
+
+            // Permanent: the account itself is refusing (an unverified
+            // sender, a plan limit), and no retry changes that.
+            if (reply && (reply.code === 'error' || (reply.status && reply.status !== 'ok'))) {
+                throw new UnprocessableEntityError(`InvoiceOcean did not send the document: ${reply.message ?? reply.status ?? 'unknown reason'}`, { vendor: 'invoiceocean', reason: 'PROVIDER_REJECTED', reply });
+            }
         },
 
         async getPdf(externalId) {

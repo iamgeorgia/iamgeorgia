@@ -7,6 +7,7 @@ import { StatCard } from "@/components/admin/StatCard";
 import { listPartners } from "@/lib/api/partners";
 import { APPLICATION_STATUSES, partnerQueryFromParams } from "@/lib/admin/partners";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Applications" };
 
@@ -21,6 +22,7 @@ export const metadata: Metadata = { title: "Applications" };
 export default async function PartnerApplicationsPage({
   searchParams,
 }: PageProps<"/[locale]/admin/partners/applications">) {
+  await requireScreen();
   const { path } = await getI18n();
   const params = await searchParams;
 

@@ -20,7 +20,6 @@ export const article = {
   title: "A driver: profile, documents, cars, verification, login, deactivation",
   summary: "The driver's page — editing the profile, keeping documents, choosing cars, recording verification, issuing the login, and deactivating or deleting.",
   category: "fleet-drivers",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/drivers/[id]"],
   keywords: ["driver", "photo", "documents", "licence", "cars", "primary car", "verification", "verified", "login", "activation link", "password link", "copy link", "deactivate", "reactivate", "delete"],
   related: ["fd-verification-documents", "fd-add-driver", "fd-car-detail", "dp-assigning-a-driver", "gs-accounts", "rf-dangerous-actions"],

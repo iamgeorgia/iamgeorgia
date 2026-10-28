@@ -8,6 +8,8 @@ import { StatCard } from "@/components/admin/StatCard";
 import { listFleetVehicles } from "@/lib/api/fleet";
 import { fleetQueryFromParams } from "@/lib/admin/fleet";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Fleet" };
 
@@ -18,6 +20,7 @@ export const metadata: Metadata = { title: "Fleet" };
 export default async function AdminFleetPage({
   searchParams,
 }: PageProps<"/[locale]/admin/transfers/fleet">) {
+  const session = await requireScreen();
   const params = await searchParams;
   const query = fleetQueryFromParams(params);
 
@@ -35,13 +38,15 @@ export default async function AdminFleetPage({
         title="Fleet"
         description="The physical cars dispatch sends. Each is sold as one vehicle class and driven by the drivers linked to it."
         actions={
-          <Link
-            href={path("/admin/transfers/fleet/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add a car
-          </Link>
+          can(session, "dispatch.write") && (
+            <Link
+              href={path("/admin/transfers/fleet/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add a car
+            </Link>
+          )
         }
       />
 

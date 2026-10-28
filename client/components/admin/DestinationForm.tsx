@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import {
   CheckboxField,
   FormError,
@@ -12,6 +13,7 @@ import {
   TextArea,
   TextInput,
 } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
 import { LocationField } from "@/components/geo/LocationField";
 import { ApiError, describeError } from "@/lib/api/client";
@@ -26,6 +28,7 @@ import {
 import { slugify, timezoneOptions } from "@/lib/admin/geography";
 import { isPlaced, locationOf } from "@/lib/geo/place";
 import { useLocalePath } from "@/lib/i18n/provider";
+import { cn } from "@/lib/utils";
 import type { Destination, DestinationNode, DestinationType } from "@/types/catalogue";
 import { EMPTY_LOCATION, type LocationValue } from "@/types/geo";
 
@@ -111,6 +114,8 @@ export function DestinationForm({
 function Form({ destination, tree }: { destination?: Destination; tree: DestinationNode[] }) {
   const router = useRouter();
   const path = useLocalePath();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const editing = Boolean(destination);
 
@@ -233,265 +238,278 @@ function Form({ destination, tree }: { destination?: Destination; tree: Destinat
 
   return (
     <form onSubmit={submit}>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-5">
-          <TextInput
-            id="destination-name"
-            label="Name"
-            required
-            value={values.name}
-            onChange={(event) => {
-              set("name", event.target.value);
-              if (!slugTouched) set("slug", slugify(event.target.value));
-            }}
-            placeholder="Bakuriani"
-            error={fieldErrors.name}
-            hint="The place as a traveller would name it. Other languages are added as translations."
-          />
-
-          <TextInput
-            id="destination-slug"
-            label="Slug"
-            required
-            mono
-            readOnly={editing}
-            value={values.slug}
-            onChange={(event) => {
-              setSlugTouched(true);
-              set("slug", slugify(event.target.value));
-            }}
-            error={fieldErrors.slug}
-            hint={
-              editing
-                ? "Fixed once the destination exists — it is a segment of the path every record below it is filed under."
-                : "Lowercase letters, numbers and hyphens. Derived from the name until you edit it."
-            }
-          />
-
-          <SelectInput
-            id="destination-type"
-            label="Type"
-            value={values.type}
-            onChange={(event) => {
-              const next = event.target.value as DestinationType;
-              set("type", next);
-              // A country is a root by definition, and a parent that was broad
-              // enough for a city may be too narrow for a region.
-              if (next === "COUNTRY") set("parentId", "");
-            }}
-            options={destinationTypeOptions}
-            error={fieldErrors.type}
-            hint={destinationTypeHints[values.type]}
-          />
-
-          <SelectInput
-            id="destination-parent"
-            label="Sits inside"
-            required={!isCountry}
-            disabled={isCountry}
-            value={isCountry ? "" : values.parentId}
-            onChange={(event) => {
-              set("parentId", event.target.value);
-
-              const next = flat.find((candidate) => candidate.id === event.target.value);
-              if (next && !countryTouched) set("countryCode", next.countryCode);
-            }}
-            placeholder={isCountry ? "Nothing — a country is a root" : "Choose a parent"}
-            options={parents.map((candidate) => ({
-              value: candidate.id,
-              label: `${indent(candidate.depth)}${candidate.name}`,
-            }))}
-            error={fieldErrors.parentId}
-            hint={
-              isCountry
-                ? "A country is always a root. Filing one under anything else would make its path a lie for every hotel below it."
-                : editing
-                  ? "Moving this re-files everything beneath it: the path of every child, hotel and pick-up point below is rewritten."
-                  : "Only destinations broad enough to hold this type are offered."
-            }
-          />
-
-          <div className="grid gap-5 sm:grid-cols-2">
+      {/* A disabled fieldset switches off every control at once for a
+          read-only viewer; the submit row below is replaced, not greyed. */}
+      <fieldset disabled={!canEdit} className="min-w-0">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-5">
             <TextInput
-              id="destination-country"
-              label="Country code"
-              required={isCountry}
-              mono
-              maxLength={2}
-              value={values.countryCode}
+              id="destination-name"
+              label="Name"
+              required
+              value={values.name}
               onChange={(event) => {
-                setCountryTouched(true);
-                set("countryCode", event.target.value.toUpperCase());
+                set("name", event.target.value);
+                if (!slugTouched) set("slug", slugify(event.target.value));
               }}
-              placeholder="GE"
-              error={fieldErrors.countryCode}
+              placeholder="Bakuriani"
+              error={fieldErrors.name}
+              hint="The place as a traveller would name it. Other languages are added as translations."
+            />
+
+            <TextInput
+              id="destination-slug"
+              label="Slug"
+              required
+              mono
+              readOnly={editing}
+              value={values.slug}
+              onChange={(event) => {
+                setSlugTouched(true);
+                set("slug", slugify(event.target.value));
+              }}
+              error={fieldErrors.slug}
               hint={
-                isCountry
-                  ? "Two letters, ISO 3166. Everything filed below inherits it."
-                  : "Two letters, ISO 3166. Follows the parent until you change it."
+                editing
+                  ? "Fixed once the destination exists — it is a segment of the path every record below it is filed under."
+                  : "Lowercase letters, numbers and hyphens. Derived from the name until you edit it."
               }
             />
 
             <SelectInput
-              id="destination-timezone"
-              label="Time zone"
-              value={values.timezone}
-              onChange={(event) => set("timezone", event.target.value)}
-              options={timezoneOptions.map((zone) => ({ value: zone, label: zone }))}
-              error={fieldErrors.timezone}
-              hint="Hotels here inherit it unless they override it."
+              id="destination-type"
+              label="Type"
+              value={values.type}
+              onChange={(event) => {
+                const next = event.target.value as DestinationType;
+                set("type", next);
+                // A country is a root by definition, and a parent that was broad
+                // enough for a city may be too narrow for a region.
+                if (next === "COUNTRY") set("parentId", "");
+              }}
+              options={destinationTypeOptions}
+              error={fieldErrors.type}
+              hint={destinationTypeHints[values.type]}
+            />
+
+            <SelectInput
+              id="destination-parent"
+              label="Sits inside"
+              required={!isCountry}
+              disabled={isCountry}
+              value={isCountry ? "" : values.parentId}
+              onChange={(event) => {
+                set("parentId", event.target.value);
+
+                const next = flat.find((candidate) => candidate.id === event.target.value);
+                if (next && !countryTouched) set("countryCode", next.countryCode);
+              }}
+              placeholder={isCountry ? "Nothing — a country is a root" : "Choose a parent"}
+              options={parents.map((candidate) => ({
+                value: candidate.id,
+                label: `${indent(candidate.depth)}${candidate.name}`,
+              }))}
+              error={fieldErrors.parentId}
+              hint={
+                isCountry
+                  ? "A country is always a root. Filing one under anything else would make its path a lie for every hotel below it."
+                  : editing
+                    ? "Moving this re-files everything beneath it: the path of every child, hotel and pick-up point below is rewritten."
+                    : "Only destinations broad enough to hold this type are offered."
+              }
+            />
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <TextInput
+                id="destination-country"
+                label="Country code"
+                required={isCountry}
+                mono
+                maxLength={2}
+                value={values.countryCode}
+                onChange={(event) => {
+                  setCountryTouched(true);
+                  set("countryCode", event.target.value.toUpperCase());
+                }}
+                placeholder="GE"
+                error={fieldErrors.countryCode}
+                hint={
+                  isCountry
+                    ? "Two letters, ISO 3166. Everything filed below inherits it."
+                    : "Two letters, ISO 3166. Follows the parent until you change it."
+                }
+              />
+
+              <SelectInput
+                id="destination-timezone"
+                label="Time zone"
+                value={values.timezone}
+                onChange={(event) => set("timezone", event.target.value)}
+                options={timezoneOptions.map((zone) => ({ value: zone, label: zone }))}
+                error={fieldErrors.timezone}
+                hint="Hotels here inherit it unless they override it."
+              />
+            </div>
+
+            <CheckboxField
+              label="Feature this destination"
+              hint="Marks it for anywhere that asks for featured places. Worth it for a handful, not for fifty."
+              checked={values.featured}
+              onChange={(next) => set("featured", next)}
             />
           </div>
 
-          <CheckboxField
-            label="Feature this destination"
-            hint="Marks it for anywhere that asks for featured places. Worth it for a handful, not for fifty."
-            checked={values.featured}
-            onChange={(next) => set("featured", next)}
-          />
+          <div className={cn("space-y-5", !canEdit && "pointer-events-none")} aria-disabled={!canEdit || undefined}>
+            <LocationField
+              label="Where it is"
+              ids={{
+                search: "destination-place",
+                latitude: "destination-latitude",
+                longitude: "destination-longitude",
+              }}
+              value={values.location}
+              error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
+              hint="Optional. It centres the maps that show what is in this place; it prices nothing."
+              onChange={(next, meta) => {
+                setValues((current) => {
+                  const place = meta.source === "search" ? next.place : null;
+
+                  return {
+                    ...current,
+                    location: next,
+                    // A searched place fills in what is still empty, and no more.
+                    ...(place?.name && !current.name.trim()
+                      ? { name: place.name, ...(slugTouched ? {} : { slug: slugify(place.name) }) }
+                      : {}),
+                    ...(place?.countryCode && !countryTouched ? { countryCode: place.countryCode } : {}),
+                  };
+                });
+                setSaved(false);
+              }}
+            />
+
+            {!placed && editing && destination?.latitude != null && (
+              <p className="text-[0.75rem] leading-relaxed text-warning-text">
+                Saving now takes this destination off the map.
+              </p>
+            )}
+
+            {parent && !isCountry && (
+              <p className="text-[0.75rem] leading-relaxed text-subtle">
+                Filed under <span className="font-medium text-body">{parent.name}</span>, at{" "}
+                <span className="font-mono">{`${parent.path}/${values.slug || "…"}`}</span>
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="space-y-5">
-          <LocationField
-            label="Where it is"
-            ids={{
-              search: "destination-place",
-              latitude: "destination-latitude",
-              longitude: "destination-longitude",
-            }}
-            value={values.location}
-            error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
-            hint="Optional. It centres the maps that show what is in this place; it prices nothing."
-            onChange={(next, meta) => {
-              setValues((current) => {
-                const place = meta.source === "search" ? next.place : null;
+        <div className="mt-8 border-t border-line pt-6">
+          <h3 className="text-[0.9375rem] font-semibold text-ink">Editorial</h3>
+          <p className="mt-1 max-w-2xl text-[0.8125rem] leading-relaxed text-muted">
+            Optional throughout. None of it holds up a hotel being filed here — it is the copy and
+            artwork a destination carries for anywhere that lists places rather than properties.
+          </p>
 
-                return {
-                  ...current,
-                  location: next,
-                  // A searched place fills in what is still empty, and no more.
-                  ...(place?.name && !current.name.trim()
-                    ? { name: place.name, ...(slugTouched ? {} : { slug: slugify(place.name) }) }
-                    : {}),
-                  ...(place?.countryCode && !countryTouched ? { countryCode: place.countryCode } : {}),
-                };
-              });
-              setSaved(false);
-            }}
-          />
+          <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <TextInput
+              id="destination-tagline"
+              label="Tagline"
+              maxLength={200}
+              value={values.tagline}
+              onChange={(event) => set("tagline", event.target.value)}
+              placeholder="Georgia’s winter capital"
+              error={fieldErrors.tagline}
+              hint="One editorial line, used over cover images."
+            />
 
-          {!placed && editing && destination?.latitude != null && (
-            <p className="text-[0.75rem] leading-relaxed text-warning-text">
-              Saving now takes this destination off the map.
-            </p>
-          )}
+            <TextArea
+              id="destination-summary"
+              label="Summary"
+              rows={2}
+              maxLength={500}
+              value={values.summary}
+              onChange={(event) => set("summary", event.target.value)}
+              error={fieldErrors.summary}
+              hint="A sentence for cards and page metadata."
+            />
 
-          {parent && !isCountry && (
-            <p className="text-[0.75rem] leading-relaxed text-subtle">
-              Filed under <span className="font-medium text-body">{parent.name}</span>, at{" "}
-              <span className="font-mono">{`${parent.path}/${values.slug || "…"}`}</span>
-            </p>
-          )}
+            <TextInput
+              id="destination-cover"
+              label="Cover image"
+              mono
+              value={values.coverImage}
+              onChange={(event) => set("coverImage", event.target.value)}
+              placeholder="/images/destinations/bakuriani-cover.jpg"
+              error={fieldErrors.coverImage}
+              hint="The portrait crop. A path or an absolute URL — destination artwork sits outside the hotel media pipeline."
+            />
+
+            <TextInput
+              id="destination-hero"
+              label="Hero image"
+              mono
+              value={values.heroImage}
+              onChange={(event) => set("heroImage", event.target.value)}
+              placeholder="/images/destinations/bakuriani-hero.jpg"
+              error={fieldErrors.heroImage}
+              hint="The wide crop, for the top of a destination page."
+            />
+
+            <LineListInput
+              label="Description"
+              rows={6}
+              value={values.description}
+              onChange={(next) => set("description", next)}
+              error={fieldErrors.description}
+              placeholder={"One paragraph per line.\nBlank lines are dropped."}
+              hint="One paragraph per line."
+            />
+
+            <LineListInput
+              label="Ideal for"
+              rows={6}
+              value={values.idealFor}
+              onChange={(next) => set("idealFor", next)}
+              error={fieldErrors.idealFor}
+              placeholder={"Skiers\nFamilies\nWinter weekends"}
+              hint="One per line. Short phrases rather than sentences."
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="mt-8 border-t border-line pt-6">
-        <h3 className="text-[0.9375rem] font-semibold text-ink">Editorial</h3>
-        <p className="mt-1 max-w-2xl text-[0.8125rem] leading-relaxed text-muted">
-          Optional throughout. None of it holds up a hotel being filed here — it is the copy and
-          artwork a destination carries for anywhere that lists places rather than properties.
-        </p>
-
-        <div className="mt-5 grid gap-5 lg:grid-cols-2">
-          <TextInput
-            id="destination-tagline"
-            label="Tagline"
-            maxLength={200}
-            value={values.tagline}
-            onChange={(event) => set("tagline", event.target.value)}
-            placeholder="Georgia’s winter capital"
-            error={fieldErrors.tagline}
-            hint="One editorial line, used over cover images."
-          />
-
-          <TextArea
-            id="destination-summary"
-            label="Summary"
-            rows={2}
-            maxLength={500}
-            value={values.summary}
-            onChange={(event) => set("summary", event.target.value)}
-            error={fieldErrors.summary}
-            hint="A sentence for cards and page metadata."
-          />
-
-          <TextInput
-            id="destination-cover"
-            label="Cover image"
-            mono
-            value={values.coverImage}
-            onChange={(event) => set("coverImage", event.target.value)}
-            placeholder="/images/destinations/bakuriani-cover.jpg"
-            error={fieldErrors.coverImage}
-            hint="The portrait crop. A path or an absolute URL — destination artwork sits outside the hotel media pipeline."
-          />
-
-          <TextInput
-            id="destination-hero"
-            label="Hero image"
-            mono
-            value={values.heroImage}
-            onChange={(event) => set("heroImage", event.target.value)}
-            placeholder="/images/destinations/bakuriani-hero.jpg"
-            error={fieldErrors.heroImage}
-            hint="The wide crop, for the top of a destination page."
-          />
-
-          <LineListInput
-            label="Description"
-            rows={6}
-            value={values.description}
-            onChange={(next) => set("description", next)}
-            error={fieldErrors.description}
-            placeholder={"One paragraph per line.\nBlank lines are dropped."}
-            hint="One paragraph per line."
-          />
-
-          <LineListInput
-            label="Ideal for"
-            rows={6}
-            value={values.idealFor}
-            onChange={(next) => set("idealFor", next)}
-            error={fieldErrors.idealFor}
-            placeholder={"Skiers\nFamilies\nWinter weekends"}
-            hint="One per line. Short phrases rather than sentences."
-          />
-        </div>
-      </div>
+      </fieldset>
 
       <FormError message={error} />
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <SubmitButton type="submit" busy={busy} saved={saved} disabled={!ready}>
-          {editing
-            ? busy
-              ? "Saving…"
-              : saved
-                ? "Saved"
-                : "Save destination"
-            : busy
-              ? "Creating…"
-              : "Create destination"}
-        </SubmitButton>
+      {canEdit ? (
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <SubmitButton type="submit" busy={busy} saved={saved} disabled={!ready}>
+            {editing
+              ? busy
+                ? "Saving…"
+                : saved
+                  ? "Saved"
+                  : "Save destination"
+              : busy
+                ? "Creating…"
+                : "Create destination"}
+          </SubmitButton>
 
-        {!ready && (
-          <p className="text-[0.75rem] text-subtle">
-            {isCountry
-              ? "A name, a slug and a two-letter country code are the minimum."
-              : "A name, a slug and somewhere to sit are the minimum."}
-          </p>
-        )}
-      </div>
+          {!ready && (
+            <p className="text-[0.75rem] text-subtle">
+              {isCountry
+                ? "A name, a slug and a two-letter country code are the minimum."
+                : "A name, a slug and somewhere to sit are the minimum."}
+            </p>
+          )}
+        </div>
+      ) : (
+        <ReadOnlyNote
+          className="mt-6"
+          needs="catalogue.write"
+          what={editing ? "Editing this destination" : "Creating a destination"}
+        />
+      )}
     </form>
   );
 }

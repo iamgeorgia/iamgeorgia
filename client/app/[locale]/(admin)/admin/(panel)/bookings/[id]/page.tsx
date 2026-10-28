@@ -10,15 +10,20 @@ import {
   AdminPanel,
 } from "@/components/admin/AdminPage";
 import { BookingActions } from "@/components/admin/BookingActions";
+import { BookingApprovalPanel } from "@/components/admin/BookingApprovalPanel";
+import { BookingDeadlinesPanel } from "@/components/admin/BookingDeadlinesPanel";
+import { BookingDeskPanel } from "@/components/admin/BookingDeskPanel";
+import { BookingPaymentPanel } from "@/components/admin/BookingPaymentPanel";
 import { BookingRequests } from "@/components/admin/BookingRequests";
 import { BookingStatusBadge } from "@/components/admin/StatusBadge";
 import { Cell, DataTable, Row } from "@/components/admin/DataTable";
 import { getAdminBooking } from "@/lib/api/bookings";
 import { ApiError } from "@/lib/api/client";
-import { formatInstant, formatStay, formatStayDate } from "@/lib/admin/bookings";
+import { bookingSourceLabel, formatInstant, formatStay, formatStayDate, guestTitleLabel } from "@/lib/admin/bookings";
 import { formatMoney, formatBps } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
 import { quoteFromSchedule } from "@/lib/admin/cancellation";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Booking" };
 
@@ -36,6 +41,7 @@ export const metadata: Metadata = { title: "Booking" };
 export default async function AdminBookingPage({
   params,
 }: PageProps<"/[locale]/admin/bookings/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const { path } = await getI18n();
 
@@ -155,6 +161,7 @@ export default async function AdminBookingPage({
                       key={`${guest.firstName}-${guestIndex}`}
                       className="rounded-full bg-surface-soft px-3 py-1 text-[0.75rem] text-body"
                     >
+                      {guestTitleLabel(guest.title)}
                       {guest.firstName} {guest.lastName}
                       {guest.isLead && <span className="text-muted"> · lead</span>}
                       {guest.age !== null && <span className="text-muted"> · age {guest.age}</span>}
@@ -293,13 +300,35 @@ export default async function AdminBookingPage({
                 ...(booking.cancelledAt
                   ? [{ label: "Cancelled", value: formatInstant(booking.cancelledAt) }]
                   : []),
-                { label: "Source", value: booking.source },
+                { label: "Source", value: bookingSourceLabel(booking.source) },
                 ...(booking.partner
                   ? [{ label: "Booked by", value: booking.partner.name }]
-                  : [{ label: "Booked by", value: "Direct guest" }]),
+                  : booking.desk?.customer
+                    ? [{ label: "Booked for", value: booking.desk.customer.name }]
+                    : [{ label: "Booked by", value: "Direct guest" }]),
               ]}
             />
           </AdminPanel>
+
+          {/* The platform's own gate, before any supplier is asked. Renders
+              nothing on a booking that never needed it. */}
+          <BookingApprovalPanel
+            product="HOTEL"
+            reference={booking.reference}
+            approval={booking.approval}
+            partnerName={booking.partner?.name ?? null}
+          />
+
+          <BookingPaymentPanel payment={booking.payment} currency={booking.currency} />
+
+          <BookingDeadlinesPanel
+            product="HOTEL"
+            reference={booking.reference}
+            lastDate={booking.checkOut}
+          />
+
+          {/* The desk's fields: staff who may see the buyer only. */}
+          <BookingDeskPanel product="HOTEL" reference={booking.reference} desk={booking.desk} currency={booking.currency} />
 
           <AdminPanel title="Actions">
             <BookingActions booking={booking} quote={quote} />

@@ -1,12 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { AlertTriangle, Clock, Search } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { AlertTriangle, Clock } from "lucide-react";
 
 import { Cell, DataTable, EmptyRow, Row, type Column } from "./DataTable";
+import { PaymentCell, PaymentStatusBadge } from "./PaymentStatusBadge";
 import { OrderStatusBadge } from "./StatusBadge";
+import { BookingFilters } from "./filters/BookingFilters";
+import { Pager } from "./filters/Pager";
+import { useFilterUrl } from "./filters/useFilterUrl";
 import {
   ORDER_STATUSES,
   formatOrderDates,
@@ -29,9 +31,9 @@ import type { OrderStatus, OrderSummary } from "@/types/order";
  * because the two queues an operator actually works — the requests and the
  * live trips — are each more than one state.
  *
- * The on-request queue is the reason this screen exists, so it is a chip of
- * its own rather than one option among five: those orders hold rooms and
- * seats that nobody else can sell until somebody answers.
+ * The on-request queue is the reason this screen exists, so its chip is the
+ * first and carries the queue's size: those orders hold rooms and seats that
+ * nobody else can sell until somebody answers.
  */
 
 export function OrdersBrowser({
@@ -41,6 +43,9 @@ export function OrdersBrowser({
   totalPages,
   pendingTotal,
   basePath = "/admin/orders",
+  today,
+  showPartner = true,
+  showManager = true,
 }: {
   data: OrderSummary[];
   total: number;
@@ -51,53 +56,13 @@ export function OrdersBrowser({
   pendingTotal: number;
   /** Where a reference links: the admin detail or the portal page. */
   basePath?: string;
+  /** `YYYY-MM-DD` from the server render. */
+  today: string;
+  showPartner?: boolean;
+  showManager?: boolean;
 }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
   const localePath = useLocalePath();
-  const [pending, startTransition] = useTransition();
-  const [search, setSearch] = useState(params.get("search") ?? "");
-
-  const apply = (changes: Record<string, string | string[] | null>) => {
-    const next = new URLSearchParams(params.toString());
-
-    for (const [key, value] of Object.entries(changes)) {
-      next.delete(key);
-      if (Array.isArray(value)) for (const item of value) next.append(key, item);
-      else if (value !== null && value !== "") next.set(key, value);
-    }
-
-    // Changing a filter invalidates the page number: page 4 of the old result
-    // set is rarely page 4 of the new one, and is often past the end of it.
-    if (!("page" in changes)) next.delete("page");
-
-    const query = next.toString();
-    startTransition(() => router.replace(query ? `${pathname}?${query}` : pathname));
-  };
-
-  // Debounced, so typing a reference does not fire a request per keystroke.
-  useEffect(() => {
-    const current = params.get("search") ?? "";
-    if (search === current) return;
-
-    const timer = setTimeout(() => apply({ search: search || null }), 300);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search]);
-
-  const selected = params.getAll("status").filter((value): value is OrderStatus =>
-    ORDER_STATUSES.includes(value as OrderStatus),
-  );
-  const from = params.get("from") ?? "";
-  const to = params.get("to") ?? "";
-
-  const toggle = (status: OrderStatus) =>
-    apply({
-      status: selected.includes(status)
-        ? selected.filter((value) => value !== status)
-        : [...selected, status],
-    });
+  const url = useFilterUrl();
 
   // Margin is on the summary for staff and absent for everyone else, so the
   // column follows the data rather than a role flag the browser would have to
@@ -111,119 +76,40 @@ export function OrdersBrowser({
     { label: "Travelling", hideBelow: "md" },
     { label: "Party", hideBelow: "xl" },
     { label: "Status" },
+    { label: "Payment", hideBelow: "xl" },
     ...(showMargin ? [{ label: "Margin", align: "end" as const, hideBelow: "xl" as const }] : []),
     { label: "Total", align: "end" },
   ];
-
-  const field =
-    "h-10 rounded-sm border border-line bg-surface px-3 text-[0.8125rem] text-ink outline-none focus:border-ink";
-  const chip =
-    "inline-flex h-9 items-center gap-2 rounded-full border px-4 text-[0.8125rem] font-medium whitespace-nowrap transition-colors";
 
   const now = new Date();
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[16rem] flex-1">
-          <Search
-            size={15}
-            aria-hidden
-            className="pointer-events-none absolute start-3 top-1/2 -translate-y-1/2 text-subtle"
-          />
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Reference, buyer name or email"
-            aria-label="Search orders"
-            className={cn(field, "w-full ps-9")}
-          />
-        </div>
-
-        <label className="flex flex-wrap items-center gap-2 text-[0.8125rem] text-muted">
-          Travelling
-          <input
-            type="date"
-            value={from}
-            onChange={(event) => apply({ from: event.target.value || null })}
-            aria-label="Travelling on or after"
-            className={field}
-          />
-          <span aria-hidden>–</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(event) => apply({ to: event.target.value || null })}
-            aria-label="Travelling on or before"
-            className={field}
-          />
-        </label>
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => toggle("PENDING_CONFIRMATION")}
-          aria-pressed={selected.includes("PENDING_CONFIRMATION")}
-          className={cn(
-            chip,
-            selected.includes("PENDING_CONFIRMATION")
-              ? "border-warning bg-warning/15 text-warning-text"
-              : "border-warning/40 text-warning-text hover:bg-warning/10",
-          )}
-        >
-          <Clock size={14} aria-hidden />
-          On request
-          <span className="rounded-full bg-warning/25 px-1.5 text-[0.75rem] tabular-nums">
-            {pendingTotal}
-          </span>
-        </button>
-
-        <span className="mx-1 h-6 w-px bg-line" aria-hidden />
-
-        <button
-          type="button"
-          onClick={() => apply({ status: null })}
-          aria-pressed={selected.length === 0}
-          className={cn(
-            chip,
-            selected.length === 0
-              ? "border-brand bg-brand-soft text-brand-text"
-              : "border-line text-body hover:border-subtle hover:text-ink",
-          )}
-        >
-          All
-        </button>
-
-        {ORDER_STATUSES.filter((status) => status !== "PENDING_CONFIRMATION").map((status) => (
-          <button
-            key={status}
-            type="button"
-            onClick={() => toggle(status)}
-            aria-pressed={selected.includes(status)}
-            className={cn(
-              chip,
-              selected.includes(status)
-                ? "border-brand bg-brand-soft text-brand-text"
-                : "border-line text-body hover:border-subtle hover:text-ink",
-            )}
-          >
-            {orderStatusLabels[status]}
-          </button>
-        ))}
-      </div>
-
-      {/* One status selected is a queue with a meaning; three is a filter. */}
-      {selected.length === 1 && (
-        <p className="mt-3 text-[0.8125rem] text-muted">{orderStatusHints[selected[0]]}</p>
-      )}
+      <BookingFilters
+        url={url}
+        statuses={[
+          // The queue first, with its size, in the warning tone.
+          { value: "PENDING_CONFIRMATION", label: "On request", count: pendingTotal, urgent: true },
+          ...ORDER_STATUSES.filter((status) => status !== "PENDING_CONFIRMATION").map((value) => ({
+            value,
+            label: orderStatusLabels[value],
+          })),
+        ]}
+        statusLabel={(status) => orderStatusLabels[status as OrderStatus] ?? status}
+        statusHints={orderStatusHints}
+        dateLabel="Travelling"
+        searchPlaceholder="Reference, buyer name or email"
+        searchLabel="Search orders"
+        today={today}
+        showPartner={showPartner}
+        showManager={showManager}
+      />
 
       <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
         {total === 0 ? "No orders match these filters." : `${total} order${total === 1 ? "" : "s"}`}
       </p>
 
-      <div className={cn("mt-4 transition-opacity", pending && "opacity-60")}>
+      <div className={cn("mt-4 transition-opacity", url.pending && "opacity-60")}>
         {/* Desktop: a real table. Below lg the same rows render as cards. */}
         <div className="hidden rounded-sm border border-line bg-surface lg:block">
           <DataTable columns={columns} caption="Orders">
@@ -270,6 +156,9 @@ export function OrdersBrowser({
                       {order.partner && (
                         <span className="block text-[0.75rem] text-muted">{order.partner.name}</span>
                       )}
+                      {!order.partner && order.desk?.customer && (
+                        <span className="block text-[0.75rem] text-muted">{order.desk.customer.name}</span>
+                      )}
                     </Cell>
                     <Cell hideBelow="md">{formatOrderDates(order.startDate, order.endDate)}</Cell>
                     <Cell hideBelow="xl">
@@ -285,6 +174,9 @@ export function OrdersBrowser({
                           {order.pendingCount}
                         </span>
                       )}
+                    </Cell>
+                    <Cell hideBelow="xl">
+                      <PaymentCell payment={order.payment} />
                     </Cell>
                     {showMargin && (
                       <Cell align="end" hideBelow="xl" className="tabular-nums text-muted">
@@ -325,7 +217,10 @@ export function OrdersBrowser({
                   >
                     {order.reference}
                   </Link>
-                  <OrderStatusBadge status={order.status} />
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <OrderStatusBadge status={order.status} />
+                    <PaymentStatusBadge status={order.payment.status} />
+                  </div>
                 </div>
                 <p className="mt-2 text-[0.875rem] text-body">
                   {order.package.name ?? "Built to order"}
@@ -360,29 +255,7 @@ export function OrdersBrowser({
         </ul>
       </div>
 
-      {totalPages > 1 && (
-        <nav className="mt-6 flex items-center justify-between" aria-label="Pagination">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => apply({ page: String(page - 1) })}
-            className="inline-flex h-10 items-center rounded-sm border border-ink/20 px-4 text-[0.8125rem] font-semibold text-ink hover:border-ink hover:bg-surface-soft disabled:pointer-events-none disabled:opacity-40"
-          >
-            Previous
-          </button>
-          <span className="text-[0.8125rem] text-muted">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => apply({ page: String(page + 1) })}
-            className="inline-flex h-10 items-center rounded-sm border border-ink/20 px-4 text-[0.8125rem] font-semibold text-ink hover:border-ink hover:bg-surface-soft disabled:pointer-events-none disabled:opacity-40"
-          >
-            Next
-          </button>
-        </nav>
-      )}
+      <Pager page={page} totalPages={totalPages} onPage={(next) => url.apply({ page: String(next) })} />
     </div>
   );
 }

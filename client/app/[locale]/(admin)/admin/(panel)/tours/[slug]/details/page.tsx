@@ -6,11 +6,13 @@ import { TourDetailsEditor } from "@/components/admin/TourDetailsEditor";
 import { getTour } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Details & itinerary" };
 
 /** Words, ages, the meeting point and the day-by-day. Prices live on the options screen. */
 export default async function TourDetailsPage({ params }: PageProps<"/[locale]/admin/tours/[slug]/details">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

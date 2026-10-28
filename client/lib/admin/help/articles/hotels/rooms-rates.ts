@@ -13,7 +13,6 @@ export const article = {
   title: "Rooms and rate plans",
   summary: "A room type is what a guest sleeps in; a rate plan is one way of selling it. How to add both, and what archiving them does.",
   category: "hotels",
-  roles: ["ADMIN"],
   routes: ["/admin/hotels/[slug]/rooms"],
   keywords: ["room type", "rate plan", "board", "breakfast", "half board", "all inclusive", "beds", "occupancy", "sleeps", "cancellation policy", "payment policy", "archive room"],
   related: ["ht-inventory-pricing", "ht-hub", "ht-publish-checklist", "pk-parts"],

@@ -31,9 +31,6 @@ const requiredInProduction = [
     // `true` in front of one lets a client spoof its own address through
     // X-Forwarded-For. Only the operator knows which, so they must say.
     'TRUST_PROXY',
-    'SMTP_HOST',
-    'SMTP_USER',
-    'SMTP_PASS',
     // Same reasoning as AUTH_TOKEN_PEPPER: the development default is public,
     // and an offer token signed with it could be re-priced by anyone.
     'HOTEL_OFFER_TOKEN_SECRET',
@@ -53,7 +50,15 @@ const requiredInProduction = [
     'MEDIA_S3_SECRET_ACCESS_KEY',
     'MEDIA_PUBLIC_BASE_URL'
 ];
-const missing = [...required, ...(isDeployed ? requiredInProduction : [])].filter((key) => !process.env[key]);
+// The transport decides which mail credentials a deploy needs. SMTP's are
+// required on every deployed transport but `gmail`, which is exactly the list
+// they were always on; the Gmail API's are checked with the rest of its
+// configuration in assertGmailConfig.
+const mailTransport = process.env.MAIL_TRANSPORT || (isProduction ? 'smtp' : 'log');
+const requiredForMail = isDeployed && mailTransport !== 'gmail' ? ['SMTP_HOST', 'SMTP_USER', 'SMTP_PASS'] : [];
+const missing = [...required, ...(isDeployed ? requiredInProduction : []), ...requiredForMail].filter(
+    (key) => !process.env[key]
+);
 
 if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
@@ -106,7 +111,12 @@ const parseOffsetDays = (key, fallback) => {
 // first send, because a mistyped MAIL_TRANSPORT on a deploy used to fall back
 // to `log` — every email quietly printed instead of sent, discovered only when
 // a partner asked where their invitation was.
-const MAIL_TRANSPORTS = ['smtp', 'log', 'capture'];
+const MAIL_TRANSPORTS = ['smtp', 'gmail', 'log', 'capture'];
+
+// The one scope the transport sends with, and `email` beside it so the
+// callback can read which account was linked from the ID token and refuse any
+// other. Nothing that reads, lists or deletes mail.
+export const GMAIL_SCOPES = Object.freeze(['https://www.googleapis.com/auth/gmail.send', 'email']);
 
 // The drivers services/media/storage.service.js knows about.
 const MEDIA_DRIVERS = ['local', 's3'];
@@ -235,6 +245,37 @@ export const config = {
         forgotPasswordLimit: numberEnv('AUTH_FORGOT_PASSWORD_LIMIT', (nodeEnv === 'test' ? 10_000 : 5))
     },
 
+    booking: {
+        // Platform approval before a booking is confirmed (owner decision
+        // OD1, 2026-10-20): every booking made without an online payment —
+        // which is every booking — waits for an operator's yes, holding its
+        // inventory meanwhile. Off by default so the schema and the code can
+        // ship before the approvals screen does; on, every partner whose
+        // `bookingApproval` is REQUIRED (the default) and every guest waits.
+        approvalEnabled: process.env.BOOKING_APPROVAL_ENABLED === 'true',
+        // How long operations have to answer before they are told it is
+        // overdue. Nothing auto-rejects at the deadline: a late yes is still
+        // a yes. A booking still waiting when its service date has passed is
+        // rejected by the sweeper, because nobody can approve a stay that
+        // has already begun.
+        approvalSlaHours: numberEnv('BOOKING_APPROVAL_SLA_HOURS', 24),
+        approvalSweepIntervalMs: numberEnv('BOOKING_APPROVAL_SWEEP_INTERVAL_MS', 10 * 60 * 1000),
+        // The desk's shared mailbox: every booking waiting for approval, and
+        // every one overdue, is also mailed here. Unset, in-app only.
+        opsEmail: process.env.BOOKING_OPS_EMAIL || null,
+        // The cart (OD2): hotels, transfers, tours and whole packages booked
+        // as one CUSTOM order through `/orders/custom`. Off until the cart
+        // pages ship; off, the public cart routes answer 404 `CART_DISABLED`
+        // while the desk's own multi-item route stays open.
+        cartEnabled: process.env.CART_ENABLED === 'true',
+
+        // Deadline reminders (payment, free cancellation, confirmation) on the
+        // schedule in `reminder_policies`. Off until the calendar ships, so
+        // partners are not written to before anyone can see what about.
+        deadlineRemindersEnabled: process.env.DEADLINE_REMINDERS_ENABLED === 'true',
+        deadlineSweepIntervalMs: numberEnv('DEADLINE_SWEEP_INTERVAL_MS', 10 * 60 * 1000)
+    },
+
     finance: {
         // Payables and receivables are dated in the supplier's (or Georgia's)
         // own time: an instalment "due on the 12th" is due at this local time.
@@ -311,7 +352,7 @@ export const config = {
     mail: {
         // smtp talks to a real server; log prints the message (links included)
         // through pino; capture collects into an in-memory outbox for tests.
-        transport: process.env.MAIL_TRANSPORT || (isProduction ? 'smtp' : 'log'),
+        transport: mailTransport,
         from: process.env.MAIL_FROM || 'I am Georgia <no-reply@iamgeorgia.travel>',
         replyTo: process.env.MAIL_REPLY_TO,
         smtp: {
@@ -328,6 +369,46 @@ export const config = {
             // longer because a large HTML body on a slow relay is not a fault.
             connectionTimeoutMs: numberEnv('SMTP_CONNECTION_TIMEOUT_MS', 10 * 1000),
             socketTimeoutMs: numberEnv('SMTP_SOCKET_TIMEOUT_MS', 30 * 1000)
+        },
+
+        // The Gmail API, as one company Google account authorised once by an
+        // administrator. Usable as soon as the four identifiers are set,
+        // whatever MAIL_TRANSPORT says, so the account can be connected and a
+        // test sent from the panel before the transport is switched over.
+        gmail: {
+            clientId: process.env.GOOGLE_CLIENT_ID || null,
+            clientSecret: process.env.GOOGLE_CLIENT_SECRET || null,
+            // Must match the OAuth client's registered redirect exactly: the
+            // API's own /api/admin/mail/google/callback.
+            redirectUri: process.env.GOOGLE_REDIRECT_URI || null,
+            // The only account allowed to connect, and the address mail goes out as.
+            senderEmail: (process.env.GMAIL_SENDER_EMAIL || '').trim().toLowerCase() || null,
+            // Gmail rewrites a From it does not recognise to the account's own
+            // address. A MAIL_FROM on another address is accepted only when the
+            // operator says it is a verified "Send mail as" alias.
+            fromAliasVerified: process.env.GMAIL_FROM_ALIAS_VERIFIED === 'true',
+            // Optional: a refresh token from the environment, for a machine with
+            // no admin flow (a developer laptop). A connected account wins.
+            envRefreshToken: process.env.GOOGLE_REFRESH_TOKEN || null,
+            // Seals the stored refresh token. Development has a public default,
+            // like every other secret here; a deploy must set its own.
+            credentialsKey: process.env.MAIL_CREDENTIALS_KEY || null,
+            requestTimeoutMs: numberEnv('GMAIL_REQUEST_TIMEOUT_MS', 15 * 1000),
+            // Attempts per message within one send, for transient failures,
+            // before the error goes back to the caller and the outbox's schedule.
+            maxAttempts: numberEnv('GMAIL_MAX_ATTEMPTS', 3),
+            retryBaseMs: numberEnv('GMAIL_RETRY_BASE_MS', 500),
+            // A soft line, not a cap: past this many sends in 24 hours the
+            // administrators are told, before Gmail's own daily limit refuses.
+            dailyWarnAt: numberEnv('GMAIL_DAILY_SEND_WARN', 400),
+            // Connect, disconnect and test sends per administrator per 15 minutes.
+            adminActionLimit: numberEnv('GMAIL_ADMIN_ACTION_LIMIT', nodeEnv === 'test' ? 10_000 : 10),
+            // A local stand-in for Google's token, certificate and Gmail hosts,
+            // for the test suite. Refused at boot anywhere deployed: pointed
+            // elsewhere it would hand the client secret and every token to it.
+            stubUrl: process.env.GOOGLE_API_STUB_URL || null,
+            // Set by assertGmailConfig: all four identifiers are present.
+            configured: false
         }
     },
 
@@ -612,6 +693,85 @@ const assertMailConfig = () => {
             `MAIL_TRANSPORT must be one of ${MAIL_TRANSPORTS.join(', ')} — got "${config.mail.transport}"`
         );
     }
+
+    assertGmailConfig();
+};
+
+/** The bare, lower-cased address out of `Name <address>` or a plain address. */
+export const addressOf = (value) => {
+    const text = String(value ?? '').trim();
+    const angled = /<([^<>]+)>\s*$/.exec(text);
+
+    return (angled ? angled[1] : text).trim().toLowerCase();
+};
+
+const GMAIL_KEYS = [
+    ['GOOGLE_CLIENT_ID', 'clientId'],
+    ['GOOGLE_CLIENT_SECRET', 'clientSecret'],
+    ['GOOGLE_REDIRECT_URI', 'redirectUri'],
+    ['GMAIL_SENDER_EMAIL', 'senderEmail']
+];
+
+/**
+ * The Gmail API is all-or-nothing: half its identifiers is a connect button
+ * that fails at Google, so a partial set refuses to boot. Selected as the
+ * transport, it must also be able to send as MAIL_FROM, or Gmail would
+ * quietly replace the sender with the account's own address.
+ */
+const assertGmailConfig = () => {
+    const gmail = config.mail.gmail;
+    const selected = config.mail.transport === 'gmail';
+    const absent = GMAIL_KEYS.filter(([, field]) => !gmail[field]).map(([key]) => key);
+
+    gmail.configured = absent.length === 0;
+
+    if (gmail.stubUrl && isDeployed) {
+        throw new Error('GOOGLE_API_STUB_URL is for the test suite and must not be set on a deployed instance');
+    }
+
+    if (!selected && absent.length === GMAIL_KEYS.length) {
+        return;
+    }
+
+    if (absent.length > 0) {
+        throw new Error(`${selected ? 'MAIL_TRANSPORT=gmail' : 'The Gmail API'} needs ${absent.join(', ')}`);
+    }
+
+    if (!gmail.senderEmail.includes('@')) {
+        throw new Error(`GMAIL_SENDER_EMAIL is not an email address: "${gmail.senderEmail}"`);
+    }
+
+    let redirect;
+
+    try {
+        redirect = new URL(gmail.redirectUri);
+    } catch {
+        throw new Error(`GOOGLE_REDIRECT_URI must be an absolute URL, got "${gmail.redirectUri}"`);
+    }
+
+    if (isDeployed && redirect.protocol !== 'https:') {
+        throw new Error('GOOGLE_REDIRECT_URI must use https on a deployed instance');
+    }
+
+    if (isDeployed && !gmail.credentialsKey) {
+        throw new Error('The Gmail API needs MAIL_CREDENTIALS_KEY on a deployed instance: it seals the stored refresh token');
+    }
+
+    if (gmail.credentialsKey && Buffer.from(gmail.credentialsKey, 'base64').length !== 32) {
+        throw new Error('MAIL_CREDENTIALS_KEY must be 32 random bytes, base64-encoded (openssl rand -base64 32)');
+    }
+
+    if (!Number.isInteger(gmail.maxAttempts) || gmail.maxAttempts < 1 || gmail.maxAttempts > 10) {
+        throw new Error(`GMAIL_MAX_ATTEMPTS must be a whole number between 1 and 10, got "${gmail.maxAttempts}"`);
+    }
+
+    if (selected && addressOf(config.mail.from) !== gmail.senderEmail && !gmail.fromAliasVerified) {
+        throw new Error(
+            `MAIL_FROM (${addressOf(config.mail.from)}) is not GMAIL_SENDER_EMAIL (${gmail.senderEmail}). ` +
+                'Gmail would send as the account instead. Add the address as a verified "Send mail as" alias and set ' +
+                'GMAIL_FROM_ALIAS_VERIFIED=true, or make MAIL_FROM the account itself.'
+        );
+    }
 };
 
 /**
@@ -671,6 +831,14 @@ const assertFinanceConfig = () => {
 
     if (isDeployed && !config.finance.opsEmail) {
         console.warn('FINANCE_OPS_EMAIL is not set: supplier payment reminders will be in-app only');
+    }
+
+    if (config.booking.opsEmail && !config.booking.opsEmail.includes('@')) {
+        throw new Error(`BOOKING_OPS_EMAIL is not an email address: "${config.booking.opsEmail}"`);
+    }
+
+    if (!Number.isInteger(config.booking.approvalSlaHours) || config.booking.approvalSlaHours < 1) {
+        throw new Error(`BOOKING_APPROVAL_SLA_HOURS must be a whole number of hours, got "${config.booking.approvalSlaHours}"`);
     }
 };
 

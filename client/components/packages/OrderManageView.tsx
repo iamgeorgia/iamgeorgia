@@ -28,7 +28,11 @@ export async function OrderManageView({ order, email, basePath }: OrderManageVie
   const { t, path } = await getI18n();
 
   let quote: OrderCancellationQuote | null = null;
-  const live = order.status === "PENDING_CONFIRMATION" || order.status === "CONFIRMED" || order.status === "PARTIALLY_CANCELLED";
+  const live =
+    order.status === "PENDING_APPROVAL" ||
+    order.status === "PENDING_CONFIRMATION" ||
+    order.status === "CONFIRMED" ||
+    order.status === "PARTIALLY_CANCELLED";
 
   if (live) {
     try {

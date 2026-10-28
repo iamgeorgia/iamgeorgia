@@ -8,6 +8,8 @@ import { StatCard } from "@/components/admin/StatCard";
 import { listPackages } from "@/lib/api/packages";
 import { packageQueryFromParams } from "@/lib/admin/packages";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Packages" };
 
@@ -21,6 +23,7 @@ export const metadata: Metadata = { title: "Packages" };
 export default async function AdminPackagesPage({
   searchParams,
 }: PageProps<"/[locale]/admin/packages">) {
+  const session = await requireScreen();
   const { path } = await getI18n();
   const query = packageQueryFromParams(await searchParams);
 
@@ -36,13 +39,15 @@ export default async function AdminPackagesPage({
         title="Packages"
         description="Trips assembled from a hotel, transfers, tours and services, sold and cancelled as one."
         actions={
-          <Link
-            href={path("/admin/packages/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add package
-          </Link>
+          can(session, "catalogue.write") ? (
+            <Link
+              href={path("/admin/packages/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add package
+            </Link>
+          ) : undefined
         }
       />
 

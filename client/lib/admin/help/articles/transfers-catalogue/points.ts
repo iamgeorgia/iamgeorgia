@@ -19,7 +19,6 @@ export const article = {
   title: "Pick-up points",
   summary: "The places a transfer starts or ends — finding, adding, editing and retiring them, and why their coordinates matter to the fare.",
   category: "transfers-catalogue",
-  roles: ["ADMIN"],
   routes: [
     { pattern: "/admin/transfers/points", section: "register" },
     { pattern: "/admin/transfers/points/new", section: "create" },

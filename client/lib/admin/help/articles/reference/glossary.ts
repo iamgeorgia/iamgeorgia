@@ -13,7 +13,6 @@ export const article = {
   title: "Glossary",
   summary: "What the panel means by a word — references, money, channels, statuses, kosher levels and the terms used on the dispatch board.",
   category: "reference",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["glossary", "terms", "definitions", "vocabulary", "meaning", "bps", "basis points", "tetri", "net", "markup", "slug", "outbox", "b2b", "b2c"],
   related: ["bk-statuses-glossary", "dp-leg-statuses", "rf-search-filters"],
   blocks: [

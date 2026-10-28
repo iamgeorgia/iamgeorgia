@@ -7,6 +7,9 @@ import { adminBadgeRoutes } from './admin.badges.routes.js';
 import { adminUserRoutes } from './admin.users.routes.js';
 import { adminRoleRoutes } from './admin.roles.routes.js';
 import { adminApprovalRoutes } from './admin.approvals.routes.js';
+import { adminBookingApprovalRoutes } from './admin.bookingApprovals.routes.js';
+import { adminCustomerRoutes } from './admin.customers.routes.js';
+import { adminDeadlineRoutes, adminReminderPolicyRoutes, partnerDeadlineRoutes } from './admin.deadlines.routes.js';
 import { adminAuditRoutes } from './admin.audit.routes.js';
 import { partnerTeamRoutes } from './partner.team.routes.js';
 import { adminFinanceRoutes } from './admin.finance.routes.js';
@@ -16,6 +19,7 @@ import { partnerFinanceRoutes } from './partner.finance.routes.js';
 import { adminNotificationRoutes } from './admin.notifications.routes.js';
 import { partnerNotificationRoutes } from './partner.notifications.routes.js';
 import { adminOutboxRoutes } from './admin.outbox.routes.js';
+import { adminMailRoutes } from './admin.mail.routes.js';
 import { partnerRoutes } from './partner.routes.js';
 import { destinationRoutes } from './destinations.routes.js';
 import { adminDestinationRoutes } from './admin.destinations.routes.js';
@@ -101,6 +105,13 @@ routes.use('/admin/badges', adminBadgeRoutes);
 routes.use('/admin/users', adminUserRoutes);
 routes.use('/admin/roles', adminRoleRoutes);
 routes.use('/admin/approvals', adminApprovalRoutes);
+// Booking approvals (OD1): the yes a booking waits for before it is confirmed.
+routes.use('/admin/booking-approvals', adminBookingApprovalRoutes);
+// Desk customers: buyers with no partner account, for manual bookings.
+routes.use('/admin/customers', adminCustomerRoutes);
+// The deadline calendar and the reminder schedule.
+routes.use('/admin/deadlines', adminDeadlineRoutes);
+routes.use('/admin/settings/reminder-policies', adminReminderPolicyRoutes);
 routes.use('/admin/audit', adminAuditRoutes);
 routes.use('/admin/finance', adminFinanceRoutes);
 routes.use('/admin/invoices', adminInvoiceRoutes);
@@ -108,6 +119,8 @@ routes.use('/admin/invoices', adminInvoiceRoutes);
 routes.use('/integrations/invoiceocean', invoiceOceanWebhookRoutes);
 routes.use('/admin/notifications', adminNotificationRoutes);
 routes.use('/admin/outbox', adminOutboxRoutes);
+// Settings → Email. Its OAuth callback is the one admin route with no session.
+routes.use('/admin/mail', adminMailRoutes);
 routes.use('/admin/partners', adminPartnerRoutes);
 routes.use('/admin/destinations', adminDestinationRoutes);
 routes.use('/admin/hotels', adminHotelRoutes);
@@ -138,6 +151,7 @@ routes.use('/partner/drivers', partnerDriverRoutes);
 routes.use('/partner/team', partnerTeamRoutes);
 routes.use('/partner/finance', partnerFinanceRoutes);
 routes.use('/partner/notifications', partnerNotificationRoutes);
+routes.use('/partner/deadlines', partnerDeadlineRoutes);
 routes.use('/partner', partnerRoutes);
 // The driver panel. Scoped on the session's driver profile, never on input.
 routes.use('/driver', driverRoutes);

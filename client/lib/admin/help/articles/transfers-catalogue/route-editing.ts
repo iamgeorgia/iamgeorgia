@@ -17,7 +17,6 @@ export const article = {
   title: "Editing a route: fares, details, stops, closed dates, archive",
   summary: "Everything on a route's page — the price grid, the details editor, intermediate stops, closed-date windows, publishing and archiving.",
   category: "transfers-catalogue",
-  roles: ["ADMIN"],
   routes: ["/admin/transfers/routes/[id]"],
   keywords: ["fares", "price grid", "one way", "return", "publish", "unpublish", "stops", "via", "closed dates", "blackout", "reopen", "archive", "restore", "checklist"],
   related: ["tc-route-create", "tc-pricing-model", "tc-vehicle-classes", "tc-routes-register", "pb-checklists", "rf-dangerous-actions"],

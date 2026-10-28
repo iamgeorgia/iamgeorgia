@@ -5,6 +5,8 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Check, Loader2, Star, X } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { publishRating, rejectRating } from "@/lib/api/ratings";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -19,6 +21,8 @@ export function RatingsQueue({ data, total, page, totalPages, status }: { data: 
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const path = useLocalePath();
+  const can = useCan();
+  const canModerate = can("dispatch.write");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,6 +81,10 @@ export function RatingsQueue({ data, total, page, totalPages, status }: { data: 
 
       {error && <p role="alert" className="mt-3 text-[0.8125rem] text-error-text">{error}</p>}
 
+      {!canModerate && data.length > 0 && (
+        <ReadOnlyNote needs="dispatch.write" what="Publishing or rejecting a rating" className="mt-6" />
+      )}
+
       {data.length === 0 ? (
         <p className="mt-6 rounded-sm border border-dashed border-line p-8 text-center text-[0.875rem] text-muted">Nothing here.</p>
       ) : (
@@ -108,7 +116,7 @@ export function RatingsQueue({ data, total, page, totalPages, status }: { data: 
                   </p>
                 </div>
 
-                {rating.status !== "PUBLISHED" || rating.comment ? (
+                {canModerate && (rating.status !== "PUBLISHED" || rating.comment) ? (
                   <div className="flex shrink-0 gap-2">
                     {rating.status !== "PUBLISHED" && (
                       <button type="button" disabled={busy !== null} onClick={() => void decide(rating, "publish")} className="inline-flex h-9 items-center gap-1.5 rounded-sm bg-brand px-3 text-[0.8125rem] font-semibold text-white hover:bg-brand-hover disabled:opacity-50">

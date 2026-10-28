@@ -5,6 +5,7 @@ import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { ApiError, describeError } from "@/lib/api/client";
 import { deleteDestination } from "@/lib/api/hotels";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -50,11 +51,15 @@ const describeBlocker = ([key, count]: [string, number]) => {
 export function DestinationDangerZone({ destination }: { destination: Destination }) {
   const router = useRouter();
   const path = useLocalePath();
+  const can = useCan();
 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [blockers, setBlockers] = useState<[string, number][]>([]);
+
+  // The panel is the action: without the capability there is nothing to show.
+  if (!can("catalogue.write")) return null;
 
   // What the record already knows, before anyone presses anything. The counts
   // come from the detail read, so an obviously-occupied destination never gets

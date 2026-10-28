@@ -15,7 +15,6 @@ export const article = {
   title: "An order: confirming, declining and cancelling parts",
   summary: "Working the parts of one order — confirm or decline what is on request, cancel a confirmed part, or end the whole trip — and what each of those sends.",
   category: "bookings",
-  roles: ["ADMIN"],
   routes: ["/admin/orders/[reference]"],
   keywords: ["ORD", "part", "item", "required part", "optional part", "decline", "confirm", "cancel this part", "clawback", "discount forfeited", "refund", "on request"],
   related: ["bk-orders-register", "bk-statuses-glossary", "rf-dangerous-actions", "pk-parts", "dp-who-is-told-what"],

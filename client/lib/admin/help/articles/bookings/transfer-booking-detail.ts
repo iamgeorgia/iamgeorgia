@@ -13,7 +13,6 @@ export const article = {
   title: "A transfer booking and its legs",
   summary: "One journey as sold, with a dispatch row for each leg — the same controls as the board — and what the booking's own status can do.",
   category: "bookings",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/bookings/[reference]"],
   keywords: ["TRF", "leg", "outbound", "return", "assign", "driver", "snapshot", "vehicle", "route", "time zone"],
   related: ["dp-dispatch-board", "dp-assigning-a-driver", "dp-leg-statuses", "bk-transfer-bookings-register", "bk-statuses-glossary"],

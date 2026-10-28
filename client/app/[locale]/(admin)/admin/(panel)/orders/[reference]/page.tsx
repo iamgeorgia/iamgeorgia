@@ -9,13 +9,17 @@ import {
   AdminPageHeader,
   AdminPanel,
 } from "@/components/admin/AdminPage";
+import { BookingApprovalPanel } from "@/components/admin/BookingApprovalPanel";
+import { BookingDeadlinesPanel } from "@/components/admin/BookingDeadlinesPanel";
+import { BookingDeskPanel } from "@/components/admin/BookingDeskPanel";
+import { BookingPaymentPanel } from "@/components/admin/BookingPaymentPanel";
 import { Cell, DataTable, Row } from "@/components/admin/DataTable";
 import { OrderActions } from "@/components/admin/OrderActions";
 import { OrderParts } from "@/components/admin/OrderParts";
 import { OrderStatusBadge } from "@/components/admin/StatusBadge";
 import { getAdminOrder, getAdminOrderCancellationQuote } from "@/lib/api/orders";
 import { ApiError } from "@/lib/api/client";
-import { formatInstant } from "@/lib/admin/bookings";
+import { bookingSourceLabel, formatInstant } from "@/lib/admin/bookings";
 import {
   componentTypeLabels,
   formatOrderDates,
@@ -26,6 +30,7 @@ import {
 import { formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
 import type { OrderCancellationQuote } from "@/types/order";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Order" };
 
@@ -44,6 +49,7 @@ export const metadata: Metadata = { title: "Order" };
 export default async function AdminOrderPage({
   params,
 }: PageProps<"/[locale]/admin/orders/[reference]">) {
+  await requireScreen();
   const { reference } = await params;
   const { path } = await getI18n();
 
@@ -207,7 +213,7 @@ export default async function AdminOrderPage({
                 { label: "Email", value: order.leadEmail },
                 { label: "Phone", value: order.leadPhone ?? "—" },
                 { label: "Requests", value: order.specialRequests ?? "None" },
-                { label: "Source", value: order.source },
+                { label: "Source", value: bookingSourceLabel(order.source) },
                 ...(order.partner
                   ? [
                       {
@@ -229,6 +235,26 @@ export default async function AdminOrderPage({
         </div>
 
         <div className="flex flex-col gap-6">
+          {/* The platform's own gate on the whole order: its parts cannot be
+              approved one at a time. Renders nothing when it never needed one. */}
+          <BookingApprovalPanel
+            product="ORDER"
+            reference={order.reference}
+            approval={order.approval}
+            partnerName={order.partner?.name ?? null}
+          />
+
+          <BookingPaymentPanel payment={order.payment} currency={order.currency} />
+
+          <BookingDeadlinesPanel
+            product="ORDER"
+            reference={order.reference}
+            lastDate={order.endDate}
+          />
+
+          {/* The desk's fields: staff who may see the buyer only. */}
+          <BookingDeskPanel product="ORDER" reference={order.reference} desk={order.desk} currency={order.currency} />
+
           <AdminPanel title="Actions">
             <OrderActions order={order} quote={quote} />
           </AdminPanel>

@@ -5,6 +5,7 @@ import { NewHotelForm } from "@/components/admin/NewHotelForm";
 import { getDestinationTree } from "@/lib/api/hotels";
 import { listPartners } from "@/lib/api/partners";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add property" };
 
@@ -17,6 +18,7 @@ export const metadata: Metadata = { title: "Add property" };
  * setup is a resumable record, not lost form state.
  */
 export default async function NewHotelPage() {
+  await requireScreen();
   const { path } = await getI18n();
 
   const [tree, suppliers] = await Promise.all([

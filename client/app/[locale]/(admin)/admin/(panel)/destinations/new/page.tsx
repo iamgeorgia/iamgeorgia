@@ -4,6 +4,7 @@ import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/
 import { DestinationForm } from "@/components/admin/DestinationForm";
 import { getDestinationTree } from "@/lib/api/hotels";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add a destination" };
 
@@ -19,6 +20,7 @@ export const metadata: Metadata = { title: "Add a destination" };
  * needs it during the first render — it is tens of rows, so it ships whole.
  */
 export default async function NewDestinationPage() {
+  await requireScreen();
   const [{ path }, tree] = await Promise.all([getI18n(), getDestinationTree()]);
 
   return (

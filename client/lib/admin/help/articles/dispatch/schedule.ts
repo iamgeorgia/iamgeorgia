@@ -13,7 +13,6 @@ export const article = {
   title: "Schedule: diaries and blocks",
   summary: "One driver's or one car's diary — jobs and blocks — and how to block time off for a day off, sickness or maintenance.",
   category: "dispatch",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/schedule"],
   keywords: ["schedule", "diary", "block", "day off", "sick", "maintenance", "busy", "availability", "time zone", "Tbilisi", "remove block"],
   related: ["dp-assigning-a-driver", "dp-dispatch-board", "fd-drivers-register", "fd-fleet-register", "rf-dangerous-actions"],

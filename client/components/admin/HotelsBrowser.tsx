@@ -15,6 +15,7 @@ import {
 } from "@/lib/admin/hotels";
 import { formatMoney } from "@/lib/money";
 import { useLocalePath } from "@/lib/i18n/provider";
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import { cn } from "@/lib/utils";
 import type { HotelSummary } from "@/types/catalogue";
 
@@ -95,7 +96,9 @@ export function HotelsBrowser({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterDisclosure
+        count={["status", "propertyType"].filter((key) => { const value = params.get(key); return value && value !== "all"; }).length}
+        lead={
         <div className="relative min-w-[16rem] flex-1">
           <Search
             size={15}
@@ -111,35 +114,38 @@ export function HotelsBrowser({
             className={cn(field, "w-full ps-9")}
           />
         </div>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={params.get("status") ?? "all"}
+            onChange={(event) => apply({ status: event.target.value })}
+            aria-label="Filter by status"
+            className={field}
+          >
+            <option value="all">All statuses</option>
+            {HOTEL_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {hotelStatusLabels[value]}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={params.get("status") ?? "all"}
-          onChange={(event) => apply({ status: event.target.value })}
-          aria-label="Filter by status"
-          className={field}
-        >
-          <option value="all">All statuses</option>
-          {HOTEL_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {hotelStatusLabels[value]}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={params.get("propertyType") ?? "all"}
-          onChange={(event) => apply({ propertyType: event.target.value })}
-          aria-label="Filter by property type"
-          className={field}
-        >
-          <option value="all">All types</option>
-          {PROPERTY_TYPES.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
-      </div>
+          <select
+            value={params.get("propertyType") ?? "all"}
+            onChange={(event) => apply({ propertyType: event.target.value })}
+            aria-label="Filter by property type"
+            className={field}
+          >
+            <option value="all">All types</option>
+            {PROPERTY_TYPES.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+      </FilterDisclosure>
 
       <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
         {total === 0 ? "No properties match these filters." : `${total} propert${total === 1 ? "y" : "ies"}`}

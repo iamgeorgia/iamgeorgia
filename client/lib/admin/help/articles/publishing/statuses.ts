@@ -15,7 +15,6 @@ export const article = {
   title: "Draft, on sale, off sale, archived (and suspended)",
   summary: "What each status means on the public site, which buttons move a record between them, which ask for confirmation, and the one move that can never be undone.",
   category: "publishing",
-  roles: ["ADMIN"],
   keywords: ["status", "lifecycle", "draft", "active", "inactive", "archived", "suspended", "publish", "take off sale", "archive", "un-archive", "restore"],
   related: ["pb-checklists", "pb-b2c-vs-trade", "ht-hub", "tr-hub", "pk-hub", "sv-services", "rf-dangerous-actions"],
   blocks: [

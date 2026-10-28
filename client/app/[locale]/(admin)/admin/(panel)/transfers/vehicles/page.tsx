@@ -10,6 +10,8 @@ import { listAdminTransferVehicles } from "@/lib/api/transfers";
 import { vehicleClassLabels } from "@/lib/admin/transfers";
 import { getI18n } from "@/lib/i18n/server";
 import { formatMoney } from "@/lib/money";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Vehicle classes" };
 
@@ -22,6 +24,7 @@ export const metadata: Metadata = { title: "Vehicle classes" };
  * route has no curated price: those are the numbers that will quote it.
  */
 export default async function AdminTransferVehiclesPage() {
+  const session = await requireScreen();
   const [{ data: vehicles }, { path }] = await Promise.all([
     listAdminTransferVehicles(),
     getI18n(),
@@ -37,13 +40,15 @@ export default async function AdminTransferVehiclesPage() {
         title="Vehicle classes"
         description="The vehicle classes on sale, and the fares that apply where a route has no price of its own."
         actions={
-          <Link
-            href={path("/admin/transfers/vehicles/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add a class
-          </Link>
+          can(session, "catalogue.write") && (
+            <Link
+              href={path("/admin/transfers/vehicles/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add a class
+            </Link>
+          )
         }
       />
 

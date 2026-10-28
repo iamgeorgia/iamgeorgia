@@ -1,4 +1,4 @@
-import { serverFetch, serverFetchOptional } from "./client";
+import { apiFetch, serverFetch, serverFetchOptional } from "./client";
 import type { AdminBadges } from "@/lib/admin/navigation";
 
 /**
@@ -12,6 +12,8 @@ import type { AdminBadges } from "@/lib/admin/navigation";
 
 /** What the API sends: `null` for each queue the viewer's role does not work. */
 interface BadgesResponse {
+  /** Null when the viewer cannot approve bookings. */
+  pendingBookingApprovals: number | null;
   pendingPartners: number | null;
   activeBookings: number | null;
   unassignedLegs: number | null;
@@ -42,6 +44,7 @@ export interface TransferBookingSummary {
 }
 
 export const NO_BADGES: AdminBadges = {
+  pendingBookingApprovals: 0,
   pendingBookings: 0,
   pendingPartners: 0,
   unassignedLegs: 0,
@@ -52,21 +55,26 @@ export const NO_BADGES: AdminBadges = {
   unreadNotifications: 0,
 };
 
-/** The sidebar's queue counts. A figure the viewer may not see reads as zero. */
-export const getAdminBadges = async (): Promise<AdminBadges> => {
-  const badges = await serverFetch<BadgesResponse>("/api/admin/badges");
+/** The API's answer as the sidebar reads it: a figure the viewer may not see is zero. */
+const toAdminBadges = (badges: BadgesResponse): AdminBadges => ({
+  pendingBookingApprovals: badges.pendingBookingApprovals ?? 0,
+  pendingBookings: badges.activeBookings ?? 0,
+  pendingPartners: badges.pendingPartners ?? 0,
+  unassignedLegs: badges.unassignedLegs ?? 0,
+  pendingTourRequests: badges.pendingTourRequests ?? 0,
+  pendingOrders: badges.pendingOrders ?? 0,
+  paymentsDue: badges.paymentsDue ?? 0,
+  pendingApprovals: badges.pendingApprovals ?? 0,
+  unreadNotifications: badges.unreadNotifications ?? 0,
+});
 
-  return {
-    pendingBookings: badges.activeBookings ?? 0,
-    pendingPartners: badges.pendingPartners ?? 0,
-    unassignedLegs: badges.unassignedLegs ?? 0,
-    pendingTourRequests: badges.pendingTourRequests ?? 0,
-    pendingOrders: badges.pendingOrders ?? 0,
-    paymentsDue: badges.paymentsDue ?? 0,
-    pendingApprovals: badges.pendingApprovals ?? 0,
-    unreadNotifications: badges.unreadNotifications ?? 0,
-  };
-};
+/** The sidebar's queue counts, read with the page. */
+export const getAdminBadges = async (): Promise<AdminBadges> =>
+  toAdminBadges(await serverFetch<BadgesResponse>("/api/admin/badges"));
+
+/** The same counts from the browser, for the shell that keeps them fresh. */
+export const fetchAdminBadges = async (): Promise<AdminBadges> =>
+  toAdminBadges(await apiFetch<BadgesResponse>("/api/admin/badges"));
 
 export const getBookingSummary = (days = 30) =>
   serverFetch<BookingSummary>(`/api/admin/bookings/summary?days=${days}`);

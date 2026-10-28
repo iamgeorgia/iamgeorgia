@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { TourBookingStatusBadge } from "./StatusBadge";
 import { cancelTourBookingAsAdmin, confirmTourRequest, declineTourRequest } from "@/lib/api/tours";
 import { describeError } from "@/lib/api/client";
@@ -19,7 +21,8 @@ import type { TourBooking, TourCancellationQuote } from "@/types/tour";
  * makes it a booking and sends the voucher, declining releases the seats at
  * no charge and tells the agency why. Cancelling a confirmed booking charges
  * whatever the terms frozen at confirmation say, and the figure is shown
- * before the button.
+ * before the button. A booking still waiting for the platform's approval
+ * can only be withdrawn here, at no charge — approving is the queue's job.
  */
 export function TourBookingActions({
   booking,
@@ -29,6 +32,7 @@ export function TourBookingActions({
   quote: TourCancellationQuote | null;
 }) {
   const router = useRouter();
+  const can = useCan();
   const [mode, setMode] = useState<"idle" | "decline" | "cancel">("idle");
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
@@ -36,7 +40,11 @@ export function TourBookingActions({
   const [message, setMessage] = useState<string | null>(null);
 
   const pending = booking.status === "PENDING";
-  const cancellable = booking.status === "PENDING" || booking.status === "CONFIRMED";
+  const awaitingApproval = booking.status === "PENDING_APPROVAL";
+  const cancellable = awaitingApproval || booking.status === "PENDING" || booking.status === "CONFIRMED";
+  // Answering a request changes the booking; cancelling is its own right.
+  const canAnswer = can("bookings.write");
+  const canCancel = can("bookings.cancel");
 
   const run = async (key: string, call: () => Promise<unknown>, note: string) => {
     setBusy(key);
@@ -74,7 +82,11 @@ export function TourBookingActions({
         </p>
       )}
 
-      {pending && (
+      {pending && !canAnswer && (
+        <ReadOnlyNote needs="bookings.write" what="Answering this request" className="mt-4" />
+      )}
+
+      {pending && canAnswer && (
         <div className="mt-4 flex flex-col gap-2">
           <button
             type="button"
@@ -126,6 +138,12 @@ export function TourBookingActions({
         </div>
       )}
 
+      {awaitingApproval && (
+        <p className="mt-4 rounded-sm bg-surface-soft p-3 text-[0.8125rem] text-muted">
+          Nothing is charged for withdrawing a request before it is approved; the held seats are released.
+        </p>
+      )}
+
       {cancellable && !pending && quote && (
         <dl className="mt-4 space-y-1.5 rounded-sm bg-surface-soft p-3 text-[0.8125rem]">
           <div className="flex justify-between gap-3">
@@ -139,7 +157,11 @@ export function TourBookingActions({
         </dl>
       )}
 
-      {cancellable && !pending && (
+      {cancellable && !pending && !canCancel && (
+        <ReadOnlyNote needs="bookings.cancel" what="Cancelling this booking" className="mt-4" />
+      )}
+
+      {cancellable && !pending && canCancel && (
         <div className="mt-4">
           {mode === "cancel" ? (
             <div className="rounded-sm border border-line p-3">
@@ -152,12 +174,16 @@ export function TourBookingActions({
                   type="button"
                   disabled={busy !== null}
                   onClick={() =>
-                    run("cancel", () => cancelTourBookingAsAdmin(booking.reference, reason.trim() || undefined), "Cancelled. The seats are released.")
+                    run(
+                      "cancel",
+                      () => cancelTourBookingAsAdmin(booking.reference, reason.trim() || undefined),
+                      awaitingApproval ? "Request withdrawn. The seats are released and nothing is charged." : "Cancelled. The seats are released.",
+                    )
                   }
                   className={cn(base, "bg-error text-white hover:bg-error/90")}
                 >
                   {busy === "cancel" && <Loader2 size={15} className="animate-spin" aria-hidden />}
-                  Cancel booking
+                  {awaitingApproval ? "Withdraw request" : "Cancel booking"}
                 </button>
                 <button type="button" onClick={() => setMode("idle")} className={cn(base, "border border-ink/20 text-ink hover:border-ink")}>
                   Keep
@@ -171,7 +197,7 @@ export function TourBookingActions({
               onClick={() => setMode("cancel")}
               className={cn(base, "border border-error/40 text-error-text hover:bg-error/8")}
             >
-              Cancel booking
+              {awaitingApproval ? "Withdraw request" : "Cancel booking"}
             </button>
           )}
         </div>

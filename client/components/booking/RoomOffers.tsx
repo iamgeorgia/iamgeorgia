@@ -5,14 +5,16 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, BedDouble, Check, ChevronDown, ShieldCheck, Users, XCircle } from "lucide-react";
 import { useState } from "react";
 
+import { AddToCartButton } from "@/components/booking/AddToCartButton";
 import { Button } from "@/components/ui/Button";
 import { createHold } from "@/lib/api/bookings";
+import type { CartItem } from "@/lib/booking/cart";
 import { bookingErrorKey } from "@/lib/booking/errors";
 import {
   newIdempotencyKey,
   saveCheckoutDraft,
 } from "@/lib/booking/checkoutSession";
-import { formatNightDate, formatInstant } from "@/lib/booking/stay";
+import { formatNightDate, formatInstant, stayQueryString } from "@/lib/booking/stay";
 import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
@@ -91,6 +93,26 @@ export function RoomOffers({
 
   const bookable = roomTypes.filter((roomType) => roomType.offers.length > 0);
 
+  /**
+   * What the cart keeps for this rate: the signed offer, and a snapshot of
+   * what the guest saw. No hold is taken — the cart holds at checkout.
+   */
+  const cartItemFor = (
+    roomType: RoomAvailability,
+    offer: Offer,
+  ): Omit<CartItem, "id" | "addedAt"> => ({
+    payload: { type: "HOTEL_STAY", offerToken: offer.token },
+    display: {
+      title: hotelName,
+      detail: `${roomType.name} · ${offer.name}`,
+      dates: { from: stay.checkIn, to: stay.checkOut },
+      priceCents: offer.quote.totals.totalCents,
+      currency: offer.quote.currency,
+      image: roomType.coverImage?.url ?? null,
+      href: `/hotels/${hotelSlug}${stayQueryString(stay)}`,
+    },
+  });
+
   return (
     <div className="flex flex-col gap-6">
       {errorKey && (
@@ -153,6 +175,7 @@ export function RoomOffers({
                     setOpenBreakdown((current) => (current === offer.token ? null : offer.token))
                   }
                   onReserve={() => reserve(offer)}
+                  cartItem={() => cartItemFor(roomType, offer)}
                 />
               </li>
             ))}
@@ -173,6 +196,7 @@ interface OfferRowProps {
   breakdownOpen: boolean;
   onToggleBreakdown: () => void;
   onReserve: () => void;
+  cartItem: () => Omit<CartItem, "id" | "addedAt">;
 }
 
 /** One rate plan: what it includes, what it costs, what cancelling costs. */
@@ -186,6 +210,7 @@ function OfferRow({
   breakdownOpen,
   onToggleBreakdown,
   onReserve,
+  cartItem,
 }: OfferRowProps) {
   const { quote, terms } = offer;
   const { currency } = quote;
@@ -298,9 +323,12 @@ function OfferRow({
           )}
         </div>
 
-        <Button fullWidth onClick={onReserve} disabled={busy}>
-          {pending ? t.booking.availability.holding : t.booking.availability.reserve}
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button fullWidth onClick={onReserve} disabled={busy}>
+            {pending ? t.booking.availability.holding : t.booking.availability.reserve}
+          </Button>
+          <AddToCartButton item={cartItem} fullWidth disabled={busy} />
+        </div>
       </div>
     </div>
   );

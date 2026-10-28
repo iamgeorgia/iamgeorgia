@@ -12,7 +12,6 @@ export const article = {
   title: "Credit limits, cancellation penalties and commission",
   summary: "Cap what a partner can owe, change a cancellation charge with a second person's approval, and read the commission report.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/penalties"],
   keywords: [
     "credit limit",

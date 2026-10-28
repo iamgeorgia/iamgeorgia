@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, TriangleAlert, XCircle } from "lucide-react";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { OrderItems } from "@/components/packages/OrderItems";
 import { Modal } from "@/components/ui/Modal";
 import { cancelOrderItemAsAdmin, confirmOrderItem, declineOrderItem } from "@/lib/api/orders";
@@ -29,19 +31,39 @@ export function OrderParts({
   /** Per-part charges, read off the figures frozen onto each child booking. */
   quote: OrderCancellationQuote | null;
 }) {
+  const can = useCan();
+  const canAnswer = can("bookings.write");
+  const canCancel = can("bookings.cancel");
+
+  const awaiting = order.items.some((item) => item.status === "REQUESTED");
+  const live = order.items.some((item) => item.status === "CONFIRMED");
+
+  // One line for the whole list, not one per row: the rows keep their status
+  // and figures, and only the controls go.
+  const note = awaiting && !canAnswer
+    ? <ReadOnlyNote needs="bookings.write" what="Answering a supplier request" className="mb-4" />
+    : live && !canCancel
+      ? <ReadOnlyNote needs="bookings.cancel" what="Cancelling a part" className="mb-4" />
+      : null;
+
   return (
-    <OrderItems
-      items={order.items}
-      currency={order.currency}
-      action={(item) => (
-        <ItemActions
-          reference={order.reference}
-          currency={order.currency}
-          item={item}
-          quote={quote}
-        />
-      )}
-    />
+    <>
+      {note}
+      <OrderItems
+        items={order.items}
+        currency={order.currency}
+        action={(item) => (
+          <ItemActions
+            reference={order.reference}
+            currency={order.currency}
+            item={item}
+            quote={quote}
+            canAnswer={canAnswer}
+            canCancel={canCancel}
+          />
+        )}
+      />
+    </>
   );
 }
 
@@ -53,11 +75,15 @@ function ItemActions({
   currency,
   item,
   quote,
+  canAnswer,
+  canCancel,
 }: {
   reference: string;
   currency: string;
   item: OrderItem;
   quote: OrderCancellationQuote | null;
+  canAnswer: boolean;
+  canCancel: boolean;
 }) {
   const router = useRouter();
   const [dialog, setDialog] = useState<"decline" | "cancel" | null>(null);
@@ -87,6 +113,8 @@ function ItemActions({
     "mt-1.5 w-full rounded-sm border border-line bg-background p-3 text-[0.8125rem] text-ink outline-none focus:border-ink";
 
   if (item.status === "REQUESTED") {
+    if (!canAnswer) return null;
+
     return (
       <>
         <div className="mt-1 flex flex-wrap justify-end gap-2">
@@ -205,7 +233,7 @@ function ItemActions({
     );
   }
 
-  if (item.status !== "CONFIRMED") return null;
+  if (item.status !== "CONFIRMED" || !canCancel) return null;
 
   return (
     <>

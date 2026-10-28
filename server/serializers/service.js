@@ -1,4 +1,7 @@
 import { toDateOnly } from '../lib/time.js';
+import { approvalOf } from '../lib/booking/approval.js';
+import { paymentBlock } from './booking.js';
+import { toDesk } from '../lib/booking/desk.js';
 import { canViewBuyer, canViewMargin, canViewNetRates, isStaff } from '../middleware/auth.js';
 import { localise } from './localise.js';
 import { toCancellationPolicy } from './ratePlan.js';
@@ -130,13 +133,15 @@ export const toServiceBookingSummary = (booking, viewer) => {
         days: booking.days,
         leadName: booking.leadName,
         currency: booking.currency,
-        totalCents: booking.sellTotalCents,
+        totalCents: booking.sellTotalCents + (booking.priceAdjustmentCents ?? 0),
         confirmationMode: booking.confirmationMode,
         requestDeadlineAt: booking.requestDeadlineAt ?? null,
         createdAt: booking.createdAt,
         confirmedAt: booking.confirmedAt ?? null,
         cancelledAt: booking.cancelledAt ?? null,
-        declinedAt: booking.declinedAt ?? null
+        declinedAt: booking.declinedAt ?? null,
+        approval: approvalOf(booking),
+        payment: paymentBlock(booking)
     };
 
     if (canViewNetRates(viewer, booking.service)) {
@@ -150,6 +155,7 @@ export const toServiceBookingSummary = (booking, viewer) => {
 
     if (canViewBuyer(viewer)) {
         summary.partner = booking.partner ?? null;
+        summary.desk = toDesk(booking);
     } else if (canViewNetRates(viewer, booking.service)) {
         summary.bookedVia = booking.partnerId ? 'AGENCY' : 'DIRECT';
     }

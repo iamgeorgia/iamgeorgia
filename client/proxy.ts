@@ -44,14 +44,33 @@ function preferredLocale(request: NextRequest): string {
   return defaultLocale;
 }
 
+/**
+ * Tells the server render which page it is on.
+ *
+ * A Server Component has no `usePathname`, and the panel's entry check
+ * (`requireScreen` in `lib/auth/session.ts`) needs the path to look up which
+ * capability opens the screen. The proxy sees every request, so it stamps the
+ * canonical, locale-stripped path onto the request as a header the page reads
+ * back with `headers()`. Always overwritten, never trusted from the client: a
+ * caller who sends their own `x-pathname` has it replaced here.
+ */
+const PATHNAME_HEADER = "x-pathname";
+
+const withPathname = (request: NextRequest, canonical: string) => {
+  const headers = new Headers(request.headers);
+  headers.set(PATHNAME_HEADER, canonical);
+  return { request: { headers } };
+};
+
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   const segments = pathname.split("/").filter(Boolean);
   const first = segments[0];
 
-  // Already prefixed with a non-default locale — nothing to do.
+  // Already prefixed with a non-default locale — serve as-is, named.
   if (first && isLocale(first) && first !== defaultLocale) {
-    return NextResponse.next();
+    const rest = segments.slice(1).join("/");
+    return NextResponse.next(withPathname(request, rest ? `/${rest}` : "/"));
   }
 
   // `/en/...` is a duplicate of the unprefixed URL. Collapse it — permanently,
@@ -78,7 +97,7 @@ export function proxy(request: NextRequest) {
   const url = request.nextUrl.clone();
   url.pathname = `/${defaultLocale}${pathname}`;
   url.search = search;
-  return NextResponse.rewrite(url);
+  return NextResponse.rewrite(url, withPathname(request, pathname || "/"));
 }
 
 export const config = {

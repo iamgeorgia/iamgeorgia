@@ -21,7 +21,7 @@ import { ApiError } from "@/lib/api/client";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getI18n, getLocale } from "@/lib/i18n/server";
-import { homePathFor } from "@/types/auth";
+import { can, homePathFor } from "@/types/auth";
 import type { Booking, CancellationQuote } from "@/types/booking";
 import type { Order } from "@/types/order";
 import type { TourBooking, TourCancellationQuote } from "@/types/tour";
@@ -66,6 +66,12 @@ export default async function PortalBookingPage(
   if (session.partner.status !== "APPROVED") {
     redirect(localePath(locale, "/portal"));
   }
+
+  // What this person may do to the company's bookings. A PARTNER_FINANCE
+  // user reads them and changes none; the server refuses either way, this
+  // keeps the screen from offering the buttons.
+  const mayAmend = can(session, "partner.bookings.write");
+  const mayCancel = can(session, "partner.bookings.cancel");
 
   const { reference } = await props.params;
 
@@ -140,19 +146,23 @@ export default async function PortalBookingPage(
         <div className="mt-10 grid gap-8 lg:grid-cols-12 lg:gap-10">
           <div className="min-w-0 lg:col-span-8">
             <TourBookingDetail booking={tour} />
-            <div className="mt-8">
-              <PortalTourBookingEditor booking={tour} />
-            </div>
+            {mayAmend && (
+              <div className="mt-8">
+                <PortalTourBookingEditor booking={tour} />
+              </div>
+            )}
           </div>
 
           <aside className="min-w-0 lg:col-span-4">
             <div className="flex flex-col gap-5 lg:sticky lg:top-8">
-              <CancelTourBooking
-                reference={tour.reference}
-                status={tour.status}
-                quote={tourQuote}
-                freeUntil={tour.cancellation.freeUntil}
-              />
+              {mayCancel && (
+                <CancelTourBooking
+                  reference={tour.reference}
+                  status={tour.status}
+                  quote={tourQuote}
+                  freeUntil={tour.cancellation.freeUntil}
+                />
+              )}
               <PrintButton label={t.booking.confirmation.print} />
             </div>
           </aside>
@@ -239,21 +249,25 @@ export default async function PortalBookingPage(
         <div className="min-w-0 lg:col-span-8">
           <BookingDetail booking={booking} />
 
-          <div className="mt-8">
-            <PortalBookingEditor booking={booking} />
-          </div>
+          {mayAmend && (
+            <div className="mt-8">
+              <PortalBookingEditor booking={booking} />
+            </div>
+          )}
         </div>
 
         <aside className="min-w-0 lg:col-span-4">
           <div className="flex flex-col gap-5 lg:sticky lg:top-8">
             {/* No email: the session already proves whose booking this is, and
                 the server stops looking at the address entirely for a partner. */}
-            <CancelBooking
-              reference={booking.reference}
-              status={booking.status}
-              quote={quote}
-              freeUntil={freeUntil}
-            />
+            {mayCancel && (
+              <CancelBooking
+                reference={booking.reference}
+                status={booking.status}
+                quote={quote}
+                freeUntil={freeUntil}
+              />
+            )}
             <PrintButton label={t.booking.confirmation.print} />
           </div>
         </aside>

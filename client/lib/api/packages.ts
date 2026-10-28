@@ -1,4 +1,5 @@
 import { apiFetch, serverFetch, type RequestOptions } from "./client";
+import { actAsInit, type ActAsOptions } from "./manualBookings";
 import { toQueryString, type QueryValue } from "./query";
 import type { Paginated } from "@/types/partner";
 import type {
@@ -46,6 +47,10 @@ export const listPublicPackagesAnonymous = (
   init: RequestOptions = {},
 ) => apiFetch<Paginated<PackageSummary>>(`/api/packages${toQueryString(query)}`, init);
 
+/** The public catalogue from the browser, for the desk: what this buyer may book, by name. */
+export const listPublicPackagesClient = (query: PublicPackageQuery = {}, options: ActAsOptions = {}) =>
+  apiFetch<Paginated<PackageSummary>>(`/api/packages${toQueryString(query)}`, actAsInit(options));
+
 export const getPublicPackage = (slug: string, query: { locale?: string } = {}) =>
   serverFetch<PackageDetail>(`/api/packages/${slug}${toQueryString(query)}`);
 
@@ -73,9 +78,12 @@ export interface PackageQuoteQuery extends Record<string, QueryValue> {
 export const quotePackage = (slug: string, query: PackageQuoteQuery) =>
   serverFetch<PackageQuote>(`/api/packages/${slug}/quote${toQueryString(query)}`);
 
-/** The same call from the browser, for a slot chooser that re-quotes live. */
-export const quotePackageClient = (slug: string, query: PackageQuoteQuery) =>
-  apiFetch<PackageQuote>(`/api/packages/${slug}/quote${toQueryString(query)}`);
+/**
+ * The same call from the browser, for a slot chooser that re-quotes live.
+ * `asPartnerId` prices the package for that partner (`X-Act-As-Partner`).
+ */
+export const quotePackageClient = (slug: string, query: PackageQuoteQuery, options: ActAsOptions = {}) =>
+  apiFetch<PackageQuote>(`/api/packages/${slug}/quote${toQueryString(query)}`, actAsInit(options));
 
 /** Re-prices a composite offer. A moved price comes back with `priceChanged`. */
 export const revalidatePackageOffer = (token: string) =>

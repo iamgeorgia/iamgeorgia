@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/transfers";
 import { categoryLabels, formatDuration, tierLabels } from "@/lib/admin/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Route" };
 
@@ -36,6 +37,7 @@ export const metadata: Metadata = { title: "Route" };
 export default async function AdminTransferRoutePage({
   params,
 }: PageProps<"/[locale]/admin/transfers/routes/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const { path } = await getI18n();
 

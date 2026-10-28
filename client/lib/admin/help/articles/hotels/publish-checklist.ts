@@ -11,7 +11,6 @@ export const article = {
   title: "Getting a hotel on sale",
   summary: "The twelve things a property needs before Publish unlocks, in the order to do them, and what the buttons around Publish do.",
   category: "hotels",
-  roles: ["ADMIN"],
   keywords: ["publish", "checklist", "not ready to publish", "go live", "on sale", "missing", "blockers", "cover image", "take off sale"],
   related: ["ht-hub", "ht-details-location", "ht-rooms-rates", "ht-kosher", "pb-checklists"],
   blocks: [

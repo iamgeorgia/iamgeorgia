@@ -1,4 +1,5 @@
-import { formatStayDate } from "@/lib/admin/bookings";
+import { bookingFiltersFromParams } from "@/lib/admin/bookingFilters";
+import { AWAITING_APPROVAL_HINT, formatStayDate } from "@/lib/admin/bookings";
 import type { OrderItemStatus, OrderQuery, OrderStatus } from "@/types/order";
 import type { PackageComponentType } from "@/types/package";
 
@@ -16,6 +17,7 @@ import type { PackageComponentType } from "@/types/package";
  * outstanding is a supplier's answer to one or more of its parts.
  */
 export const orderStatusLabels: Record<OrderStatus, string> = {
+  PENDING_APPROVAL: "Awaiting approval",
   PENDING_CONFIRMATION: "Awaiting answers",
   CONFIRMED: "Confirmed",
   PARTIALLY_CANCELLED: "Partly cancelled",
@@ -25,6 +27,7 @@ export const orderStatusLabels: Record<OrderStatus, string> = {
 
 /** What each state means for the operator, shown under a filter. */
 export const orderStatusHints: Record<OrderStatus, string> = {
+  PENDING_APPROVAL: AWAITING_APPROVAL_HINT,
   PENDING_CONFIRMATION: "A part is on request. Its capacity is held and nobody else can sell it.",
   CONFIRMED: "Every part is committed and the buyer has been told.",
   PARTIALLY_CANCELLED: "A part was dropped. The rest of the trip still runs.",
@@ -33,6 +36,7 @@ export const orderStatusHints: Record<OrderStatus, string> = {
 };
 
 export const ORDER_STATUSES: OrderStatus[] = [
+  "PENDING_APPROVAL",
   "PENDING_CONFIRMATION",
   "CONFIRMED",
   "PARTIALLY_CANCELLED",
@@ -41,6 +45,7 @@ export const ORDER_STATUSES: OrderStatus[] = [
 ];
 
 export const orderItemStatusLabels: Record<OrderItemStatus, string> = {
+  AWAITING_APPROVAL: "Awaiting approval",
   REQUESTED: "Awaiting answer",
   CONFIRMED: "Confirmed",
   DECLINED: "Declined",
@@ -109,20 +114,13 @@ const read = (params: Record<string, string | string[] | undefined>, key: string
 export function orderQueryFromParams(
   params: Record<string, string | string[] | undefined>,
 ): OrderQuery {
-  const requested = params.status;
-  const asArray = Array.isArray(requested) ? requested : requested ? [requested] : [];
-  const valid = asArray.filter((value): value is OrderStatus =>
-    ORDER_STATUSES.includes(value as OrderStatus),
-  );
-  const page = Number.parseInt(read(params, "page") ?? "", 10);
+  // The shared keys are read the same way on every register.
+  const { status, ...shared } = bookingFiltersFromParams(params, { statuses: ORDER_STATUSES });
 
   return {
-    status: valid.length > 0 ? valid : undefined,
-    search: read(params, "search") || undefined,
-    from: read(params, "from") || undefined,
-    to: read(params, "to") || undefined,
-    partnerId: read(params, "partnerId") || undefined,
-    page: Number.isFinite(page) && page > 0 ? page : 1,
+    ...shared,
+    status: status as OrderStatus[] | undefined,
+    packageId: read(params, "packageId") || undefined,
     pageSize: 25,
   };
 }

@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { FormError, LineListInput, SubmitButton, TextArea, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { setServiceTranslation } from "@/lib/api/services";
 import { cn } from "@/lib/utils";
@@ -48,6 +50,8 @@ export function ServiceTranslationsEditor({
   translations: ServiceTranslation[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
   const [locale, setLocale] = useState<LocaleCode>("ka");
   const [drafts, setDrafts] = useState<Record<LocaleCode, Draft>>(() =>
     Object.fromEntries(
@@ -115,7 +119,12 @@ export function ServiceTranslationsEditor({
         ))}
       </div>
 
-      <div className="mt-5 flex flex-col gap-4" dir={locale === "he" ? "rtl" : "ltr"}>
+      {/* The locale tabs above stay live for a reader; only the fields lock. */}
+      <fieldset
+        disabled={!canEdit}
+        className="mt-5 flex min-w-0 flex-col gap-4"
+        dir={locale === "he" ? "rtl" : "ltr"}
+      >
         <TextInput
           label="Name"
           value={draft.name}
@@ -140,14 +149,18 @@ export function ServiceTranslationsEditor({
           value={draft.included}
           onChange={(next) => set("included", next)}
         />
-      </div>
+      </fieldset>
 
       <FormError message={error} />
 
       <div className="mt-5">
-        <SubmitButton busy={busy} saved={saved === locale} onClick={() => void save()}>
-          Save {LOCALES.find((entry) => entry.code === locale)?.label}
-        </SubmitButton>
+        {canEdit ? (
+          <SubmitButton busy={busy} saved={saved === locale} onClick={() => void save()}>
+            Save {LOCALES.find((entry) => entry.code === locale)?.label}
+          </SubmitButton>
+        ) : (
+          <ReadOnlyNote needs="catalogue.write" what="Editing translations" />
+        )}
       </div>
     </div>
   );

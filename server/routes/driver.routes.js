@@ -115,7 +115,7 @@ driverRoutes.post(
 driverRoutes.get('/notifications', validate({ query: notificationQuerySchema }), async (req, res) => {
     const { notifications, ...page } = await listNotifications(req.user.id, req.valid.query);
 
-    res.json({ data: notifications.map(toNotification), ...page });
+    res.json({ data: notifications.map((row) => toNotification(row, 'driver')), ...page });
 });
 
 driverRoutes.post('/notifications/read-all', async (req, res) => {
@@ -127,5 +127,5 @@ driverRoutes.post('/notifications/read-all', async (req, res) => {
 driverRoutes.post('/notifications/:id/read', validate({ params: notificationParamSchema }), async (req, res) => {
     const { notification } = await markNotificationRead(req.user.id, req.valid.params.id);
 
-    res.json(toNotification(notification));
+    res.json(toNotification(notification, 'driver'));
 });

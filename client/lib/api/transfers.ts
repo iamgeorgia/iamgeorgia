@@ -1,7 +1,9 @@
 import { apiFetch, cachedFor, serverFetch, type RequestOptions } from "./client";
+import { actAsInit, type ActAsOptions } from "./manualBookings";
 import { toQueryString } from "./query";
 import type { AvailableDrivers } from "@/types/driver";
 import type { PlaceRef } from "@/types/geo";
+import type { SharedBookingFilters } from "@/types/booking";
 import type { Paginated } from "@/types/partner";
 import type {
   AmendTransferInput,
@@ -158,9 +160,15 @@ export const listTransferExtras = () =>
 export const quoteTransfers = (query: TransferQuoteQuery) =>
   serverFetch<TransferQuoteResult>(`/api/transfers/quotes${toQueryString(query)}`);
 
-/** The same call from the browser, for a results page that refines in place. */
-export const quoteTransfersClient = (query: TransferQuoteQuery) =>
-  apiFetch<TransferQuoteResult>(`/api/transfers/quotes${toQueryString(query)}`);
+/**
+ * The same call from the browser, for a results page that refines in place.
+ *
+ * `asPartnerId` is the desk's: the quote is then priced for that partner and
+ * its token must be used when booking for them (`X-Act-As-Partner`, staff
+ * with `bookings.write` only).
+ */
+export const quoteTransfersClient = (query: TransferQuoteQuery, options: ActAsOptions = {}) =>
+  apiFetch<TransferQuoteResult>(`/api/transfers/quotes${toQueryString(query)}`, actAsInit(options));
 
 /**
  * Re-prices a token that has been sitting in a tab.
@@ -221,8 +229,9 @@ export const cancelTransferBooking = (
 
 // --- admin -------------------------------------------------------------------
 
-export interface AdminTransferBookingQuery {
+export interface AdminTransferBookingQuery extends SharedBookingFilters {
   status?: string | string[];
+  partnerId?: string;
   from?: string;
   to?: string;
   search?: string;

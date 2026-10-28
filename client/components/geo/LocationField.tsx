@@ -154,7 +154,7 @@ export function LocationField({
 
   const halfTyped = (manual.latitude.trim() === "") !== (manual.longitude.trim() === "");
   const placed = isPlaced(value);
-  const mapless = availability === "missing-key" || availability === "failed";
+  const mapless = availability !== "ready" && availability !== "loading";
 
   return (
     <Field label={label} hint={hint} error={error} className={className}>

@@ -16,6 +16,7 @@ import { getDestination, getDestinationTree, listHotels } from "@/lib/api/hotels
 import { destinationTypeLabels } from "@/lib/admin/destinations";
 import { getI18n } from "@/lib/i18n/server";
 import type { Destination } from "@/types/catalogue";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Destination" };
 
@@ -35,6 +36,7 @@ export const metadata: Metadata = { title: "Destination" };
 export default async function AdminDestinationPage({
   params,
 }: PageProps<"/[locale]/admin/destinations/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const { path } = await getI18n();
 

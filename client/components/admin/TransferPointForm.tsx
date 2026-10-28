@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import {
   CheckboxField,
   FormError,
@@ -10,6 +11,7 @@ import {
   SubmitButton,
   TextInput,
 } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
 import { LocationField } from "@/components/geo/LocationField";
 import { ApiError, describeError } from "@/lib/api/client";
@@ -21,6 +23,7 @@ import {
 import { isPlaced, locationOf, suggestPointKind } from "@/lib/geo/place";
 import { pointKindOptions, slugify, timezoneOptions } from "@/lib/admin/transfers";
 import { useLocalePath } from "@/lib/i18n/provider";
+import { cn } from "@/lib/utils";
 import { EMPTY_LOCATION, type LocationValue } from "@/types/geo";
 import type { TransferPoint, TransferPointKind } from "@/types/transfer";
 
@@ -77,6 +80,8 @@ export function TransferPointForm({ point }: { point?: TransferPoint }) {
 function PointForm({ point }: { point?: TransferPoint }) {
   const router = useRouter();
   const path = useLocalePath();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const editing = Boolean(point);
 
@@ -168,150 +173,163 @@ function PointForm({ point }: { point?: TransferPoint }) {
 
   return (
     <form onSubmit={submit}>
-      <div className="grid gap-6 lg:grid-cols-2">
-        <div className="space-y-5">
-          <TextInput
-            id="point-name"
-            label="Name"
-            required
-            value={values.name}
-            onChange={(event) => {
-              set("name", event.target.value);
-              if (!slugTouched) set("slug", slugify(event.target.value));
-            }}
-            placeholder="Tbilisi International Airport"
-            error={fieldErrors.name}
-            hint="What the traveller sees in the pick-up picker."
-          />
-
-          <TextInput
-            id="point-slug"
-            label="Slug"
-            required
-            mono
-            readOnly={editing}
-            value={values.slug}
-            onChange={(event) => {
-              setSlugTouched(true);
-              set("slug", slugify(event.target.value));
-            }}
-            error={fieldErrors.slug}
-            hint={
-              editing
-                ? "Fixed once the point exists — it is part of URLs that are already linked to."
-                : "Lowercase letters, numbers and hyphens. Derived from the name until you edit it."
-            }
-          />
-
-          <div className="grid gap-5 sm:grid-cols-2">
-            <SelectInput
-              id="point-kind"
-              label="Kind"
-              value={values.kind}
+      {/* A disabled fieldset switches off every control at once for a
+          read-only viewer; the submit row below is replaced, not greyed. */}
+      <fieldset disabled={!canEdit} className="min-w-0">
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="space-y-5">
+            <TextInput
+              id="point-name"
+              label="Name"
+              required
+              value={values.name}
               onChange={(event) => {
-                setKindTouched(true);
-                set("kind", event.target.value as TransferPointKind);
+                set("name", event.target.value);
+                if (!slugTouched) set("slug", slugify(event.target.value));
               }}
-              options={pointKindOptions}
-              error={fieldErrors.kind}
+              placeholder="Tbilisi International Airport"
+              error={fieldErrors.name}
+              hint="What the traveller sees in the pick-up picker."
             />
 
             <TextInput
-              id="point-iata"
-              label="IATA code"
+              id="point-slug"
+              label="Slug"
+              required
               mono
-              maxLength={3}
-              disabled={!isAirport}
-              value={isAirport ? values.iataCode : ""}
-              onChange={(event) => set("iataCode", event.target.value.toUpperCase())}
-              placeholder="TBS"
-              error={fieldErrors.iataCode}
-              hint={isAirport ? "Shown as a chip beside the name." : "Airports only."}
+              readOnly={editing}
+              value={values.slug}
+              onChange={(event) => {
+                setSlugTouched(true);
+                set("slug", slugify(event.target.value));
+              }}
+              error={fieldErrors.slug}
+              hint={
+                editing
+                  ? "Fixed once the point exists — it is part of URLs that are already linked to."
+                  : "Lowercase letters, numbers and hyphens. Derived from the name until you edit it."
+              }
+            />
+
+            <div className="grid gap-5 sm:grid-cols-2">
+              <SelectInput
+                id="point-kind"
+                label="Kind"
+                value={values.kind}
+                onChange={(event) => {
+                  setKindTouched(true);
+                  set("kind", event.target.value as TransferPointKind);
+                }}
+                options={pointKindOptions}
+                error={fieldErrors.kind}
+              />
+
+              <TextInput
+                id="point-iata"
+                label="IATA code"
+                mono
+                maxLength={3}
+                disabled={!isAirport}
+                value={isAirport ? values.iataCode : ""}
+                onChange={(event) => set("iataCode", event.target.value.toUpperCase())}
+                placeholder="TBS"
+                error={fieldErrors.iataCode}
+                hint={isAirport ? "Shown as a chip beside the name." : "Airports only."}
+              />
+            </div>
+
+            <TextInput
+              id="point-region"
+              label="Region"
+              required
+              value={values.regionLabel}
+              onChange={(event) => set("regionLabel", event.target.value)}
+              placeholder="Tbilisi"
+              error={fieldErrors.regionLabel}
+              hint="The second line of every option row, so two places with the same name stay apart."
+            />
+
+            <SelectInput
+              id="point-timezone"
+              label="Time zone"
+              value={values.timezone}
+              onChange={(event) => set("timezone", event.target.value)}
+              options={timezoneOptions.map((zone) => ({ value: zone, label: zone }))}
+              error={fieldErrors.timezone}
+              hint="A pick-up time is a wall clock reading here, not a UTC instant."
+            />
+
+            <CheckboxField
+              label="Show first in the picker"
+              hint="Surfaced before the traveller types anything. Worth it for a handful of places, not for fifty."
+              checked={values.popular}
+              onChange={(next) => set("popular", next)}
             />
           </div>
 
-          <TextInput
-            id="point-region"
-            label="Region"
-            required
-            value={values.regionLabel}
-            onChange={(event) => set("regionLabel", event.target.value)}
-            placeholder="Tbilisi"
-            error={fieldErrors.regionLabel}
-            hint="The second line of every option row, so two places with the same name stay apart."
-          />
+          <div className={cn("space-y-5", !canEdit && "pointer-events-none")} aria-disabled={!canEdit || undefined}>
+            <LocationField
+              label="Where it is"
+              required
+              ids={{ search: "point-place", latitude: "point-latitude", longitude: "point-longitude" }}
+              value={values.location}
+              error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
+              hint="The position prices every route through here that has no fare of its own, so it is worth checking the pin."
+              onChange={(next, meta) => {
+                setValues((current) => {
+                  const place = meta.source === "search" ? next.place : null;
+                  const kind = place ? suggestPointKind(place.types) : null;
 
-          <SelectInput
-            id="point-timezone"
-            label="Time zone"
-            value={values.timezone}
-            onChange={(event) => set("timezone", event.target.value)}
-            options={timezoneOptions.map((zone) => ({ value: zone, label: zone }))}
-            error={fieldErrors.timezone}
-            hint="A pick-up time is a wall clock reading here, not a UTC instant."
-          />
-
-          <CheckboxField
-            label="Show first in the picker"
-            hint="Surfaced before the traveller types anything. Worth it for a handful of places, not for fifty."
-            checked={values.popular}
-            onChange={(next) => set("popular", next)}
-          />
+                  return {
+                    ...current,
+                    location: next,
+                    // A searched place fills in what is still empty, and no more.
+                    ...(place?.name && !current.name.trim()
+                      ? { name: place.name, ...(slugTouched ? {} : { slug: slugify(place.name) }) }
+                      : {}),
+                    ...(place && !current.regionLabel.trim() && (place.region ?? place.city)
+                      ? { regionLabel: (place.region ?? place.city)! }
+                      : {}),
+                    ...(kind && !kindTouched ? { kind } : {}),
+                  };
+                });
+                setSaved(false);
+              }}
+            />
+          </div>
         </div>
 
-        <div className="space-y-5">
-          <LocationField
-            label="Where it is"
-            required
-            ids={{ search: "point-place", latitude: "point-latitude", longitude: "point-longitude" }}
-            value={values.location}
-            error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
-            hint="The position prices every route through here that has no fare of its own, so it is worth checking the pin."
-            onChange={(next, meta) => {
-              setValues((current) => {
-                const place = meta.source === "search" ? next.place : null;
-                const kind = place ? suggestPointKind(place.types) : null;
-
-                return {
-                  ...current,
-                  location: next,
-                  // A searched place fills in what is still empty, and no more.
-                  ...(place?.name && !current.name.trim()
-                    ? { name: place.name, ...(slugTouched ? {} : { slug: slugify(place.name) }) }
-                    : {}),
-                  ...(place && !current.regionLabel.trim() && (place.region ?? place.city)
-                    ? { regionLabel: (place.region ?? place.city)! }
-                    : {}),
-                  ...(kind && !kindTouched ? { kind } : {}),
-                };
-              });
-              setSaved(false);
-            }}
-          />
-        </div>
-      </div>
+      </fieldset>
 
       <FormError message={error} />
 
-      <div className="mt-6 flex items-center gap-3">
-        <SubmitButton type="submit" busy={busy} saved={saved} disabled={!ready}>
-          {editing
-            ? busy
-              ? "Saving…"
-              : saved
-                ? "Saved"
-                : "Save point"
-            : busy
-              ? "Creating…"
-              : "Create point"}
-        </SubmitButton>
+      {canEdit ? (
+        <div className="mt-6 flex items-center gap-3">
+          <SubmitButton type="submit" busy={busy} saved={saved} disabled={!ready}>
+            {editing
+              ? busy
+                ? "Saving…"
+                : saved
+                  ? "Saved"
+                  : "Save point"
+              : busy
+                ? "Creating…"
+                : "Create point"}
+          </SubmitButton>
 
-        {!ready && (
-          <p className="text-[0.75rem] text-subtle">
-            A name, a slug, a region and a place on the map are the minimum.
-          </p>
-        )}
-      </div>
+          {!ready && (
+            <p className="text-[0.75rem] text-subtle">
+              A name, a slug, a region and a place on the map are the minimum.
+            </p>
+          )}
+        </div>
+      ) : (
+        <ReadOnlyNote
+          className="mt-6"
+          needs="catalogue.write"
+          what={editing ? "Editing this pick-up point" : "Creating a pick-up point"}
+        />
+      )}
     </form>
   );
 }

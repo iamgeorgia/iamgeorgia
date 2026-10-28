@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { AlertTriangle, ChevronRight, Search, X } from "lucide-react";
@@ -144,7 +145,9 @@ export function PayablesBrowser({ payables, total, page, pageSize, totalPages }:
   return (
     <section className="mt-8">
       <div className="rounded-sm border border-line bg-surface p-4 sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <FilterDisclosure
+          count={Math.max(0, activeFilters - (query.trim() !== "" ? 1 : 0))}
+          lead={
           <div className="relative min-w-0 flex-1 sm:min-w-[16rem]">
             <Search
               size={16}
@@ -160,80 +163,83 @@ export function PayablesBrowser({ payables, total, page, pageSize, totalPages }:
               className="h-10 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
             />
           </div>
-
-          <select
-            value={product}
-            onChange={(event) => apply({ product: event.target.value })}
-            aria-label="Filter by product"
-            className={field}
-          >
-            <option value="all">All products</option>
-            {PAYABLE_PRODUCTS.map((value) => (
-              <option key={value} value={value}>
-                {productLabels[value]}
-              </option>
-            ))}
-          </select>
-
-          <select
-            value={currency}
-            onChange={(event) => apply({ currency: event.target.value })}
-            aria-label="Filter by currency"
-            className={field}
-          >
-            <option value="all">All currencies</option>
-            {PAYABLE_CURRENCIES.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
-          <fieldset>
-            <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Status
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              {(["all", ...PAYABLE_STATUS_FILTERS] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => apply({ status: value })}
-                  aria-pressed={status === value}
-                  className={chip(status === value)}
-                >
-                  {statusFilterLabel(value)}
-                </button>
+          }
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            <select
+              value={product}
+              onChange={(event) => apply({ product: event.target.value })}
+              aria-label="Filter by product"
+              className={field}
+            >
+              <option value="all">All products</option>
+              {PAYABLE_PRODUCTS.map((value) => (
+                <option key={value} value={value}>
+                  {productLabels[value]}
+                </option>
               ))}
-            </div>
-          </fieldset>
+            </select>
 
-          <fieldset>
-            <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Show only
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => apply({ review: review ? null : "1" })}
-                aria-pressed={review}
-                className={chip(review)}
-              >
-                Needs review
-              </button>
-              <button
-                type="button"
-                onClick={() => apply({ platform: platform ? null : "1" })}
-                aria-pressed={platform}
-                className={chip(platform)}
-              >
-                Platform inventory only
-              </button>
-            </div>
-          </fieldset>
-        </div>
+            <select
+              value={currency}
+              onChange={(event) => apply({ currency: event.target.value })}
+              aria-label="Filter by currency"
+              className={field}
+            >
+              <option value="all">All currencies</option>
+              {PAYABLE_CURRENCIES.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
+            <fieldset>
+              <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Status
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {(["all", ...PAYABLE_STATUS_FILTERS] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => apply({ status: value })}
+                    aria-pressed={status === value}
+                    className={chip(status === value)}
+                  >
+                    {statusFilterLabel(value)}
+                  </button>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Show only
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => apply({ review: review ? null : "1" })}
+                  aria-pressed={review}
+                  className={chip(review)}
+                >
+                  Needs review
+                </button>
+                <button
+                  type="button"
+                  onClick={() => apply({ platform: platform ? null : "1" })}
+                  aria-pressed={platform}
+                  className={chip(platform)}
+                >
+                  Platform inventory only
+                </button>
+              </div>
+            </fieldset>
+          </div>
+        </FilterDisclosure>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
           <p aria-live="polite" className={cn("text-[0.8125rem] text-muted", pending && "opacity-50")}>

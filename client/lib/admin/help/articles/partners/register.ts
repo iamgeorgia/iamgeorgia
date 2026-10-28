@@ -14,7 +14,6 @@ export const article = {
   title: "Partners register",
   summary: "What a partner is, and how to find one by name, Partner ID, registration number or email, filtered by status and type.",
   category: "partners",
-  roles: ["ADMIN"],
   routes: ["/admin/partners"],
   keywords: ["partner", "supplier", "agency", "PTR", "partner id", "hotel partner", "tour operator", "transport", "commission", "status", "type"],
   related: ["pt-applications", "pt-registering", "pt-detail-review", "pt-lifecycle", "tc-vehicle-classes"],

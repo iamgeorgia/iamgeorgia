@@ -1,5 +1,7 @@
-import type { TransferRouteQuery } from "@/lib/api/transfers";
+import { bookingFiltersFromParams } from "./bookingFilters";
+import type { AdminTransferBookingQuery, TransferRouteQuery } from "@/lib/api/transfers";
 import type {
+  TransferBookingStatus,
   TransferExtraBasis,
   TransferFeature,
   TransferKind,
@@ -32,6 +34,22 @@ type Params = Record<string, string | string[] | undefined>;
 
 const first = (value: string | string[] | undefined) =>
   Array.isArray(value) ? value[0] : value;
+
+export const TRANSFER_BOOKING_STATUSES: TransferBookingStatus[] = [
+  "PENDING_APPROVAL",
+  "PENDING",
+  "CONFIRMED",
+  "CANCELLED",
+  "COMPLETED",
+  "NO_SHOW",
+];
+
+/** The transfer bookings register's query, from its URL: its statuses plus the shared keys. */
+export function transferBookingQueryFromParams(params: Params): AdminTransferBookingQuery {
+  const { status, ...shared } = bookingFiltersFromParams(params, { statuses: TRANSFER_BOOKING_STATUSES });
+
+  return { ...shared, status, pageSize: 25 };
+}
 
 const positiveInt = (value: string | string[] | undefined, fallback: number) => {
   const parsed = Number.parseInt(first(value) ?? "", 10);

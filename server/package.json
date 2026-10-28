@@ -29,6 +29,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1115.0",
     "@aws-sdk/s3-request-presigner": "^3.1115.0",
+    "@googleapis/gmail": "^22.0.1",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "cookie-parser": "^1.4.7",
@@ -37,6 +38,7 @@
     "express": "^5.3.0",
     "express-rate-limit": "^8.6.2",
     "file-type": "^22.0.2",
+    "google-auth-library": "^11.3.1",
     "helmet": "^8.3.0",
     "multer": "^2.4.0",
     "nodemailer": "^10.1.0",

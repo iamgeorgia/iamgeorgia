@@ -14,7 +14,6 @@ export const article = {
   summary:
     "Every register keeps its search, filters and page in the address, so a view can be bookmarked or shared — and each register has its own set of them.",
   category: "reference",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["search", "filter", "pagination", "page", "bookmark", "url", "address", "query", "debounce", "next page", "previous"],
   related: ["gs-sidebar-and-top-bar", "bk-transfer-bookings-register", "dp-dispatch-board", "rf-troubleshooting"],
   blocks: [

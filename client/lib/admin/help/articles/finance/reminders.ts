@@ -14,7 +14,6 @@ export const article = {
   title: "Supplier payment reminders",
   summary: "When the finance desk is reminded about an instalment, who hears, what stops it, and the settings behind the schedule.",
   category: "finance",
-  roles: ["ADMIN"],
   keywords: [
     "reminder",
     "due",

@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { setTourInventory } from "@/lib/api/tours";
 import { ApiError, describeError } from "@/lib/api/client";
 import { addDaysISO, formatDayMonth, formatWeekday, weekdayOfISO } from "@/lib/admin/dates";
@@ -56,6 +58,8 @@ export function TourCalendarManager({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const can = useCan();
+  const canEdit = can("catalogue.write", "tours.write");
   const [pending, startTransition] = useTransition();
 
   const navigate = (changes: Record<string, string>) => {
@@ -109,7 +113,13 @@ export function TourCalendarManager({
         <DepartureGrid calendar={calendar} from={from} to={to} />
       </div>
 
-      <DepartureEditor tour={tour} option={option} from={from} to={to} />
+      {/* The grid and its navigation are reading; the range editor is the
+          one write on this screen and goes with the capability. */}
+      {canEdit ? (
+        <DepartureEditor tour={tour} option={option} from={from} to={to} />
+      ) : (
+        <ReadOnlyNote needs={["catalogue.write", "tours.write"]} what="Editing departures" />
+      )}
     </div>
   );
 }

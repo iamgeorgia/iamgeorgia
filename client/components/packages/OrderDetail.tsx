@@ -10,10 +10,16 @@ import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
-import type { Order, OrderCancellationQuote, OrderStatus } from "@/types/order";
+import type {
+  CustomOrderSnapshotPackage,
+  Order,
+  OrderCancellationQuote,
+  OrderStatus,
+} from "@/types/order";
 import { cn } from "@/lib/utils";
 
 const TONES: Record<OrderStatus, "neutral" | "outline" | "nature"> = {
+  PENDING_APPROVAL: "outline",
   PENDING_CONFIRMATION: "outline",
   CONFIRMED: "nature",
   PARTIALLY_CANCELLED: "neutral",
@@ -51,6 +57,11 @@ export function OrderDetail({ order, cancel, className }: OrderDetailProps) {
     .filter(Boolean)
     .join(" · ");
 
+  // A cart order is a trip of its own naming, not a package; its items may
+  // come from several packages, which the snapshot names for the list.
+  const custom = order.kind === "CUSTOM";
+  const packages = snapshotPackages(order.packageSnapshot);
+
   const pending = order.items.filter((item) => item.status === "REQUESTED");
   const live = order.items.filter(
     (item) => item.status !== "CANCELLED" && item.status !== "DECLINED",
@@ -76,7 +87,9 @@ export function OrderDetail({ order, cancel, className }: OrderDetailProps) {
 
         <dl className="mt-5 grid gap-4 border-t border-line pt-4 sm:grid-cols-3">
           <div>
-            <dt className="type-caption text-muted">{t.orders.manage.package}</dt>
+            <dt className="type-caption text-muted">
+              {custom ? t.orders.cart.tripName : t.orders.manage.package}
+            </dt>
             <dd className="type-body-sm mt-0.5 text-ink">{order.package.name ?? "—"}</dd>
           </div>
           <div>
@@ -130,6 +143,7 @@ export function OrderDetail({ order, cancel, className }: OrderDetailProps) {
         <OrderItems
           items={order.items}
           currency={order.currency}
+          packages={packages}
           action={
             cancel
               ? (item) => (
@@ -193,5 +207,19 @@ export function OrderDetail({ order, cancel, className }: OrderDetailProps) {
         </p>
       </section>
     </div>
+  );
+}
+
+/** The packages a CUSTOM snapshot flattened, for heading their lines. */
+function snapshotPackages(snapshot: Record<string, unknown>): CustomOrderSnapshotPackage[] {
+  const packages = snapshot.packages;
+
+  if (!Array.isArray(packages)) return [];
+
+  return packages.filter(
+    (entry): entry is CustomOrderSnapshotPackage =>
+      !!entry &&
+      typeof entry === "object" &&
+      typeof (entry as { groupKey?: unknown }).groupKey === "string",
   );
 }

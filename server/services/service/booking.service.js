@@ -16,6 +16,13 @@ import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
 import { resolveMarkup } from '../hotel/pricingRule.service.js';
 import { quoteService } from './pricing.service.js';
+import { sourceFor } from '../../lib/booking/source.js';
+import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
+import { CANCELLABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
+import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { syncBookingIndexInTx } from '../booking/index.service.js';
+import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { serviceInclude } from './service.service.js';
 
 /**
@@ -30,12 +37,16 @@ import { serviceInclude } from './service.service.js';
  * price is computed here, twice.
  */
 
-const CANCELLABLE_STATUSES = ['PENDING', 'CONFIRMED'];
+const CANCELLABLE_STATUSES = CANCELLABLE_BOOKING_STATUSES;
 const START_TIME = '09:00';
 
 export const serviceBookingInclude = {
     service: { select: { id: true, slug: true, name: true, supplierId: true, timezone: true } },
-    partner: { select: { id: true, reference: true, name: true } }
+    partner: { select: { id: true, reference: true, name: true } },
+    // Where the money stands: this booking's receivable, or its order's.
+    receivable: RECEIVABLE_SUMMARY_SELECT,
+    orderItem: ORDER_LINK_SELECT,
+    ...DESK_INCLUDE
 };
 
 const deriveIdempotencyKey = (input) =>
@@ -165,7 +176,9 @@ export const prepareServiceBooking = async (input, actor, { strict = true, now =
         schedule,
         lead: input.lead,
         notes: input.notes ?? null,
-        source: input.source ?? 'web',
+        source: sourceFor(actor, input.channel ?? null),
+        approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
+        desk: deskFrom(input),
         priceChanged,
         quotedCents,
         currentCents,
@@ -181,10 +194,15 @@ export const confirmServiceBookingInTx = async (tx, prepared, { idempotencyKey }
     const now = new Date();
     const reference = await nextServiceBookingReference(tx);
 
+    // The platform's yes comes first (OD1); the provider is asked after it.
+    const stamps = approvalStampsFor(prepared.approval ?? 'AUTO', { onRequest, now });
+    const awaitingApproval = stamps.status === 'PENDING_APPROVAL';
+    const askedNow = stamps.status === 'PENDING';
+
     const created = await tx.serviceBooking.create({
         data: {
             reference,
-            status: onRequest ? 'PENDING' : 'CONFIRMED',
+            ...stamps,
             idempotencyKey: idempotencyKey ?? null,
             partnerId: actor?.partnerId ?? null,
             bookedByUserId: actor?.id ?? null,
@@ -207,13 +225,9 @@ export const confirmServiceBookingInTx = async (tx, prepared, { idempotencyKey }
             serviceSnapshot: snapshotService(service, quote),
             cancellationSchedule: schedule,
             confirmationMode: service.confirmationMode,
-            ...(onRequest
-                ? {
-                      requestedAt: now,
-                      requestDeadlineAt: new Date(now.getTime() + config.service.onRequestSlaHours * 3_600_000)
-                  }
-                : { confirmedAt: now }),
-            source: prepared.source
+            ...(askedNow ? requestStamps(now) : {}),
+            source: prepared.source,
+            ...deskColumns(prepared)
         },
         include: serviceBookingInclude
     });
@@ -223,7 +237,7 @@ export const confirmServiceBookingInTx = async (tx, prepared, { idempotencyKey }
         actor,
         entityType: AUDIT_ENTITY.serviceBooking,
         entityId: created.id,
-        summary: `${onRequest ? 'Requested' : 'Booked'} ${service.name} for ${prepared.date}`,
+        summary: `${awaitingApproval ? 'Requested approval for' : onRequest ? 'Requested' : 'Booked'} ${service.name} for ${prepared.date}`,
         metadata: {
             reference,
             serviceId: service.id,
@@ -232,25 +246,41 @@ export const confirmServiceBookingInTx = async (tx, prepared, { idempotencyKey }
             days: prepared.days,
             totalCents: created.sellTotalCents,
             currency: created.currency,
-            onRequest
+            onRequest,
+            status: created.status
         },
         req
     });
 
+    await auditPriceAdjustment(tx, { entityType: AUDIT_ENTITY.serviceBooking, booking: created, prepared, catalogueCents: created.sellTotalCents }, actor, req);
+
     // The provider hears about every booking of its service, however it was
-    // sold; the buyer's own email is the facade's business.
-    await enqueueEvent(tx, {
-        topic: TOPICS.SUPPLIER_BOOKING_RECEIVED,
-        payload: { product: 'service', bookingId: created.id, requested: onRequest },
-        entityType: AUDIT_ENTITY.serviceBooking,
-        entityId: created.id
-    });
+    // sold — once the platform has said yes; the buyer's own email is the
+    // facade's business.
+    if (!awaitingApproval) {
+        await enqueueSupplierReceived(tx, created.id, onRequest);
+    }
 
     // Owed to the provider once confirmed; an on-request booking owes nothing yet.
     await syncPayableInTx(tx, 'SERVICE', created.id, actor, req);
 
     return created;
 };
+
+/** The provider's "a booking arrived" note, written once the platform has said yes. */
+const enqueueSupplierReceived = (tx, bookingId, requested) =>
+    enqueueEvent(tx, {
+        topic: TOPICS.SUPPLIER_BOOKING_RECEIVED,
+        payload: { product: 'service', bookingId, requested },
+        entityType: AUDIT_ENTITY.serviceBooking,
+        entityId: bookingId
+    });
+
+/** The stamps of a request put to the provider: when, and by when they should answer. */
+const requestStamps = (now) => ({
+    requestedAt: now,
+    requestDeadlineAt: new Date(now.getTime() + config.service.onRequestSlaHours * 3_600_000)
+});
 
 /** The buyer's side of a standalone booking; orders describe their own parts. */
 const enqueueBuyerEvent = (tx, booking, topic, payload = {}) =>
@@ -282,19 +312,25 @@ export const confirmServiceBooking = async (input, actor, req) => {
 
     try {
         const booking = await prisma.$transaction(async (tx) => {
-            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.quote.totals.sellCents, currency: prepared.quote.currency }, actor, req);
+            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.quote.totals.sellCents + prepared.desk.priceAdjustmentCents, currency: prepared.quote.currency }, actor, req);
 
             const created = await confirmServiceBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
             await syncBookingReceivableInTx(tx, 'SERVICE', created.id, actor, req);
 
-            await enqueueBuyerEvent(
-                tx,
-                created,
-                created.status === 'PENDING' ? TOPICS.SERVICE_BOOKING_REQUESTED : TOPICS.SERVICE_BOOKING_CONFIRMED
-            );
+            if (created.status === 'PENDING_APPROVAL') {
+                await enqueueBuyerEvent(tx, created, TOPICS.BOOKING_AWAITING_APPROVAL, { product: 'SERVICE' });
+            } else {
+                await enqueueBuyerEvent(
+                    tx,
+                    created,
+                    created.status === 'PENDING' ? TOPICS.SERVICE_BOOKING_REQUESTED : TOPICS.SERVICE_BOOKING_CONFIRMED
+                );
+            }
 
-            return created;
+            await enqueueEvent(tx, { topic: TOPICS.BOOKING_CREATED, payload: { product: 'SERVICE', bookingId: created.id }, entityType: AUDIT_ENTITY.serviceBooking, entityId: created.id });
+
+            return tx.serviceBooking.findUnique({ where: { id: created.id }, include: serviceBookingInclude });
         });
 
         return { booking, replayed: false };
@@ -367,6 +403,7 @@ export const listServiceBookings = async (query, viewer) => {
     const { page, pageSize, status, serviceId, partnerId, from, to, search } = query;
 
     const where = {
+        ...bookingWhere(query, { destination: (id) => ({ service: { is: { destinationId: id } } }) }),
         ...(readsAllBookings(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(serviceId ? { serviceId } : {}),
@@ -389,7 +426,7 @@ export const listServiceBookings = async (query, viewer) => {
         prisma.serviceBooking.findMany({
             where,
             include: serviceBookingInclude,
-            orderBy: { createdAt: 'desc' },
+            orderBy: bookingOrderBy(query.sort, { dateField: 'date', fallback: { createdAt: 'desc' } }),
             skip: (page - 1) * pageSize,
             take: pageSize
         })
@@ -400,13 +437,14 @@ export const listServiceBookings = async (query, viewer) => {
 
 /** A request nobody has confirmed costs nothing to withdraw. */
 export const quoteServiceCancellation = (booking, at = new Date()) => {
-    if (booking.status === 'PENDING') {
+    // Unanswered by the provider, or not yet approved by the platform: free to withdraw.
+    if (booking.status === 'PENDING' || booking.status === 'PENDING_APPROVAL') {
         return { chargeCents: 0, refundCents: booking.sellTotalCents, currency: booking.currency };
     }
 
     const refund = calculateRefund(booking.cancellationSchedule, at);
 
-    return { chargeCents: refund.chargeCents, refundCents: refund.refundCents, currency: booking.currency };
+    return applyAdjustmentToQuote({ chargeCents: refund.chargeCents, refundCents: refund.refundCents, currency: booking.currency }, booking);
 };
 
 
@@ -501,6 +539,92 @@ const assertPending = (booking) => {
     if (booking.status !== 'PENDING') {
         throw new ConflictError('That booking is not awaiting an answer', { reason: 'NOT_PENDING', status: booking.status });
     }
+};
+
+const assertAwaitingApproval = (booking) => {
+    if (booking.status !== 'PENDING_APPROVAL') {
+        throw new ConflictError('That booking is not waiting for approval', { reason: 'NOT_PENDING_APPROVAL', status: booking.status });
+    }
+};
+
+const statusChanged = (err) => {
+    if (err?.code === 'P2025') {
+        throw new ConflictError('That booking has moved on since it was read', { reason: 'STATUS_CHANGED' });
+    }
+
+    throw err;
+};
+
+/** The platform says yes (OD1): confirmed outright, or put to the provider now. */
+export const approvePendingServiceBookingInTx = async (tx, booking, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+    const onRequest = booking.confirmationMode === 'ON_REQUEST';
+    const signature = { approvedAt: now, approvedByUserId: by.userId, approvedByName: by.name };
+
+    const approved = await tx.serviceBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: onRequest ? { status: 'PENDING', ...requestStamps(now), ...signature } : { status: 'CONFIRMED', confirmedAt: now, ...signature },
+            include: serviceBookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: 'BOOKING_APPROVED',
+        actor,
+        entityType: AUDIT_ENTITY.serviceBooking,
+        entityId: booking.id,
+        summary: `Approved ${booking.reference}${onRequest ? ' and asked the provider' : ''}`,
+        metadata: { reference: booking.reference, totalCents: booking.sellTotalCents, currency: booking.currency, onRequest },
+        req
+    });
+
+    await enqueueSupplierReceived(tx, booking.id, onRequest);
+    await syncBookingInTx(tx, 'SERVICE', booking.id, actor, req);
+
+    return tx.serviceBooking.findUnique({ where: { id: booking.id }, include: serviceBookingInclude });
+};
+
+/** The platform says no, or the sweeper gives up on one whose date has passed. Nothing is charged. */
+export const rejectPendingServiceBookingInTx = async (tx, booking, { reason, expired = false } = {}, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+
+    const rejected = await tx.serviceBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: {
+                status: 'CANCELLED',
+                cancelledAt: now,
+                cancellationChargeCents: 0,
+                cancellationReason: reason,
+                rejectedAt: now,
+                rejectedByUserId: by.userId,
+                rejectedByName: by.name,
+                rejectionReason: reason
+            },
+            include: serviceBookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: expired ? 'BOOKING_APPROVAL_EXPIRED' : 'BOOKING_REJECTED',
+        actor,
+        entityType: AUDIT_ENTITY.serviceBooking,
+        entityId: booking.id,
+        summary: `${expired ? 'Expired' : 'Rejected'} ${booking.reference}`,
+        metadata: { reference: booking.reference, reason },
+        req
+    });
+
+    await syncBookingInTx(tx, 'SERVICE', booking.id, actor, req);
+
+    return rejected;
 };
 
 export const confirmPendingServiceBookingInTx = async (tx, booking, actor, req) => {

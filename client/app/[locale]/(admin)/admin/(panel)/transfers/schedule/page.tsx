@@ -7,6 +7,7 @@ import { listBlocks, listOccupancy } from "@/lib/api/dispatch";
 import { listDrivers } from "@/lib/api/drivers";
 import { listFleetVehicles } from "@/lib/api/fleet";
 import { defaultWindow } from "@/lib/admin/dispatch";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Schedule" };
 
@@ -21,6 +22,7 @@ const first = (value: string | string[] | undefined) => (Array.isArray(value) ? 
 export default async function AdminSchedulePage({
   searchParams,
 }: PageProps<"/[locale]/admin/transfers/schedule">) {
+  await requireScreen();
   const params = await searchParams;
   const fallback = defaultWindow(14);
   const from = DATE.test(first(params.from) ?? "") ? first(params.from)! : fallback.from;

@@ -13,6 +13,13 @@ import { dateOnlyToUtc, toDateOnly } from '../../lib/time.js';
 import { readsAllBookings } from '../../middleware/auth.js';
 import { CAPABILITIES, can } from '../../lib/permissions.js';
 import { readTourOfferToken } from '../../lib/tour/offerToken.js';
+import { sourceFor } from '../../lib/booking/source.js';
+import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
+import { CANCELLABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
+import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { syncBookingIndexInTx } from '../booking/index.service.js';
+import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
 import { revalidateTourOffer } from './search.service.js';
 import {
@@ -50,7 +57,11 @@ export const tourBookingInclude = {
     tour: { select: { id: true, slug: true, title: true, timezone: true, currency: true, supplierId: true } },
     tourOption: { select: { id: true, code: true, name: true, kind: true, confirmationMode: true } },
     partner: { select: { id: true, reference: true, name: true } },
-    travellers: { orderBy: [{ isLead: 'desc' }, { createdAt: 'asc' }] }
+    travellers: { orderBy: [{ isLead: 'desc' }, { createdAt: 'asc' }] },
+    // Where the money stands: this booking's receivable, or its order's.
+    receivable: RECEIVABLE_SUMMARY_SELECT,
+    orderItem: ORDER_LINK_SELECT,
+    ...DESK_INCLUDE
 };
 
 const deriveIdempotencyKey = (input) =>
@@ -170,7 +181,9 @@ export const prepareTourBooking = async (input, actor, { strict = true } = {}) =
         travellers: input.travellers ?? [],
         specialRequests: input.specialRequests ?? null,
         pickupNote: input.pickupNote ?? null,
-        source: input.source ?? 'web',
+        source: sourceFor(actor, input.channel ?? null),
+        approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
+        desk: deskFrom(input),
         priceChanged,
         quotedCents,
         currentCents,
@@ -215,6 +228,14 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
     const now = new Date();
     const reference = await nextTourBookingReference(tx);
 
+    // The platform's yes comes first (OD1): a booking that waits for it is
+    // PENDING_APPROVAL whatever the option's confirmation mode, and the
+    // operator is asked only once it is approved. Seats are claimed now
+    // either way, as they always were for an on-request departure.
+    const stamps = approvalStampsFor(prepared.approval ?? 'AUTO', { onRequest, now });
+    const awaitingApproval = stamps.status === 'PENDING_APPROVAL';
+    const askedNow = stamps.status === 'PENDING';
+
     const lead = prepared.leadTraveller;
     const perType = {
         ADULT: unitPriceFor(quote, option.pricingBasis === 'PER_GROUP' ? 'GROUP' : 'ADULT'),
@@ -228,7 +249,7 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
     const created = await tx.tourBooking.create({
         data: {
             reference,
-            status: onRequest ? 'PENDING' : 'CONFIRMED',
+            ...stamps,
             idempotencyKey: idempotencyKey ?? null,
             partnerId: actor?.partnerId ?? null,
             bookedByUserId: actor?.id ?? null,
@@ -255,17 +276,14 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
             cancellationSummary: option.cancellationPolicy?.description ?? null,
             cancellationSchedule: schedule,
             confirmationMode: option.confirmationMode,
-            ...(onRequest
-                ? {
-                      requestedAt: now,
-                      requestDeadlineAt: new Date(now.getTime() + config.tour.onRequestSlaHours * 60 * 60 * 1000)
-                  }
-                : { confirmedAt: now }),
+            ...(askedNow ? requestStamps(now) : {}),
             source: prepared.source,
+            ...deskColumns(prepared),
             travellers: {
                 create: [
                     {
                         type: 'ADULT',
+                        title: lead.title ?? null,
                         firstName: lead.firstName,
                         lastName: lead.lastName,
                         isLead: true,
@@ -273,6 +291,7 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
                     },
                     ...prepared.travellers.map((traveller) => ({
                         type: traveller.type ?? 'ADULT',
+                        title: traveller.title ?? null,
                         firstName: traveller.firstName,
                         lastName: traveller.lastName,
                         age: traveller.age ?? null,
@@ -293,7 +312,7 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
         actor,
         entityType: AUDIT_ENTITY.tourBooking,
         entityId: created.id,
-        summary: `${onRequest ? 'Requested' : 'Booked'} ${tour.title} (${option.name}) for ${date}`,
+        summary: `${awaitingApproval ? 'Requested approval for' : onRequest ? 'Requested' : 'Booked'} ${tour.title} (${option.name}) for ${date}`,
         metadata: {
             reference,
             tourId: tour.id,
@@ -303,25 +322,41 @@ export const confirmTourBookingInTx = async (tx, prepared, { idempotencyKey, hol
             pax: party.pax,
             totalCents: created.sellTotalCents,
             currency: created.currency,
-            confirmationMode: option.confirmationMode
+            confirmationMode: option.confirmationMode,
+            status: created.status
         },
         req
     });
 
+    await auditPriceAdjustment(tx, { entityType: AUDIT_ENTITY.tourBooking, booking: created, prepared, catalogueCents: created.sellTotalCents }, actor, req);
+
     // The operator hears about every booking of its tour, however it was
-    // sold; the traveller's own email is the facade's business.
-    await enqueueEvent(tx, {
-        topic: TOPICS.SUPPLIER_BOOKING_RECEIVED,
-        payload: { product: 'tour', bookingId: created.id, requested: onRequest },
-        entityType: AUDIT_ENTITY.tourBooking,
-        entityId: created.id
-    });
+    // sold — once the platform has said yes; the traveller's own email is
+    // the facade's business.
+    if (!awaitingApproval) {
+        await enqueueSupplierReceived(tx, created.id, onRequest);
+    }
 
     // Owed to the operator once confirmed; an on-request booking owes nothing yet.
     await syncPayableInTx(tx, 'TOUR', created.id, actor, req);
 
     return tx.tourBooking.findUnique({ where: { id: created.id }, include: tourBookingInclude });
 };
+
+/** The operator's "a booking arrived" note, written once the platform has said yes. */
+const enqueueSupplierReceived = (tx, bookingId, requested) =>
+    enqueueEvent(tx, {
+        topic: TOPICS.SUPPLIER_BOOKING_RECEIVED,
+        payload: { product: 'tour', bookingId, requested },
+        entityType: AUDIT_ENTITY.tourBooking,
+        entityId: bookingId
+    });
+
+/** The stamps of a request put to the operator: when, and by when they should answer. */
+const requestStamps = (now) => ({
+    requestedAt: now,
+    requestDeadlineAt: new Date(now.getTime() + config.tour.onRequestSlaHours * 60 * 60 * 1000)
+});
 
 /** The traveller's side of a fresh booking: a request or a confirmation, by what was written. */
 const enqueueTravellerEvent = (tx, booking, topic, payload = {}) =>
@@ -356,19 +391,25 @@ export const confirmTourBooking = async (input, actor, req) => {
 
     try {
         const booking = await prisma.$transaction(async (tx) => {
-            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.priced.quote.totals.sellCents, currency: prepared.priced.quote.currency }, actor, req);
+            await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.priced.quote.totals.sellCents + prepared.desk.priceAdjustmentCents, currency: prepared.priced.quote.currency }, actor, req);
 
             const created = await confirmTourBookingInTx(tx, prepared, { idempotencyKey }, actor, req);
 
             await syncBookingReceivableInTx(tx, 'TOUR', created.id, actor, req);
 
-            await enqueueTravellerEvent(
-                tx,
-                created,
-                created.status === 'PENDING' ? TOPICS.TOUR_BOOKING_REQUESTED : TOPICS.TOUR_BOOKING_CONFIRMED
-            );
+            if (created.status === 'PENDING_APPROVAL') {
+                await enqueueTravellerEvent(tx, created, TOPICS.BOOKING_AWAITING_APPROVAL, { product: 'TOUR' });
+            } else {
+                await enqueueTravellerEvent(
+                    tx,
+                    created,
+                    created.status === 'PENDING' ? TOPICS.TOUR_BOOKING_REQUESTED : TOPICS.TOUR_BOOKING_CONFIRMED
+                );
+            }
 
-            return created;
+            await enqueueEvent(tx, { topic: TOPICS.BOOKING_CREATED, payload: { product: 'TOUR', bookingId: created.id }, entityType: AUDIT_ENTITY.tourBooking, entityId: created.id });
+
+            return tx.tourBooking.findUnique({ where: { id: created.id }, include: tourBookingInclude });
         });
 
         return { booking, replayed: false };
@@ -472,6 +513,7 @@ export const listTourBookings = async (query, viewer) => {
     const { page, pageSize, status, tourId, partnerId, from, to, search } = query;
 
     const where = {
+        ...bookingWhere(query, { destination: (id) => ({ tour: { is: { destinationId: id } } }) }),
         ...(readsAllBookings(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(tourId ? { tourId } : {}),
@@ -494,7 +536,7 @@ export const listTourBookings = async (query, viewer) => {
         prisma.tourBooking.findMany({
             where,
             include: tourBookingInclude,
-            orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+            orderBy: bookingOrderBy(query.sort, { dateField: 'date', fallback: [{ date: 'desc' }, { createdAt: 'desc' }] }),
             skip: (page - 1) * pageSize,
             take: pageSize
         })
@@ -505,17 +547,18 @@ export const listTourBookings = async (query, viewer) => {
 
 /** What cancelling would cost right now, read off the frozen schedule. */
 export const quoteTourCancellation = (booking, at = new Date()) => {
-    // A request the operator has not answered costs nothing to withdraw.
-    if (booking.status === 'PENDING') {
+    // A request the operator has not answered, or a booking the platform has
+    // not yet said yes to, costs nothing to withdraw.
+    if (booking.status === 'PENDING' || booking.status === 'PENDING_APPROVAL') {
         return { chargeCents: 0, refundCents: booking.sellTotalCents, currency: booking.currency };
     }
 
     const refund = calculateRefund(booking.cancellationSchedule, at);
 
-    return { chargeCents: refund.chargeCents, refundCents: refund.refundCents, currency: booking.currency };
+    return applyAdjustmentToQuote({ chargeCents: refund.chargeCents, refundCents: refund.refundCents, currency: booking.currency }, booking);
 };
 
-const CANCELLABLE_STATUSES = ['PENDING', 'CONFIRMED'];
+const CANCELLABLE_STATUSES = CANCELLABLE_BOOKING_STATUSES;
 
 /**
  * Cancels an already-loaded booking inside the caller's transaction, giving
@@ -631,6 +674,103 @@ const assertPending = (booking) => {
             status: booking.status
         });
     }
+};
+
+const assertAwaitingApproval = (booking) => {
+    if (booking.status !== 'PENDING_APPROVAL') {
+        throw new ConflictError('That booking is not waiting for approval', { reason: 'NOT_PENDING_APPROVAL', status: booking.status });
+    }
+};
+
+const statusChanged = (err) => {
+    if (err?.code === 'P2025') {
+        throw new ConflictError('That booking has moved on since it was read', { reason: 'STATUS_CHANGED' });
+    }
+
+    throw err;
+};
+
+/**
+ * The platform says yes (OD1). An instant option is confirmed outright; an
+ * on-request one is now put to the operator — PENDING, with the answer
+ * window starting here, not at booking — and the operator is told either
+ * way. The seats were claimed at booking and stay claimed.
+ */
+export const approvePendingTourBookingInTx = async (tx, booking, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+    const onRequest = booking.confirmationMode === 'ON_REQUEST';
+    const signature = { approvedAt: now, approvedByUserId: by.userId, approvedByName: by.name };
+
+    const approved = await tx.tourBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: onRequest ? { status: 'PENDING', ...requestStamps(now), ...signature } : { status: 'CONFIRMED', confirmedAt: now, ...signature },
+            include: tourBookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: 'BOOKING_APPROVED',
+        actor,
+        entityType: AUDIT_ENTITY.tourBooking,
+        entityId: booking.id,
+        summary: `Approved ${booking.reference}${onRequest ? ' and asked the operator' : ''}`,
+        metadata: { reference: booking.reference, totalCents: booking.sellTotalCents, currency: booking.currency, onRequest },
+        req
+    });
+
+    await enqueueSupplierReceived(tx, booking.id, onRequest);
+
+    // Owed once confirmed; a request owes nothing until the operator says yes.
+    await syncBookingInTx(tx, 'TOUR', booking.id, actor, req);
+
+    return tx.tourBooking.findUnique({ where: { id: booking.id }, include: tourBookingInclude });
+};
+
+/** The platform says no, or the sweeper gives up on one whose date has passed. Seats go back, nothing is charged. */
+export const rejectPendingTourBookingInTx = async (tx, booking, { reason, expired = false } = {}, actor, req) => {
+    assertAwaitingApproval(booking);
+
+    if (booking.tourOptionId) {
+        await releaseBookedTourUnits(tx, { tourOptionId: booking.tourOptionId, date: booking.date, quantity: booking.units });
+    }
+
+    const now = new Date();
+    const by = decidedByFor(actor);
+
+    const rejected = await tx.tourBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING_APPROVAL' },
+            data: {
+                status: 'CANCELLED',
+                cancelledAt: now,
+                cancellationChargeCents: 0,
+                cancellationReason: reason,
+                rejectedAt: now,
+                rejectedByUserId: by.userId,
+                rejectedByName: by.name,
+                rejectionReason: reason
+            },
+            include: tourBookingInclude
+        })
+        .catch(statusChanged);
+
+    await recordAudit(tx, {
+        action: expired ? 'BOOKING_APPROVAL_EXPIRED' : 'BOOKING_REJECTED',
+        actor,
+        entityType: AUDIT_ENTITY.tourBooking,
+        entityId: booking.id,
+        summary: `${expired ? 'Expired' : 'Rejected'} ${booking.reference}`,
+        metadata: { reference: booking.reference, reason },
+        req
+    });
+
+    await syncBookingInTx(tx, 'TOUR', booking.id, actor, req);
+
+    return rejected;
 };
 
 /** The operator says yes. The price was frozen at request; nothing is re-quoted. */
@@ -787,6 +927,15 @@ export const amendTourBooking = async (reference, input, actor, req) =>
             metadata: { reference: booking.reference, fields },
             req
         });
+
+        await enqueueEvent(tx, {
+            topic: TOPICS.BOOKING_MODIFIED,
+            payload: { product: 'TOUR', bookingId: booking.id, fields, byUserId: actor?.id ?? null },
+            entityType: AUDIT_ENTITY.tourBooking,
+            entityId: booking.id
+        });
+
+        await syncBookingIndexInTx(tx, 'TOUR', booking.id);
 
         return tx.tourBooking.findUnique({ where: { id: booking.id }, include: tourBookingInclude });
     });

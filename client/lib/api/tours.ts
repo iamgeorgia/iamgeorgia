@@ -1,4 +1,5 @@
 import { apiFetch, serverFetch, type RequestOptions } from "./client";
+import { actAsInit, type ActAsOptions } from "./manualBookings";
 import { toQueryString, type QueryValue } from "./query";
 import type { CancellationPolicy } from "@/types/catalogue";
 import type { Paginated } from "@/types/partner";
@@ -92,6 +93,19 @@ export interface TourAvailabilityQuery extends Record<string, QueryValue> {
 /** Every option of one tour, priced for every departure in a window of up to 62 days. */
 export const getTourAvailability = (slug: string, query: TourAvailabilityQuery) =>
   serverFetch<TourAvailability>(`/api/search/tours/${slug}${toQueryString(query)}`);
+
+/**
+ * The same searches from the browser, for the desk. `asPartnerId` prices the
+ * departures for that partner (`X-Act-As-Partner`).
+ */
+export const searchToursClient = (query: TourSearchQuery, options: ActAsOptions = {}) =>
+  apiFetch<TourSearchResponse>(`/api/search/tours${toQueryString(query)}`, actAsInit(options));
+
+export const getTourAvailabilityClient = (slug: string, query: TourAvailabilityQuery, options: ActAsOptions = {}) =>
+  apiFetch<TourAvailability>(`/api/search/tours/${slug}${toQueryString(query)}`, actAsInit(options));
+
+export const listPublicToursClient = (query: PublicTourQuery = {}, options: ActAsOptions = {}) =>
+  apiFetch<Paginated<TourSummary>>(`/api/tours${toQueryString(query)}`, actAsInit(options));
 
 /** Re-prices an offer. A moved price comes back with `priceChanged: true`. */
 export const quoteTourOffer = (token: string) =>

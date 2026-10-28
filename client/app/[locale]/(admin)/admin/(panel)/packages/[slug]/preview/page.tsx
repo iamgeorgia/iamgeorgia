@@ -11,6 +11,7 @@ import { PackagePreviewQuote } from "@/components/admin/PackagePreviewQuote";
 import { ApiError } from "@/lib/api/client";
 import { getPackage } from "@/lib/api/packages";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Package preview" };
 
@@ -24,6 +25,7 @@ export const metadata: Metadata = { title: "Package preview" };
 export default async function AdminPackagePreviewPage({
   params,
 }: PageProps<"/[locale]/admin/packages/[slug]/preview">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

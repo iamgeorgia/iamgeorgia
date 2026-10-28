@@ -13,7 +13,6 @@ export const article = {
   title: "Booking and order statuses",
   summary: "Every status a hotel booking, order, order part, tour booking or transfer booking can carry, what it means, and which moves the panel can make.",
   category: "bookings",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["status", "PENDING", "CONFIRMED", "CANCELLED", "COMPLETED", "NO_SHOW", "PENDING_CONFIRMATION", "PARTIALLY_CANCELLED", "REQUESTED", "DECLINED", "glossary"],
   related: ["dp-leg-statuses", "bk-transfer-booking-detail", "rf-glossary"],
   blocks: [

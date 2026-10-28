@@ -5,7 +5,9 @@ import { useState } from "react";
 import { Archive, BadgeCheck, FileText, Plus, ShieldAlert, ShieldQuestion, X } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { FormError, SelectInput, SubmitButton, TextArea, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   addKosherCertification,
   archiveKosherCertification,
@@ -73,6 +75,10 @@ interface KosherCertificationsProps {
 
 export function KosherCertifications({ hotelId, kosher, documents }: KosherCertificationsProps) {
   const router = useRouter();
+  const can = useCan();
+  // Adding, verifying, rejecting and archiving are all catalogue writes on the
+  // server; a reader sees the register and its states, and none of the buttons.
+  const canEdit = can("catalogue.write");
 
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<KosherCertificationInput>(EMPTY);
@@ -144,6 +150,7 @@ export function KosherCertifications({ hotelId, kosher, documents }: KosherCerti
       title="Certification"
       description="The only thing that makes a property read as kosher certified."
       action={
+        canEdit &&
         !adding && (
           <button
             type="button"
@@ -218,7 +225,7 @@ export function KosherCertifications({ hotelId, kosher, documents }: KosherCerti
                       ` · ${certification.expiresInDays}d left`}
                   </span>
 
-                  {!archived && certification.state !== "VERIFIED" && (
+                  {canEdit && !archived && certification.state !== "VERIFIED" && (
                     <button
                       type="button"
                       disabled={busy !== null}
@@ -230,7 +237,7 @@ export function KosherCertifications({ hotelId, kosher, documents }: KosherCerti
                     </button>
                   )}
 
-                  {!archived && certification.state !== "REJECTED" && (
+                  {canEdit && !archived && certification.state !== "REJECTED" && (
                     <button
                       type="button"
                       disabled={busy !== null}
@@ -243,7 +250,7 @@ export function KosherCertifications({ hotelId, kosher, documents }: KosherCerti
                     </button>
                   )}
 
-                  {!archived && (
+                  {canEdit && !archived && (
                     <button
                       type="button"
                       disabled={busy !== null}
@@ -382,6 +389,14 @@ export function KosherCertifications({ hotelId, kosher, documents }: KosherCerti
             checks it against the authority and presses Verify.
           </p>
         </div>
+      )}
+
+      {!canEdit && (
+        <ReadOnlyNote
+          className="mt-5"
+          needs="catalogue.write"
+          what="Adding, verifying, rejecting or archiving a certificate"
+        />
       )}
 
       <FormError message={error} />
