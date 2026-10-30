@@ -315,6 +315,7 @@ export const ru: UiDictionary = {
     newsletterThanks: "Спасибо — мы свяжемся с вами.",
     newsletterError: "Пожалуйста, введите корректный адрес почты.",
     rights: "© {year} {name}. Все права защищены.",
+    credit: "Дизайн и разработка: {name}",
   },
 
   studio: {

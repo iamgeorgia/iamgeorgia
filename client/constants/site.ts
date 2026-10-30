@@ -8,6 +8,8 @@ export const site = {
     "A Georgian travel studio crafting private tours, mountain journeys, wine routes and stays across the Caucasus.",
   url: "https://iamgeorgia.travel",
   founded: 2014,
+  /** Footer credit. A company name, so it stays in Latin in every language. */
+  developer: "Goal Software Development",
   contact: {
     email: "hello@iamgeorgia.travel",
     phone: "+995 32 255 0140",

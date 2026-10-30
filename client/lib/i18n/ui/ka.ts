@@ -295,6 +295,7 @@ export const ka: UiDictionary = {
     newsletterThanks: "გმადლობთ — მალე დაგიკავშირდებით.",
     newsletterError: "გთხოვთ, შეიყვანოთ სწორი ელფოსტა.",
     rights: "© {year} {name}. ყველა უფლება დაცულია.",
+    credit: "დიზაინი და შემუშავება: {name}",
   },
 
   studio: {

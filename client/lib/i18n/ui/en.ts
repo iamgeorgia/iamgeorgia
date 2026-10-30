@@ -354,6 +354,7 @@ export const en = {
     newsletterThanks: "Thank you — we'll be in touch.",
     newsletterError: "Please enter a valid email address.",
     rights: "© {year} {name}. All rights reserved.",
+    credit: "Designed and developed by {name}",
   },
 
   /** Studio contact details. Addresses and opening hours are read, not parsed. */
