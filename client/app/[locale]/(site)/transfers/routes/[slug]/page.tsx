@@ -200,7 +200,7 @@ export default async function TransferRoutePage(
       </Container>
 
       <Container className="pt-16 pb-20 lg:pt-20 lg:pb-24">
-        <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
           <div className="min-w-0 lg:col-span-7">
             <Reveal>
               <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-3">

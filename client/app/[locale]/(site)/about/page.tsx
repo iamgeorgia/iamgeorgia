@@ -88,7 +88,7 @@ export default async function AboutPage() {
 
       <section className="py-16 sm:py-24 lg:py-32">
         <Container>
-          <div className="grid gap-14 lg:grid-cols-12 lg:gap-16">
+          <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-16">
             {/* Same pinned-intro treatment as the home page's "Why travel with
                 us": identical two-column layout, so it should behave identically. */}
             <div className="lg:col-span-5 lg:sticky lg:top-32 lg:self-start">

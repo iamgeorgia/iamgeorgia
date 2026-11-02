@@ -282,7 +282,7 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
 
   return (
     <Container className="pt-6 pb-24 lg:pb-32">
-      <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
+      <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-7">
           <MobileCheckoutSummary
             title={t.booking.checkout.summary}

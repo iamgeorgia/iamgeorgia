@@ -143,7 +143,7 @@ export default async function PortalBookingPage(
         </h1>
         <p className="mt-2 font-mono text-[0.8125rem] tracking-wide text-brand-text">{tour.reference}</p>
 
-        <div className="mt-10 grid gap-8 lg:grid-cols-12 lg:gap-10">
+        <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-10">
           <div className="min-w-0 lg:col-span-8">
             <TourBookingDetail booking={tour} />
             {mayAmend && (
@@ -245,7 +245,7 @@ export default async function PortalBookingPage(
         {booking.reference}
       </p>
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-12 lg:gap-10">
+      <div className="mt-10 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-10">
         <div className="min-w-0 lg:col-span-8">
           <BookingDetail booking={booking} />
 

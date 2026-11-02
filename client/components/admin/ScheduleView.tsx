@@ -121,7 +121,7 @@ export function ScheduleView({
   }, {});
 
   return (
-    <div className="grid gap-8 lg:grid-cols-12">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
       <div className="lg:col-span-8">
         <div className="flex flex-wrap items-end gap-3">
           <label className="min-w-64 flex-1 text-[0.75rem] font-semibold text-muted">

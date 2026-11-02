@@ -72,7 +72,7 @@ export default async function AdminCustomerPage({ params }: PageProps<"/[locale]
         }
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 lg:col-span-2">
           <AdminPanel title="Bookings" description="Every booking made for this customer, newest first." bodyClassName="p-0">
             <DataTable

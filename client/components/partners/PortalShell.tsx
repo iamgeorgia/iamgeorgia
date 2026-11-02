@@ -82,7 +82,7 @@ export function PortalShell({
 
         <header className="border-b border-line bg-surface">
           <div className="mx-auto flex w-full max-w-(--container-page) items-center gap-4 px-5 py-4 sm:px-8 lg:px-12">
-            <Link href={path("/portal")} className="min-w-0 font-display text-[1.125rem] text-ink">
+            <Link href={path("/portal")} className="min-w-0 font-display text-[1.125rem] whitespace-nowrap text-ink">
               I am Georgia
               <span className="ms-2 text-[0.75rem] tracking-[0.12em] text-muted uppercase">
                 Partners
@@ -118,7 +118,7 @@ export function PortalShell({
             )}
 
             {session && (
-              <div className="ms-auto flex shrink-0 items-center gap-4">
+              <div className="ms-auto flex shrink-0 items-center gap-2 sm:gap-4">
                 {hasBell && <NotificationBell scope="partner" unreadCount={unread} />}
                 <span className="hidden text-end lg:block">
                   <span className="block text-[0.8125rem] font-medium text-ink">
@@ -128,13 +128,16 @@ export function PortalShell({
                     <span className="block text-[0.6875rem] text-muted">{session.partner.name}</span>
                   )}
                 </span>
+                {/* Icon-only below `sm`: with the label, the wordmark wrapped
+                    onto two lines on a 390px phone. The text stays in the
+                    accessibility tree, so the button keeps its name. */}
                 <button
                   type="button"
                   onClick={handleSignOut}
-                  className="inline-flex h-9 items-center gap-2 rounded-sm border border-line px-3 text-[0.8125rem] whitespace-nowrap text-body transition-colors hover:border-ink/40 hover:text-ink"
+                  className="relative inline-flex h-9 min-w-9 items-center justify-center gap-2 rounded-sm border border-line px-2.5 text-[0.8125rem] whitespace-nowrap text-body transition-colors hover:border-ink/40 hover:text-ink sm:px-3"
                 >
                   <LogOut size={14} className="rtl:-scale-x-100" aria-hidden />
-                  Sign out
+                  <span className="sr-only sm:not-sr-only">Sign out</span>
                 </button>
               </div>
             )}
@@ -144,9 +147,11 @@ export function PortalShell({
         {approved && (
           <nav
             aria-label="Partner platform"
-            // Five entries do not fit a phone; the strip scrolls on its own
-            // rather than widening the page.
-            className="flex gap-1 overflow-x-auto border-b border-line bg-surface px-5 pb-3 sm:px-8 md:hidden"
+            // Up to five equal tabs, icon over label. Side by side the labels
+            // needed ~520px, so the old strip scrolled with "Financ…" cut at
+            // the edge and nothing saying there was more. Stacked, five fit a
+            // 320px screen and every destination is visible at once.
+            className="grid auto-cols-fr grid-flow-col gap-1 border-b border-line bg-surface px-3 pb-2 sm:px-8 md:hidden"
           >
             {nav.map((item) => {
               const active = current === item.href || current.startsWith(`${item.href}/`);
@@ -157,7 +162,7 @@ export function PortalShell({
                   href={path(item.href)}
                   aria-current={active ? "page" : undefined}
                   className={cn(
-                    "inline-flex h-9 flex-1 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sm px-2.5 text-[0.8125rem] transition-colors",
+                    "flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-sm px-1 py-1.5 text-[0.75rem] leading-tight whitespace-nowrap transition-colors",
                     active ? "bg-surface-soft font-medium text-ink" : "text-muted",
                   )}
                 >

@@ -63,7 +63,7 @@ export function TransferConfirmation({ booking }: { booking: TransferBooking }) 
     <Container className="pt-8 pb-24 lg:pb-32">
       <TransferSteps current={4} />
 
-      <div className="mt-10 grid gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
+      <div className="mt-10 grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
         <div className="min-w-0 lg:col-span-7">
           <span className="flex size-14 items-center justify-center rounded-full bg-surface-soft text-success">
             <Check size={26} aria-hidden />

@@ -109,7 +109,7 @@ export function TransferBookingsBrowser({
                   <Cell>
                     <Link
                       href={localePath(`${basePath}/${booking.reference}`)}
-                      className="font-medium text-ink tabular-nums underline-offset-4 hover:underline"
+                      className="font-medium whitespace-nowrap text-ink tabular-nums underline-offset-4 hover:underline"
                     >
                       {booking.reference}
                     </Link>

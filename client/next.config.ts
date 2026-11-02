@@ -1,5 +1,18 @@
 import type { NextConfig } from "next";
 
+/**
+ * Whether the API this build talks to is on this machine. The image optimiser
+ * refuses upstreams that resolve to a private address (an SSRF guard), and the
+ * local media driver serves from http://localhost:5000 — so on a fresh checkout
+ * every catalogue photo came back 400 ("resolved to private IP") and rendered
+ * broken. The guard is relaxed only when the configured API is itself on
+ * loopback, where the server already talks to it directly; a deployment
+ * pointed at a public API host keeps it on.
+ */
+const apiIsLocal = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(
+  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000",
+);
+
 const nextConfig: NextConfig = {
   /**
    * A self-contained build under .next/standalone: the traced server, only the
@@ -36,6 +49,7 @@ const nextConfig: NextConfig = {
     imageSizes: [128, 256, 384],
     /** WebP only: AVIF encoding costs far more CPU than it saves here. */
     formats: ["image/webp"],
+    dangerouslyAllowLocalIP: apiIsLocal,
   },
 };
 

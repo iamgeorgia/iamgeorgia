@@ -25,10 +25,15 @@ export default async function NotFound() {
   const { t, path } = await getI18n();
   return (
     <section className="relative flex min-h-[86svh] items-center overflow-hidden bg-ink">
+      {/* The page's LCP element at every width, so it is preloaded at high
+          priority like every other hero (`PageHero`) — it was lazy-loaded,
+          which made the browser wait for layout before even requesting it. */}
       <Image
         src="/images/about/landscape.jpg"
         alt=""
         fill
+        preload
+        fetchPriority="high"
         sizes="100vw"
         className="object-cover opacity-40"
       />

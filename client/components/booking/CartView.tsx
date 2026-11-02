@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -126,7 +126,7 @@ export function CartView() {
   if (!cart.ready) {
     return (
       <Container className="py-12">
-        <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
           <div className="flex flex-col gap-4 lg:col-span-8">
             <div className="h-32 animate-pulse rounded-sm bg-surface-soft" />
             <div className="h-32 animate-pulse rounded-sm bg-surface-soft" />
@@ -203,7 +203,7 @@ export function CartView() {
         {currency && <> · {fill(t.orders.cart.pricedIn, { currency })}</>}
       </p>
 
-      <div className="mt-6 grid gap-10 lg:grid-cols-12 lg:gap-12">
+      <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
           {/* --- notices ------------------------------------------------- */}
           {mixed && (
@@ -346,7 +346,7 @@ function CartItemCard({ item, lines, gone, money, onRemove }: CartItemCardProps)
       <div className="grid gap-4 p-4 sm:grid-cols-[7rem_minmax(0,1fr)] sm:p-5">
         <div className="relative aspect-4/3 overflow-hidden rounded-sm bg-surface-soft sm:aspect-square">
           {display.image ? (
-            <Image
+            <SafeImage
               src={display.image}
               alt=""
               fill

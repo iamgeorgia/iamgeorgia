@@ -40,7 +40,9 @@ const COLUMNS: Column[] = [
   { label: "Outstanding", align: "end" },
   { label: "Status" },
   { label: "Due" },
-  { label: "", align: "end" },
+  // The reference already opens the record; the extra "Open" link earns its
+  // column only once the row has room for it.
+  { label: "", align: "end", hideBelow: "xl" },
 ];
 
 const isOpen = (receivable: Receivable) => receivable.status === "OPEN" || receivable.status === "PARTIAL";
@@ -296,7 +298,7 @@ export function ReceivablesBrowser({
                   <Link
                     href={href(receivable)}
                     prefetch={false}
-                    className="font-mono text-[0.8125rem] font-medium text-ink underline-offset-4 hover:underline"
+                    className="font-mono text-[0.8125rem] font-medium whitespace-nowrap text-ink underline-offset-4 hover:underline"
                   >
                     {receivable.reference}
                   </Link>
@@ -306,7 +308,10 @@ export function ReceivablesBrowser({
                 </Cell>
                 <Cell>
                   <span className="block text-ink">{receivableDebtorName(receivable)}</span>
-                  <span className="block text-[0.75rem] text-muted">{debtorMeta(receivable)}</span>
+                  {/* Wraps rather than running on: a guest's email was the
+                      longest unbreakable line in the row and set the column's
+                      width, pushing the table past the panel at 1024px. */}
+                  <span className="block text-[0.75rem] wrap-anywhere text-muted">{debtorMeta(receivable)}</span>
                 </Cell>
                 <Cell align="end" hideBelow="xl" className="tabular-nums whitespace-nowrap">
                   {formatMoney(receivable.amountCents, receivable.currency)}
@@ -325,7 +330,7 @@ export function ReceivablesBrowser({
                   <SettlementStatusBadge status={receivable.status} overdue={receivable.overdue} />
                 </Cell>
                 <Cell>{due(receivable)}</Cell>
-                <Cell align="end">
+                <Cell align="end" hideBelow="xl">
                   <Link
                     href={href(receivable)}
                     prefetch={false}

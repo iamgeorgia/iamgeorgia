@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { useRouter } from "next/navigation";
 import { AlertCircle, BedDouble, Check, ChevronDown, ShieldCheck, Users, XCircle } from "lucide-react";
 import { useState } from "react";
@@ -130,7 +130,7 @@ export function RoomOffers({
           <div className="grid gap-5 p-4 sm:grid-cols-[13rem_1fr] sm:p-5">
             <div className="relative aspect-4/3 overflow-hidden rounded-sm bg-line">
               {roomType.coverImage && (
-                <Image
+                <SafeImage
                   src={roomType.coverImage.url}
                   alt={roomType.name}
                   fill

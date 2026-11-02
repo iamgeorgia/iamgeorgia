@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { useRef, useState } from "react";
 import { Loader2, Trash2, Upload, UserRound } from "lucide-react";
 
@@ -41,14 +42,17 @@ export function DriverPhoto({ driver }: { driver: DriverAdmin }) {
   return (
     <AdminPanel title="Photo" description="Shown to partners and passengers. A clear, recent face.">
       <div className="flex items-center gap-4">
-        {url ? (
-          // eslint-disable-next-line @next/next/no-img-element -- API-served
-          <img src={url} alt={driverDisplayName(driver)} className="h-24 w-24 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
-            <UserRound size={32} aria-hidden />
-          </span>
-        )}
+        <MediaImg
+          src={url}
+          alt={driverDisplayName(driver)}
+          loading="eager"
+          className="h-24 w-24 shrink-0 rounded-full object-cover"
+          fallback={
+            <span className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
+              <UserRound size={32} aria-hidden />
+            </span>
+          }
+        />
 
         {/* Without the right the face is still shown; only the controls go. */}
         {canEdit && (

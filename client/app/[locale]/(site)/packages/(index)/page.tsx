@@ -73,10 +73,18 @@ export default async function PackagesPage(props: PageProps<"/[locale]/packages"
         )}
       </Container>
 
+      {/* From `lg` only. Below it the feature card is an ordinary 4:3 card,
+          so on a phone the same package appeared twice in a row — here and
+          again at the top of the results — and pushed the filters a screen
+          down. The results still list it at every size. Lazy on purpose: a
+          lazy image under `display: none` is never fetched, where an eager one
+          would cost every phone a hero-sized download it cannot see; on a
+          desktop it sits inside the browser's lazy-load distance and starts
+          with the page anyway. */}
       {spotlight && (
-        <section className="border-b border-line py-16 lg:py-20">
+        <section className="hidden border-b border-line py-20 lg:block">
           <Container>
-            <PackageCard pkg={spotlight} variant="feature" query={query} eager />
+            <PackageCard pkg={spotlight} variant="feature" query={query} />
           </Container>
         </section>
       )}

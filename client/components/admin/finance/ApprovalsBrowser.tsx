@@ -149,7 +149,7 @@ export function ApprovalsBrowser({ approvals, total, page, pageSize, totalPages 
                   <Link
                     href={href(approval)}
                     prefetch={false}
-                    className="font-mono text-[0.8125rem] font-medium text-ink underline-offset-4 hover:underline"
+                    className="font-mono text-[0.8125rem] font-medium whitespace-nowrap text-ink underline-offset-4 hover:underline"
                   >
                     {approval.reference}
                   </Link>

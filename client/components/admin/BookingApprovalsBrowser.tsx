@@ -113,7 +113,7 @@ export function BookingApprovalsBrowser({
       prefetch={false}
       className="underline-offset-4 hover:underline"
     >
-      <span className="font-medium text-ink">{row.reference}</span>
+      <span className="font-medium whitespace-nowrap text-ink">{row.reference}</span>
     </Link>
   );
 

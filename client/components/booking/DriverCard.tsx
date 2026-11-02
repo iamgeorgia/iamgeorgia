@@ -1,4 +1,5 @@
 import { Languages, Phone, ShieldCheck, Star, UserRound } from "lucide-react";
+import { MediaImg } from "@/components/ui/MediaImg";
 
 import { languageLabels } from "@/lib/admin/fleet";
 import type { AssignmentForPartner, DriverLanguage } from "@/types/driver";
@@ -29,14 +30,16 @@ export function DriverCard({
       </h2>
 
       <div className="mt-4 flex items-start gap-4">
-        {photo ? (
-          // eslint-disable-next-line @next/next/no-img-element -- API-served
-          <img src={photo} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
-            <UserRound size={28} aria-hidden />
-          </span>
-        )}
+        <MediaImg
+          src={photo}
+          alt=""
+          className="h-20 w-20 shrink-0 rounded-full object-cover"
+          fallback={
+            <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
+              <UserRound size={28} aria-hidden />
+            </span>
+          }
+        />
 
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-2 text-[1.0625rem] font-medium text-ink">
@@ -87,12 +90,12 @@ export function DriverCard({
 
       {vehicle && (
         <div className="mt-5 flex items-center gap-4 border-t border-line pt-4">
-          {carPhoto ? (
-            // eslint-disable-next-line @next/next/no-img-element -- API-served
-            <img src={carPhoto} alt="" className="h-16 w-24 shrink-0 rounded-sm object-cover" />
-          ) : (
-            <span className="h-16 w-24 shrink-0 rounded-sm bg-surface-soft" aria-hidden />
-          )}
+          <MediaImg
+            src={carPhoto}
+            alt=""
+            className="h-16 w-24 shrink-0 rounded-sm object-cover"
+            fallback={<span className="h-16 w-24 shrink-0 rounded-sm bg-surface-soft" aria-hidden />}
+          />
           <div>
             <p className="text-[0.9375rem] font-medium text-ink">
               {vehicle.make} {vehicle.model}

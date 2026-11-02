@@ -159,6 +159,18 @@
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    /* Every shell has a bar pinned to the top: the site header (h-18, h-20
+       from lg), the admin bar (h-16) and the driver bar. Without this, a field
+       reached with Tab or an anchor jump was scrolled to y=0 and landed under
+       the bar (WCAG 2.4.11). The header height plus a 1rem breath; in-page
+       anchors add only what sits below the header (`scroll-mt-14`). */
+    scroll-padding-top: 5.5rem;
+  }
+
+  @media (width >= 64rem) {
+    html {
+      scroll-padding-top: 6rem;
+    }
   }
 
   body {

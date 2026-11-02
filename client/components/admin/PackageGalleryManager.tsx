@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { useRef, useState } from "react";
 import { Loader2, Star, Trash2, Upload } from "lucide-react";
 
@@ -118,8 +119,7 @@ export function PackageGalleryManager({ pkg }: { pkg: PackageWithChecklist }) {
           {pkg.images.map((image) => (
             <li key={image.packageImageId} className="overflow-hidden rounded-sm border border-line bg-surface">
               <div className="relative aspect-4/3 bg-line">
-                {/* eslint-disable-next-line @next/next/no-img-element -- API-served */}
-                <img src={cardUrl(image)} alt={image.altText ?? ""} className="size-full object-cover" />
+                <MediaImg src={cardUrl(image)} alt={image.altText ?? ""} className="size-full object-cover" />
                 {image.isCover && (
                   <span className="absolute top-2 start-2 inline-flex items-center gap-1 rounded-full bg-background/90 px-2 py-0.5 text-[0.6875rem] font-semibold text-ink">
                     <Star size={11} aria-hidden />

@@ -57,7 +57,7 @@ export function ReportSummary({ rows, period }: { rows: FinanceSummary["currenci
         const money = (cents: number) => formatMoney(cents, row.currency);
 
         return (
-          <section key={row.currency} aria-label={row.currency} className="grid gap-4 lg:grid-cols-3">
+          <section key={row.currency} aria-label={row.currency} className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <AdminPanel title={`${row.currency} · Buyers owe us`} description="As of now.">
               <AdminDefinitionList
                 items={[

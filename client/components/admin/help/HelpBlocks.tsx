@@ -210,7 +210,7 @@ export function HelpBlockView({
       return (
         <h2
           id={headingId(block.id)}
-          className="scroll-mt-24 border-b border-line pt-2 pb-2 text-[1.0625rem] font-semibold text-ink"
+          className="scroll-mt-4 border-b border-line pt-2 pb-2 text-[1.0625rem] font-semibold text-ink"
         >
           {block.text}
         </h2>

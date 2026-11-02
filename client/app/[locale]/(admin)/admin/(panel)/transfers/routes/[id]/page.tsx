@@ -88,7 +88,7 @@ export default async function AdminTransferRoutePage({
         </div>
       )}
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 space-y-8 lg:col-span-8">
           <AdminPanel title="Fares" description="What this journey costs in each vehicle class.">
             <TransferPriceGrid route={route} vehicles={sellable} />

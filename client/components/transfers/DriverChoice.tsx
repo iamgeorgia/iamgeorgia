@@ -1,6 +1,7 @@
 "use client";
 
 import { Camera, Languages, ShieldCheck, Star, UserRound, Users } from "lucide-react";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { useEffect, useState } from "react";
 
 import { describeError } from "@/lib/api/client";
@@ -146,14 +147,16 @@ function DriverOption({
         />
 
         <label htmlFor={inputId} className="flex min-w-0 flex-1 cursor-pointer items-start gap-4">
-          {photo ? (
-            // eslint-disable-next-line @next/next/no-img-element -- API-served
-            <img src={photo} alt="" className="size-16 shrink-0 rounded-full object-cover" />
-          ) : (
-            <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
-              <UserRound size={24} aria-hidden />
-            </span>
-          )}
+          <MediaImg
+            src={photo}
+            alt=""
+            className="size-16 shrink-0 rounded-full object-cover"
+            fallback={
+              <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
+                <UserRound size={24} aria-hidden />
+              </span>
+            }
+          />
 
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-x-2 text-[0.9375rem] font-medium text-ink">
@@ -253,12 +256,12 @@ function CarOption({
           htmlFor={choosable ? inputId : undefined}
           className={cn("flex min-w-0 flex-1 items-start gap-3", choosable && "cursor-pointer")}
         >
-          {cover ? (
-            // eslint-disable-next-line @next/next/no-img-element -- API-served
-            <img src={cover} alt="" className="h-16 w-24 shrink-0 rounded-sm object-cover" />
-          ) : (
-            <span className="h-16 w-24 shrink-0 rounded-sm bg-surface-soft" aria-hidden />
-          )}
+          <MediaImg
+            src={cover}
+            alt=""
+            className="h-16 w-24 shrink-0 rounded-sm object-cover"
+            fallback={<span className="h-16 w-24 shrink-0 rounded-sm bg-surface-soft" aria-hidden />}
+          />
 
           <span className="min-w-0 flex-1">
             <span className="block text-[0.9375rem] font-medium text-ink">
@@ -304,8 +307,7 @@ function CarOption({
           <ul className="mt-2 flex flex-wrap gap-2">
             {gallery.map((image) => (
               <li key={image.imageId}>
-                {/* eslint-disable-next-line @next/next/no-img-element -- API-served */}
-                <img
+                <MediaImg
                   src={variantUrl(image, "card") ?? image.url}
                   alt={image.caption ?? ""}
                   className="h-20 w-28 rounded-sm object-cover"

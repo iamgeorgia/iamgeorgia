@@ -319,12 +319,15 @@ export function AuditBrowser({
                       <span className="block font-mono text-[0.75rem] text-muted">{when.time}</span>
                     </time>
                   </Cell>
-                  <Cell className="max-w-[14rem]">{renderWho(entry)}</Cell>
+                  {/* Caps and floors step down at `lg`, and the record type
+                      may wrap there: the panel is ~720px and five columns at
+                      their wide-screen sizes ran 118px past it. */}
+                  <Cell className="max-w-[10rem] xl:max-w-[14rem]">{renderWho(entry)}</Cell>
                   <Cell>
                     <span className="font-medium text-ink">{auditActionLabel(entry.action)}</span>
                   </Cell>
-                  <Cell className="whitespace-nowrap">{renderWhat(entry)}</Cell>
-                  <Cell className="min-w-[16rem]">
+                  <Cell className="xl:whitespace-nowrap">{renderWhat(entry)}</Cell>
+                  <Cell className="min-w-[12rem] xl:min-w-[16rem]">
                     <p className="break-words text-body">{entry.summary}</p>
                     <AuditMetadata metadata={entry.metadata} />
                   </Cell>

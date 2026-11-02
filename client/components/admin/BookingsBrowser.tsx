@@ -102,7 +102,7 @@ export function BookingsBrowser({
                   <Cell>
                     <Link
                       href={localePath(`/admin/bookings/${booking.reference}`)}
-                      className="font-medium text-ink underline-offset-4 hover:underline"
+                      className="font-medium whitespace-nowrap text-ink underline-offset-4 hover:underline"
                     >
                       {booking.reference}
                     </Link>

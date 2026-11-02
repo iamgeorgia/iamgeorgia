@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MediaImg } from "@/components/ui/MediaImg";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowLeft, Languages, ShieldCheck, Star, UserRound } from "lucide-react";
@@ -48,16 +49,18 @@ export default async function PortalDriverPage(props: PageProps<"/[locale]/porta
         All bookings
       </Link>
 
-      <div className="mt-8 grid gap-10 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-4">
-          {photo ? (
-            // eslint-disable-next-line @next/next/no-img-element -- API-served
-            <img src={photo} alt="" className="aspect-square w-full rounded-sm object-cover" />
-          ) : (
-            <span className="flex aspect-square w-full items-center justify-center rounded-sm bg-surface-soft text-subtle">
-              <UserRound size={64} aria-hidden />
-            </span>
-          )}
+          <MediaImg
+            src={photo}
+            alt=""
+            className="aspect-square w-full rounded-sm object-cover"
+            fallback={
+              <span className="flex aspect-square w-full items-center justify-center rounded-sm bg-surface-soft text-subtle">
+                <UserRound size={64} aria-hidden />
+              </span>
+            }
+          />
         </div>
 
         <div className="min-w-0 lg:col-span-8">
@@ -101,12 +104,12 @@ export default async function PortalDriverPage(props: PageProps<"/[locale]/porta
                   const image = car.mainImage?.variants.find((variant) => variant.variant === "card")?.url ?? car.mainImage?.url;
                   return (
                     <li key={car.id} className="overflow-hidden rounded-sm border border-line bg-surface">
-                      {image ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- API-served
-                        <img src={image} alt="" className="aspect-4/3 w-full object-cover" />
-                      ) : (
-                        <span className="block aspect-4/3 w-full bg-surface-soft" aria-hidden />
-                      )}
+                      <MediaImg
+                        src={image}
+                        alt=""
+                        className="aspect-4/3 w-full object-cover"
+                        fallback={<span className="block aspect-4/3 w-full bg-surface-soft" aria-hidden />}
+                      />
                       <div className="p-3">
                         <p className="text-[0.9375rem] font-medium text-ink">
                           {car.make} {car.model}

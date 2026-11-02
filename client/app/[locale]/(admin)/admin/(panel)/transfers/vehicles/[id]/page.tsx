@@ -56,7 +56,7 @@ export default async function AdminTransferVehiclePage({
 
       <AdminPageHeader title={vehicle.name} description={vehicle.summary} />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-8">
           <AdminPanel title="Details">
             <TransferVehicleEditor vehicle={vehicle} />

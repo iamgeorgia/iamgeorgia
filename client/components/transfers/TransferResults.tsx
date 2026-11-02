@@ -175,7 +175,7 @@ export function TransferResults({
       </Container>
 
       <Container className="pt-8 pb-24 lg:pt-10 lg:pb-32">
-        <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
           <aside className="hidden lg:col-span-3 lg:block">
             <div className="sticky top-28">
               <div className="flex items-baseline justify-between">

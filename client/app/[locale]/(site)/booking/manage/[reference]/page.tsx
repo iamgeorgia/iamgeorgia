@@ -158,7 +158,7 @@ export default async function ManageBookingPage(
 
       <h1 className="type-h1 mt-6">{t.booking.manage.metaTitle}</h1>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
+      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
           <BookingDetail booking={booking} />
         </div>

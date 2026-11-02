@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { useState } from "react";
 
 import { VehicleIllustration } from "./VehicleIllustration";
@@ -73,7 +73,7 @@ export function TransferGallery({ vehicle, from, to, className }: TransferGaller
             />
           </div>
         ) : (
-          <Image
+          <SafeImage
             src={active.src}
             alt={active.label}
             fill
@@ -111,7 +111,7 @@ export function TransferGallery({ vehicle, from, to, className }: TransferGaller
                       <VehicleIllustration vehicleClass={vehicle.body} />
                     </span>
                   ) : (
-                    <Image
+                    <SafeImage
                       src={frame.src}
                       alt=""
                       fill

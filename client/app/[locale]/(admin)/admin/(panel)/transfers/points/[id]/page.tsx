@@ -62,7 +62,7 @@ export default async function AdminTransferPointPage({
         description={`${pointKindLabels[point.kind] ?? point.kind} in ${point.region}.`}
       />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-8">
           <AdminPanel title="Details">
             <TransferPointForm point={point} />

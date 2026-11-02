@@ -57,7 +57,7 @@ export default function ContactPage() {
 
       <section className="py-16 lg:py-20">
         <Container>
-          <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
             <div className="lg:col-span-5">
               <Reveal>
                 <h2 className="type-h3">Get in touch directly</h2>

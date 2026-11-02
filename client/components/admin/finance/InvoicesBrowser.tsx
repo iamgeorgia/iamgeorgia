@@ -120,7 +120,7 @@ export function InvoicesBrowser({ invoices, total, page, pageSize, totalPages, p
       <Link
         href={path(`/admin/finance/receivables/${invoice.receivable.id}`)}
         prefetch={false}
-        className="font-mono text-[0.75rem] text-brand-text underline-offset-4 hover:underline"
+        className="font-mono text-[0.75rem] whitespace-nowrap text-brand-text underline-offset-4 hover:underline"
       >
         {invoice.receivable.reference}
       </Link>

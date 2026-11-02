@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { ShieldCheck, ShieldQuestion, Star } from "lucide-react";
 
 import { DriverProfileForm } from "@/components/driver/DriverProfileForm";
@@ -14,12 +15,13 @@ export default async function DriverMePage() {
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-4">
-        {photo ? (
-          // eslint-disable-next-line @next/next/no-img-element -- API-served
-          <img src={photo} alt="" className="h-20 w-20 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span className="h-20 w-20 shrink-0 rounded-full bg-surface-soft" aria-hidden />
-        )}
+        <MediaImg
+          src={photo}
+          alt=""
+          loading="eager"
+          className="h-20 w-20 shrink-0 rounded-full object-cover"
+          fallback={<span className="h-20 w-20 shrink-0 rounded-full bg-surface-soft" aria-hidden />}
+        />
         <div>
           <h1 className="text-[1.25rem] font-semibold text-ink">
             {driver.firstName} {driver.lastName}

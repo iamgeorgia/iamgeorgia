@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import Link from "next/link";
 import { Clock, Users } from "lucide-react";
 
@@ -46,7 +46,7 @@ export function TourCard({ tour, variant = "default", query = "", className, eag
           )}
         >
           {image && (
-            <Image
+            <SafeImage
               src={image}
               alt={tour.title}
               fill

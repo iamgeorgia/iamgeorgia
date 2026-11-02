@@ -160,7 +160,15 @@ export function NotificationsBrowser({
   return (
     <div>
       {categories.length > 0 && (
-        <div role="tablist" aria-label="Notification tabs" className="flex gap-1 overflow-x-auto border-b border-line">
+        // `relative` makes the strip the containing block of the count pills'
+        // `sr-only` text (position: absolute), so the strip clips it. Without
+        // it those 1px spans sat past the last tab, outside the scroller, and
+        // stretched the page to ~590px on a phone.
+        <div
+          role="tablist"
+          aria-label="Notification tabs"
+          className="relative flex gap-1 overflow-x-auto border-b border-line"
+        >
           <button
             type="button"
             role="tab"

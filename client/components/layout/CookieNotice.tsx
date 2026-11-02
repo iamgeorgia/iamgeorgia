@@ -65,14 +65,21 @@ export function CookieNotice() {
      * mobile menu (z-90) and every dialog and lightbox (z-100). At z-100 and
      * later in the DOM it used to paint over an open dialog's action buttons.
      * `--booking-bar-offset` lifts it clear of that bar where a page has one.
+     *
+     * On a phone it is a slim sheet docked to the bottom edge (or onto the
+     * booking bar), text beside the button. As a floating card with the button
+     * under the text it stood ~150px tall, and with the booking bar under it
+     * covered a quarter of an 844px screen. The bottom padding takes the home
+     * indicator's inset only when nothing sits below the sheet: with the bar
+     * there, the bar has already cleared it.
      */
     <div
       role="region"
       aria-label={t.cookieNotice.label}
-      className="fixed inset-x-0 bottom-(--booking-bar-offset) z-60 px-4 pb-4 sm:px-6 sm:pb-6"
+      className="fixed inset-x-0 bottom-(--booking-bar-offset) z-60 transition-[bottom] duration-300 ease-(--ease-out-soft) sm:px-6 sm:pb-6"
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-4 rounded-sm border border-line bg-surface p-4 shadow-card sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:p-5">
-        <p className="type-body-sm text-body">
+      <div className="mx-auto flex max-w-3xl items-center gap-3 border-t border-line bg-surface px-4 pt-2.5 pb-[max(0.625rem,calc(env(safe-area-inset-bottom)-var(--booking-bar-offset)))] shadow-[0_-8px_24px_-16px_rgb(32_32_29/0.18)] sm:justify-between sm:gap-6 sm:rounded-sm sm:border sm:p-4 sm:ps-5 sm:shadow-card">
+        <p className="type-caption min-w-0 flex-1 text-body sm:text-[0.9375rem]">
           {t.cookieNotice.body}{" "}
           <Link
             href={path("/cookies")}
@@ -81,12 +88,7 @@ export function CookieNotice() {
             {t.cookieNotice.link}
           </Link>
         </p>
-        <Button
-          onClick={dismiss}
-          size="sm"
-          variant="secondary"
-          className="shrink-0 self-start sm:self-auto"
-        >
+        <Button onClick={dismiss} variant="secondary" className="shrink-0">
           {t.cookieNotice.dismiss}
         </Button>
       </div>

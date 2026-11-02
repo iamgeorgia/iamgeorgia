@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { useRef, useState } from "react";
 import { Loader2, Star, Trash2, Upload } from "lucide-react";
 
@@ -137,12 +138,7 @@ export function GalleryManager({ hotel }: { hotel: HotelWithChecklist }) {
         <ul className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
           {hotel.images.map((image) => (
             <li key={image.hotelImageId} className="group relative overflow-hidden rounded-sm border border-line">
-              {/* eslint-disable-next-line @next/next/no-img-element -- API-served */}
-              <img
-                src={cardUrl(image)}
-                alt={image.altText ?? ""}
-                className="aspect-4/3 w-full object-cover"
-              />
+              <MediaImg src={cardUrl(image)} alt={image.altText ?? ""} className="aspect-4/3 w-full object-cover" />
               <div className="flex items-center justify-between gap-2 bg-surface px-3 py-2">
                 {!canEdit ? (
                   <span className="text-[0.75rem] text-muted">{image.category}</span>

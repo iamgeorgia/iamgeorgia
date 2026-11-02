@@ -86,7 +86,7 @@ export function HotelExplorer({ hotels }: HotelExplorerProps) {
   return (
     <>
       <Container className="pt-12 pb-24 lg:pt-16 lg:pb-32">
-        <div className="grid gap-10 lg:grid-cols-12 lg:gap-12">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
           <aside className="hidden lg:col-span-3 lg:block">
             {/*
              * The panel is taller than a laptop viewport once a catalogue has

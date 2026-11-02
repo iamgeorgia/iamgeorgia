@@ -18,7 +18,7 @@ export interface Column {
   /** Right-align numeric columns so figures line up on the decimal. */
   align?: "start" | "end";
   /** Hide below the given breakpoint to keep the table scannable. */
-  hideBelow?: "sm" | "md" | "lg" | "xl";
+  hideBelow?: "sm" | "md" | "lg" | "xl" | "2xl";
   className?: string;
 }
 
@@ -27,6 +27,7 @@ const hideClasses: Record<NonNullable<Column["hideBelow"]>, string> = {
   md: "hidden md:table-cell",
   lg: "hidden lg:table-cell",
   xl: "hidden xl:table-cell",
+  "2xl": "hidden 2xl:table-cell",
 };
 
 export function DataTable({
@@ -46,11 +47,19 @@ export function DataTable({
     // min-content width upwards, so a 44rem table inside a grid column made the
     // column 44rem wide and the page scroll sideways on a phone. Containment
     // sizes the wrapper from its parent alone; the table scrolls inside it.
-    <div className={cn("w-full contain-inline-size overflow-x-auto", className)}>
-      {/* The floor applies from `md`. Below that the `hideBelow` columns are
-          already gone, and a 44rem minimum forced every table into a sideways
-          scroll on a phone anyway; the wrapper still scrolls if a row needs it. */}
-      <table className="w-full border-collapse text-start md:min-w-[44rem]">
+    // `relative`: an `overflow` box only clips absolutely positioned
+    // descendants when it is their containing block. Without it the `sr-only`
+    // "Actions" header (position: absolute, parked at the far end of a row
+    // wider than the wrapper) escaped the scroller and widened the page.
+    <div className={cn("relative w-full contain-inline-size overflow-x-auto", className)}>
+      {/* No width floor: the table is as narrow as its cells allow and the
+          wrapper scrolls only when a row truly needs more room. The old
+          `md:min-w-[44rem]` was measured against the viewport, not the panel,
+          so a five-column table in a 470px detail column scrolled sideways
+          with room to spare and its money columns sat off screen. Columns that
+          must not squeeze say so themselves (`whitespace-nowrap` on
+          references, dates and amounts; `hideBelow` for the secondary ones). */}
+      <table className="w-full border-collapse text-start">
         <caption className="sr-only">{caption}</caption>
         <thead>
           <tr className="border-b border-line">

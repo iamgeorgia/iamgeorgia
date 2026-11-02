@@ -57,7 +57,7 @@ export async function OrderManageView({ order, email, basePath }: OrderManageVie
 
       <h1 className="type-h1 mt-6">{t.orders.nav.manage}</h1>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
+      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
           <OrderDetail order={order} cancel={live ? { quote, email } : null} />
         </div>

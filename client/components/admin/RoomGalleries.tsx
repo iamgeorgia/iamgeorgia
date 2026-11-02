@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { useRef, useState } from "react";
 import { BedDouble, Loader2, Star, Trash2, Upload } from "lucide-react";
 
@@ -158,8 +159,7 @@ function RoomSection({
         <ul className="grid grid-cols-2 gap-4 p-4 sm:grid-cols-3 lg:grid-cols-5">
           {room.images.map((image) => (
             <li key={image.roomImageId} className="group relative overflow-hidden rounded-sm border border-line">
-              {/* eslint-disable-next-line @next/next/no-img-element -- API-served */}
-              <img src={cardUrl(image)} alt={image.altText ?? ""} className="aspect-4/3 w-full object-cover" />
+              <MediaImg src={cardUrl(image)} alt={image.altText ?? ""} className="aspect-4/3 w-full object-cover" />
               {canEdit && (
                 <div className="flex items-center justify-end gap-2 bg-surface px-2 py-1.5">
                   <button

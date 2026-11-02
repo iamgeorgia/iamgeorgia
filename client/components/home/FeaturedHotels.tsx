@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { MapPin } from "lucide-react";
@@ -73,7 +73,7 @@ export async function FeaturedHotels() {
                     className="relative aspect-4/3 overflow-hidden bg-line"
                   >
                     {view.image && (
-                      <Image
+                      <SafeImage
                         src={view.image}
                         alt=""
                         fill
