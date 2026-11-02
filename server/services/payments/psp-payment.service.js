@@ -177,6 +177,11 @@ export const toStaffPayment = (payment) => ({
     failureReason: payment.failureReason,
     updatedAt: payment.updatedAt,
     receivable: payment.receivable ?? null,
+    /** What may still go back to the card: charged minus reversed minus refunds in flight. */
+    refundableCents:
+        ['APPROVED', 'REVERSED', 'MISMATCH'].includes(payment.status) && payment.actualAmountCents
+            ? Math.max(0, payment.actualAmountCents - payment.reversedCents - (payment.refunds ?? []).filter((r) => ['REQUESTED', 'SUBMITTED', 'FAILED'].includes(r.status)).reduce((sum, r) => sum + r.amountCents, 0))
+            : 0,
     callbacks: (payment.callbacks ?? []).map((event) => ({
         id: event.id,
         receivedAt: event.receivedAt,

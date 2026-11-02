@@ -7,6 +7,7 @@ import { CAPABILITIES, assertCan, can } from '../../lib/permissions.js';
 import { nextReference } from '../../lib/reference.js';
 import { adjustPayableInTx, adjustReceivableInTx, findPayableOr404, findReceivableOr404 } from './settlement.service.js';
 import { recordPaymentInTx } from './payment.service.js';
+import { openPspRefundInTx } from '../payments/psp-refund.service.js';
 import { findPenaltyOr404, overridePenaltyInTx } from './penalty.service.js';
 import { syncBookingReceivableInTx } from './ledger.service.js';
 
@@ -44,10 +45,15 @@ const KINDS = {
             summary: `Refund of ${money(payload.amountCents, payload.currency)} ${payload.direction === 'OUT' ? 'to a buyer' : 'from a supplier'}: ${payload.reason}`
         }),
         execute: (tx, request, actor, req, via) =>
-            recordPaymentInTx(tx, { ...request.payload, idempotencyKey: `approval:${request.id}` }, actor, req, via).then((payment) => ({
-                entityType: AUDIT_ENTITY.paymentRecord,
-                entityId: payment.id
-            }))
+            // Money that came in by card goes back by card: the gateway is asked
+            // by the outbox after this commits, and the ledger row follows its
+            // answer (services/payments/psp-refund.service.js).
+            request.payload.pspPaymentId
+                ? openPspRefundInTx(tx, request, actor, req, via)
+                : recordPaymentInTx(tx, { ...request.payload, idempotencyKey: `approval:${request.id}` }, actor, req, via).then((payment) => ({
+                      entityType: AUDIT_ENTITY.paymentRecord,
+                      entityId: payment.id
+                  }))
     },
     PAYABLE_OVERRIDE: {
         requestCap: CAPABILITIES.FINANCE_ADJUSTMENTS_REQUEST,
