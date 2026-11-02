@@ -349,6 +349,15 @@ describe('card payments: HTTP', { skip: dbAvailable ? false : 'Postgres is not r
             assert.ok(await prisma.auditLog.findFirst({ where: { entityId: payment.id, action: 'PSP_STATUS_CHECKED' } }));
         });
 
+        it('answers the health view to finance', async () => {
+            const res = await request(app).get('/api/admin/payments/health').set('Cookie', cookies.ACCOUNTANT);
+            assert.equal(res.status, 200, JSON.stringify(res.body));
+            assert.equal(res.body.enabled, true);
+            assert.equal(res.body.mode, 'TEST');
+            for (const key of ['inboxBacklog', 'openAttempts', 'stuckProcessing', 'openMismatches', 'pendingRefunds', 'unpaidDue']) assert.equal(typeof res.body[key], 'number', key);
+            assert.equal((await request(app).get('/api/admin/payments/health').set('Cookie', cookies.DISPATCHER)).status, 403);
+        });
+
         it('keeps a dispatcher out and tells any staff member the mode', async () => {
             const { payment } = await open();
 

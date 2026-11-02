@@ -535,6 +535,36 @@ describe('card payments: flow', { skip: dbAvailable ? false : 'Postgres is not r
         });
     });
 
+    describe('reconciliation', () => {
+        it('stamps settled payments the ledger agrees with, and alerts on one it does not', async () => {
+            const { reconcileSettledPayments } = await import('../services/payments/psp-sweeper.service.js');
+            const settledAt = new Date(Date.now() - 2 * 3_600_000);
+
+            const good = await open();
+            stub.approve(good.payment.merchantOrderId);
+            await refreshFromProvider(good.payment.id);
+            await prisma.pspPayment.update({ where: { id: good.payment.id }, data: { completedAt: settledAt } });
+
+            const bad = await open();
+            stub.approve(bad.payment.merchantOrderId);
+            await refreshFromProvider(bad.payment.id);
+            // A reversal made in the gateway's portal that never reached us.
+            stub.setOrderStatus(bad.payment.merchantOrderId, { reversal_amount: 5_000 });
+            await prisma.pspPayment.update({ where: { id: bad.payment.id }, data: { completedAt: settledAt } });
+
+            const result = await reconcileSettledPayments();
+            assert.ok(result.reconciled >= 1);
+            assert.ok(result.mismatched >= 1);
+
+            assert.ok((await prisma.pspPayment.findUnique({ where: { id: good.payment.id } })).reconciledAt);
+            const stillOpen = await prisma.pspPayment.findUnique({ where: { id: bad.payment.id } });
+            assert.equal(stillOpen.reconciledAt, null);
+            assert.equal(stillOpen.reversedCents, 5_000, 'the gateway\'s reversal is recorded even though the ledger has none');
+            assert.ok(await prisma.auditLog.findFirst({ where: { entityId: bad.payment.id, action: 'PSP_RECONCILIATION_MISMATCH' } }));
+            assert.ok((await outboxTopics(bad.payment.id)).some((e) => e.topic === TOPICS.PSP_ALERT && e.payload.kind === 'RECONCILIATION_MISMATCH'));
+        });
+    });
+
     describe('payment rules on the receivable', () => {
         it('freezes the provider policy at confirmation and auto-cancels an unpaid PAY_NOW booking', async () => {
             const { booking, receivable } = await booked({ vehicleId: payNowVehicle.id });

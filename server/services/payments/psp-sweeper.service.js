@@ -230,6 +230,111 @@ export const sweepUnpaidBookings = async () => {
     return counts;
 };
 
+// --- Reconciliation ----------------------------------------------------------------------
+
+const RECONCILE_AFTER_MS = 60 * 60 * 1000;
+const RECONCILE_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+const RECONCILE_BATCH = 20;
+
+/**
+ * Settled payments are re-read from the gateway once, an hour after they
+ * settled: the ledger row must equal what the gateway charged minus what it
+ * reversed. Agreement stamps `reconciledAt`; disagreement is an alert and an
+ * audit row, never a silent patch — the gateway is right, a person decides.
+ * A handful per sweep, oldest first, so a backlog clears without a burst.
+ */
+export const reconcileSettledPayments = async () => {
+    const now = Date.now();
+    const rows = await prisma.pspPayment.findMany({
+        where: {
+            status: { in: ['APPROVED', 'REVERSED'] },
+            reconciledAt: null,
+            completedAt: { lt: new Date(now - RECONCILE_AFTER_MS), gt: new Date(now - RECONCILE_WINDOW_MS) }
+        },
+        select: { id: true, reference: true, bookingReference: true, merchantOrderId: true, status: true, actualAmountCents: true, reversedCents: true, currency: true, paymentRecordId: true },
+        orderBy: { completedAt: 'asc' },
+        take: RECONCILE_BATCH
+    });
+
+    let reconciled = 0;
+    let mismatched = 0;
+
+    for (const row of rows) {
+        try {
+            // The status read is applied too (a reversal made in the portal lands here).
+            await refreshFromProvider(row.id, { source: 'sweep' });
+            const current = await prisma.pspPayment.findUnique({
+                where: { id: row.id },
+                include: { paymentRecord: { select: { amountCents: true } }, refunds: { where: { status: 'APPROVED' }, select: { amountCents: true } } }
+            });
+
+            const ledgerIn = current.paymentRecord?.amountCents ?? 0;
+            const ledgerOut = current.refunds.reduce((sum, r) => sum + r.amountCents, 0);
+            const gatewayNet = (current.actualAmountCents ?? 0) - current.reversedCents;
+            const agree = ledgerIn === (current.actualAmountCents ?? 0) && ledgerIn - ledgerOut === gatewayNet;
+
+            if (agree) {
+                await prisma.pspPayment.update({ where: { id: row.id }, data: { reconciledAt: new Date() } });
+                reconciled += 1;
+                continue;
+            }
+
+            mismatched += 1;
+            await prisma.$transaction(async (tx) => {
+                await recordAudit(tx, {
+                    action: 'PSP_RECONCILIATION_MISMATCH',
+                    actor: null,
+                    entityType: AUDIT_ENTITY.pspPayment,
+                    entityId: row.id,
+                    summary: `Card payment ${row.reference}: ledger ${ledgerIn - ledgerOut} differs from gateway ${gatewayNet} ${current.currency}`,
+                    metadata: { ledgerIn, ledgerOut, gatewayCharged: current.actualAmountCents, gatewayReversed: current.reversedCents },
+                    req: null
+                });
+                await enqueueEvent(tx, {
+                    topic: TOPICS.PSP_ALERT,
+                    payload: { kind: 'RECONCILIATION_MISMATCH', paymentId: row.id, paymentReference: row.reference, bookingReference: row.bookingReference, ledgerIn, ledgerOut, gatewayCharged: current.actualAmountCents, gatewayReversed: current.reversedCents, currency: current.currency },
+                    entityType: AUDIT_ENTITY.pspPayment,
+                    entityId: row.id
+                });
+            });
+        } catch (err) {
+            logger.warn({ paymentId: row.id, err: err?.message, reason: err?.details?.reason }, 'Could not reconcile a card payment; will try again');
+        }
+    }
+
+    return { reconciled, mismatched };
+};
+
+let lastSweep = null;
+
+/** What the last pass did and when, for the health view. */
+export const lastSweepSummary = () => lastSweep;
+
+/** The numbers a person checks when something feels wrong. */
+export const paymentsHealth = async () => {
+    const now = Date.now();
+    const [inboxBacklog, openAttempts, stuckProcessing, openMismatches, pendingRefunds, unpaidDue] = await Promise.all([
+        prisma.pspCallbackEvent.count({ where: { signatureValid: true, processedAt: null } }),
+        prisma.pspPayment.count({ where: { status: { in: ['CREATED', 'REDIRECT_READY', 'PROCESSING'] } } }),
+        prisma.pspPayment.count({ where: { status: 'PROCESSING', updatedAt: { lt: new Date(now - 30 * 60_000) } } }),
+        prisma.pspPayment.count({ where: { status: 'MISMATCH' } }),
+        prisma.pspRefund.count({ where: { status: { in: ['REQUESTED', 'SUBMITTED', 'FAILED'] } } }),
+        prisma.receivable.count({ where: { autoCancelAt: { lt: new Date() }, autoCancelledAt: null, status: 'OPEN', debtorPartnerId: null } })
+    ]);
+
+    return {
+        enabled: settings().enabled,
+        mode: settings().enabled ? (settings().mode === 'live' ? 'LIVE' : 'TEST') : null,
+        inboxBacklog,
+        openAttempts,
+        stuckProcessing,
+        openMismatches,
+        pendingRefunds,
+        unpaidDue,
+        lastSweep
+    };
+};
+
 /** One pass of everything. Called by the timer in server.js and by tests. */
 export const sweepPspPayments = async () => {
     if (!settings().enabled) {
@@ -240,6 +345,9 @@ export const sweepPspPayments = async () => {
     const polled = await pollOpenAttempts();
     const abandoned = await failAbandonedCreates();
     const unpaid = await sweepUnpaidBookings();
+    const reconciliation = await reconcileSettledPayments();
 
-    return { callbacks, ...polled, ...abandoned, unpaid };
+    lastSweep = { at: new Date(), callbacks, ...polled, ...abandoned, unpaid, reconciliation };
+
+    return { callbacks, ...polled, ...abandoned, unpaid, reconciliation };
 };

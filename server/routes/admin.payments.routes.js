@@ -7,6 +7,7 @@ import { validate } from '../middleware/validate.js';
 import { toApproval } from '../serializers/approval.js';
 import { checkStatusByStaff, findPaymentOr404, listPayments, toStaffPayment } from '../services/payments/psp-payment.service.js';
 import { requestCardRefund } from '../services/payments/psp-refund.service.js';
+import { paymentsHealth } from '../services/payments/psp-sweeper.service.js';
 import { adminPaymentsListSchema, paymentIdParamSchema, refundPaymentSchema } from '../validation/payments.js';
 
 /**
@@ -34,6 +35,11 @@ adminPaymentRoutes.get('/settings', requireCapability(CAPABILITIES.FINANCE_PAYME
         currencies: settings.currencies,
         orderLifetimeSeconds: settings.orderLifetimeSeconds
     });
+});
+
+/** Backlogs and stuck rows: what to look at when a guest says they paid and the panel disagrees. */
+adminPaymentRoutes.get('/health', requireCapability(CAPABILITIES.FINANCE_PAYMENTS_READ), async (req, res) => {
+    res.json(await paymentsHealth());
 });
 
 adminPaymentRoutes.get('/', requireCapability(CAPABILITIES.FINANCE_PAYMENTS_READ), validate({ query: adminPaymentsListSchema }), async (req, res) => {
