@@ -276,5 +276,15 @@ export const PAYMENT_TEMPLATES = [
         name: 'Credit account',
         timing: 'CREDIT_ACCOUNT',
         description: 'Invoiced to the partner account on the agreed settlement terms.'
-    }
+    },
+
+    // Templates for the other products (docs/plans/FLITT_INTEGRATION_PLAN.md
+    // §4.4). `productKind` null above means hotels. Items with no policy of
+    // their own behave as the first template of their kind.
+    { productKind: 'TOUR', name: 'Pay later', timing: 'PAY_LATER', description: 'Card offered at checkout; settling with the operator stays possible.' },
+    { productKind: 'TOUR', name: 'Pay now by card', timing: 'PAY_NOW', unpaidCancelHours: 24, description: 'Card required to confirm; unpaid bookings are cancelled after 24 hours.' },
+    { productKind: 'TRANSFER', name: 'Settle with the driver', timing: 'PAY_AT_HOTEL', description: 'Nothing is taken online; the passenger pays the driver.' },
+    { productKind: 'TRANSFER', name: 'Pay now by card', timing: 'PAY_NOW', unpaidCancelHours: 24, description: 'Card required to confirm; unpaid bookings are cancelled after 24 hours.' },
+    { productKind: 'PACKAGE', name: 'Pay later', timing: 'PAY_LATER', description: 'Card offered at checkout; paying later stays possible.' },
+    { productKind: 'PACKAGE', name: 'Pay now by card', timing: 'PAY_NOW', unpaidCancelHours: 24, description: 'Card required to confirm; unpaid orders are cancelled after 24 hours.' }
 ];

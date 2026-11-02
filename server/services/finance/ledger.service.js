@@ -4,6 +4,7 @@ import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { upsertPenaltyInTx } from './penalty.service.js';
 import { onReceivableAmountChangedInTx, onReceivableCreatedInTx } from '../invoicing/invoice.service.js';
 import { addDays, todayInTimezone, toDateOnly, zonedTimeToInstant } from '../../lib/time.js';
+import { autoCancelAtFor, resolvePaymentRule, ruleFrom } from '../../lib/payments/policy.js';
 
 /**
  * The finance ledger: what we owe suppliers and what buyers owe us.
@@ -36,7 +37,12 @@ const PRODUCTS = {
     HOTEL: {
         model: 'hotelBooking',
         foreignKey: 'hotelBookingId',
-        include: { hotel: { select: { id: true, supplierId: true, timezone: true } } },
+        include: {
+            hotel: { select: { id: true, supplierId: true, timezone: true } },
+            // The payment rule each room was sold under (docs/plans/FLITT_INTEGRATION_PLAN.md §4.4).
+            rooms: { select: { ratePlan: { select: { paymentPolicy: true } } } }
+        },
+        paymentRule: (b) => resolvePaymentRule((b.rooms ?? []).map((room) => ruleFrom(room.ratePlan?.paymentPolicy, 'HOTEL')), { product: 'HOTEL' }),
         supplierId: (b) => b.hotel?.supplierId ?? null,
         termsWhere: (b) => ({ hotelId: b.hotelId }),
         timezone: (b) => b.hotel?.timezone,
@@ -51,8 +57,9 @@ const PRODUCTS = {
         model: 'transferBooking',
         foreignKey: 'transferBookingId',
         include: {
-            vehicle: { select: { partnerId: true, providerId: true, provider: { select: { partnerId: true } } } }
+            vehicle: { select: { partnerId: true, providerId: true, provider: { select: { partnerId: true, paymentPolicy: true } } } }
         },
+        paymentRule: (b) => ruleFrom(b.vehicle?.provider?.paymentPolicy, 'TRANSFER'),
         supplierId: (b) => b.vehicle?.partnerId ?? b.vehicle?.provider?.partnerId ?? null,
         termsWhere: (b) => (b.vehicle?.providerId ? { transferProviderId: b.vehicle.providerId } : null),
         timezone: () => null,
@@ -64,7 +71,8 @@ const PRODUCTS = {
     TOUR: {
         model: 'tourBooking',
         foreignKey: 'tourBookingId',
-        include: { tour: { select: { id: true, supplierId: true, timezone: true } } },
+        include: { tour: { select: { id: true, supplierId: true, timezone: true } }, tourOption: { select: { paymentPolicy: true } } },
+        paymentRule: (b) => ruleFrom(b.tourOption?.paymentPolicy, 'TOUR'),
         supplierId: (b) => b.tour?.supplierId ?? null,
         termsWhere: (b) => ({ tourId: b.tourId }),
         timezone: (b) => b.tour?.timezone,
@@ -77,6 +85,8 @@ const PRODUCTS = {
         model: 'serviceBooking',
         foreignKey: 'serviceBookingId',
         include: { service: { select: { id: true, supplierId: true, timezone: true } } },
+        // Services are sold to partners only; no card rule of their own.
+        paymentRule: () => ruleFrom(null, 'SERVICE'),
         supplierId: (b) => b.service?.supplierId ?? null,
         termsWhere: (b) => ({ serviceId: b.serviceId }),
         timezone: (b) => b.service?.timezone,
@@ -448,7 +458,20 @@ const applyReceivableTarget = async (tx, receivable, targetCents, actor, req, wh
     return updated;
 };
 
-const createReceivable = async (tx, subject, { reference, partner, customer = null, lead, currency, amountCents, dueAt, source }, actor, req) => {
+const createReceivable = async (tx, subject, { reference, partner, customer = null, lead, currency, amountCents, dueAt, source, rule = null }, actor, req) => {
+    const now = new Date();
+    // The payment rule is frozen here, with the money: a policy edited later
+    // does not reach a booking already made. The unpaid timeout runs from
+    // this moment (confirmation), guests only, and only while the gateway is
+    // on — a rule nobody can satisfy must not cancel anyone.
+    const frozen = rule
+        ? {
+              paymentTiming: rule.timing,
+              unpaidCancelHours: rule.unpaidCancelHours,
+              autoCancelAt: amountCents > 0 ? autoCancelAtFor(rule, { from: now, paymentsEnabled: config.payments.flitt.enabled, partner: Boolean(partner) }) : null
+          }
+        : {};
+
     const receivable = await tx.receivable.create({
         data: {
             ...subject,
@@ -461,9 +484,10 @@ const createReceivable = async (tx, subject, { reference, partner, customer = nu
             originalAmountCents: amountCents,
             amountCents,
             status: amountCents === 0 ? 'VOID' : 'OPEN',
-            voidedAt: amountCents === 0 ? new Date() : null,
+            voidedAt: amountCents === 0 ? now : null,
             dueAt,
-            source
+            source,
+            ...frozen
         }
     });
 
@@ -543,7 +567,8 @@ const syncBookingReceivableCoreInTx = async (tx, product, bookingId, actor = nul
                     arrivalDate: spec.arrival(booking, timezone),
                     timezone
                 }),
-                source
+                source,
+                rule: owed ? spec.paymentRule(booking) : null
             },
             actor,
             req
@@ -570,7 +595,18 @@ const ORDER_OWED = new Set(['CONFIRMED', 'PARTIALLY_CANCELLED', 'COMPLETED']);
 const syncOrderReceivableCoreInTx = async (tx, orderId, actor = null, req = null, { source = 'CONFIRM' } = {}) => {
     const order = await tx.order.findUnique({
         where: { id: orderId },
-        include: { items: true, partner: partnerSelect, customer: customerSelect, receivable: true }
+        include: {
+            items: {
+                include: {
+                    hotelBooking: { select: { rooms: { select: { ratePlan: { select: { paymentPolicy: true } } } } } },
+                    tourBooking: { select: { tourOption: { select: { paymentPolicy: true } } } },
+                    transferBooking: { select: { vehicle: { select: { provider: { select: { paymentPolicy: true } } } } } }
+                }
+            },
+            partner: partnerSelect,
+            customer: customerSelect,
+            receivable: true
+        }
     });
 
     if (!order) {
@@ -578,6 +614,20 @@ const syncOrderReceivableCoreInTx = async (tx, orderId, actor = null, req = null
     }
 
     const target = order.items.reduce((sum, item) => sum + orderItemOwed(item), 0);
+    // The strictest rule among the lines (§4.4). A package's own policy, when
+    // it has one, counts as one more line.
+    const orderRule = () =>
+        resolvePaymentRule(
+            [
+                ...order.items.flatMap((item) => {
+                    if (item.hotelBooking) return (item.hotelBooking.rooms ?? []).map((room) => ruleFrom(room.ratePlan?.paymentPolicy, 'HOTEL'));
+                    if (item.tourBooking) return [ruleFrom(item.tourBooking.tourOption?.paymentPolicy, 'TOUR')];
+                    if (item.transferBooking) return [ruleFrom(item.transferBooking.vehicle?.provider?.paymentPolicy, 'TRANSFER')];
+                    return [ruleFrom(null, 'SERVICE')];
+                })
+            ],
+            { product: 'PACKAGE' }
+        );
 
     if (order.receivable) {
         return applyReceivableTarget(tx, order.receivable, target, actor, req, order.status);
@@ -607,7 +657,8 @@ const syncOrderReceivableCoreInTx = async (tx, orderId, actor = null, req = null
                 arrivalDate: toDateOnly(order.startDate),
                 timezone
             }),
-            source
+            source,
+            rule: order.status === 'CANCELLED' ? null : orderRule()
         },
         actor,
         req

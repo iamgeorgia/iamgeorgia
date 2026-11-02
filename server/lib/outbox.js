@@ -96,7 +96,18 @@ export const TOPICS = Object.freeze({
     INVOICE_SEND_REQUESTED: 'finance.invoice.send_requested',
     INVOICE_CANCEL_REQUESTED: 'finance.invoice.cancel_requested',
     INVOICE_ISSUED: 'finance.invoice.issued',
-    INVOICE_SYNC_FAILED: 'finance.invoice.sync_failed'
+    INVOICE_SYNC_FAILED: 'finance.invoice.sync_failed',
+
+    // Card payments through a provider. The first two are written in the
+    // transaction that applied the provider's verified status (the receipt,
+    // the "try again" note); the refund one asks the drain to call the
+    // provider; the alert is for finance to look at something.
+    PSP_PAYMENT_APPROVED: 'psp.payment.approved',
+    PSP_PAYMENT_FAILED: 'psp.payment.failed',
+    PSP_REFUND_REQUESTED: 'psp.refund.requested',
+    PSP_ALERT: 'psp.alert',
+    /** A PAY_NOW booking cancelled by the sweeper because nobody paid. */
+    BOOKING_AUTO_CANCELLED_UNPAID: 'booking.auto_cancelled_unpaid'
 });
 
 /** Writes one event on the given client — a transaction handle, in practice. */

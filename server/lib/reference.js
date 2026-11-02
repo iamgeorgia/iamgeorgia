@@ -19,7 +19,8 @@ export const REFERENCE_KINDS = {
     tourBooking: { sequence: 'tour_booking_reference_seq', prefix: 'TUR', digits: 6 },
     serviceBooking: { sequence: 'service_booking_reference_seq', prefix: 'SVC', digits: 6 },
     order: { sequence: 'order_reference_seq', prefix: 'ORD', digits: 6 },
-    approval: { sequence: 'approval_reference_seq', prefix: 'APR', digits: 6 }
+    approval: { sequence: 'approval_reference_seq', prefix: 'APR', digits: 6 },
+    pspPayment: { sequence: 'psp_payment_reference_seq', prefix: 'PAY', digits: 6 }
 };
 
 const kindOrThrow = (kind) => {

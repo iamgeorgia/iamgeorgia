@@ -984,6 +984,8 @@ model Tour {
   kosher            TourKosherProfile?
   packageComponents PackageComponent[]
   pricingRules      PricingRule[]
+  /// Payment policies this tour owns, beside the platform templates.
+  paymentPolicies   PaymentPolicy[]       @relation("TourPaymentPolicies")
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
   /// When and how this supplier is paid, and what it is owed after a cancellation.
@@ -1098,6 +1100,11 @@ model TourOption {
   /// policy. Percent-of-total tiers only; a night has no meaning here.
   cancellationPolicyId String             @map("cancellation_policy_id")
   cancellationPolicy   CancellationPolicy @relation(fields: [cancellationPolicyId], references: [id], onDelete: Restrict)
+
+  /// How a guest pays: a tour-owned policy or a TOUR template. Null = the
+  /// platform default for tours.
+  paymentPolicyId String?        @map("payment_policy_id")
+  paymentPolicy   PaymentPolicy? @relation(fields: [paymentPolicyId], references: [id], onDelete: Restrict)
 
   seasons   TourSeason[]
   inventory TourInventory[]
@@ -1271,12 +1278,12 @@ model TourBooking {
   /// Inventory units this booking holds: pax for SEAT, one for GROUP.
   units     Int   @default(1)
 
-  currency       String @db.Char(3)
-  netTotalCents  Int    @map("net_total_cents")
-  sellTotalCents Int    @map("sell_total_cents")
-  markupBps      Int    @map("markup_bps")
+  currency          String @db.Char(3)
+  netTotalCents     Int    @map("net_total_cents")
+  sellTotalCents    Int    @map("sell_total_cents")
+  markupBps         Int    @map("markup_bps")
   /// The agency's own commission rate when it booked, beside the markup actually applied (a pricing rule may have won).
-  commissionRateBps Int? @map("commission_rate_bps")
+  commissionRateBps Int?   @map("commission_rate_bps")
 
   leadTravellerName  String  @map("lead_traveller_name")
   leadTravellerEmail String  @map("lead_traveller_email")
@@ -1560,12 +1567,12 @@ model ServiceBooking {
   pax      Int @default(1)
   days     Int @default(1)
 
-  currency       String @db.Char(3)
-  netTotalCents  Int    @map("net_total_cents")
-  sellTotalCents Int    @map("sell_total_cents")
-  markupBps      Int    @map("markup_bps")
+  currency          String @db.Char(3)
+  netTotalCents     Int    @map("net_total_cents")
+  sellTotalCents    Int    @map("sell_total_cents")
+  markupBps         Int    @map("markup_bps")
   /// The agency's own commission rate when it booked, beside the markup actually applied (a pricing rule may have won).
-  commissionRateBps Int? @map("commission_rate_bps")
+  commissionRateBps Int?   @map("commission_rate_bps")
 
   leadName  String  @map("lead_name")
   leadEmail String  @map("lead_email")
@@ -1651,6 +1658,12 @@ model Package {
   nights   Int
   currency String @default("GEL") @db.Char(3)
   timezone String @default("Asia/Tbilisi")
+
+  /// How a guest pays for the package as a whole: a PACKAGE template, or
+  /// null for the platform default. Items keep their own rules; the
+  /// strictest wins (docs/plans/FLITT_INTEGRATION_PLAN.md §4.4).
+  paymentPolicyId String?        @map("payment_policy_id")
+  paymentPolicy   PaymentPolicy? @relation(fields: [paymentPolicyId], references: [id], onDelete: Restrict)
 
   b2cEnabled Boolean @default(false) @map("b2c_enabled")
   featured   Boolean @default(false)
@@ -2299,9 +2312,16 @@ model CancellationRule {
 }
 
 model PaymentPolicy {
-  id      String  @id @default(cuid())
-  hotelId String? @map("hotel_id")
-  hotel   Hotel?  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  id          String          @id @default(cuid())
+  hotelId     String?         @map("hotel_id")
+  hotel       Hotel?          @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  /// A tour may own policies the way a hotel does. At most one owner (CHECK);
+  /// none = a platform template, usable by every item of `productKind`.
+  tourId      String?         @map("tour_id")
+  tour        Tour?           @relation("TourPaymentPolicies", fields: [tourId], references: [id], onDelete: Cascade)
+  /// Which product a template is for. Null = hotels (rows from before tours,
+  /// packages and transfers had payment rules).
+  productKind FinanceProduct? @map("product_kind")
 
   name   String
   timing PaymentTiming
@@ -2310,15 +2330,26 @@ model PaymentPolicy {
   depositBps                  Int? @map("deposit_bps")
   balanceDueDaysBeforeCheckIn Int? @map("balance_due_days_before_check_in")
 
+  /// PAY_NOW: hours after confirmation before an unpaid guest booking is
+  /// cancelled. Null = never (docs/plans/FLITT_INTEGRATION_PLAN.md §4.4).
+  unpaidCancelHours Int?    @default(24) @map("unpaid_cancel_hours")
+  /// PAY_AT_HOTEL: also offer card at checkout.
+  cardOptional      Boolean @default(false) @map("card_optional")
+
   description String?
   isActive    Boolean @default(true) @map("is_active")
 
-  ratePlans RatePlan[]
+  ratePlans         RatePlan[]
+  tourOptions       TourOption[]
+  packages          Package[]
+  transferProviders TransferProvider[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@index([hotelId, isActive])
+  @@index([tourId, isActive])
+  @@index([productKind, isActive])
   @@map("payment_policies")
 }
 
@@ -3524,6 +3555,21 @@ enum AuditAction {
   MAIL_PROVIDER_DISCONNECTED
   MAIL_PROVIDER_REVOKED
   MAIL_PROVIDER_TEST_SENT
+  // Card payments through a provider (docs/plans/FLITT_INTEGRATION_PLAN.md).
+  PSP_PAYMENT_CREATED
+  PSP_PAYMENT_APPROVED
+  PSP_PAYMENT_DECLINED
+  PSP_PAYMENT_EXPIRED
+  PSP_PAYMENT_CANCELLED
+  PSP_PAYMENT_MISMATCH
+  PSP_PAYMENT_REVERSED
+  PSP_CALLBACK_REJECTED
+  PSP_STATUS_CHECKED
+  PSP_REFUND_REQUESTED
+  PSP_REFUND_APPROVED
+  PSP_REFUND_FAILED
+  PSP_RECONCILIATION_MISMATCH
+  BOOKING_AUTO_CANCELLED_UNPAID
 
   @@map("audit_action")
 }
@@ -3534,10 +3580,10 @@ enum AuditAction {
 /// added in the migration, because an admin attached to a company would be an
 /// authorization bug that only surfaced at read time.
 model User {
-  id           String  @id @default(cuid())
-  email        String  @unique
+  id            String     @id @default(cuid())
+  email         String     @unique
   /// Null until the invitee or invited admin sets one through an activation link.
-  passwordHash String? @map("password_hash")
+  passwordHash  String?    @map("password_hash")
   /// The role the panels label the account with; one of the roles it holds
   /// (a trigger keeps the `user_roles` row in step). Never read for
   /// authorization: that is the resolved capability set.
@@ -3573,21 +3619,21 @@ model User {
   partnerId String?  @map("partner_id")
   partner   Partner? @relation("PartnerMembers", fields: [partnerId], references: [id], onDelete: Cascade)
 
-  sessions          Session[]
-  authTokens        AuthToken[]
-  auditLogs         AuditLog[]
-  invitationsSent   Invitation[]   @relation("InvitationInvitedBy")
-  partnersApproved  Partner[]      @relation("PartnerApprovedBy")
-  partnersRejected  Partner[]      @relation("PartnerRejectedBy")
-  partnersSuspended Partner[]      @relation("PartnerSuspendedBy")
-  partnersBlocked    Partner[]     @relation("PartnerBlockedBy")
-  partnersTerminated Partner[]     @relation("PartnerTerminatedBy")
-  contractsUploaded  Partner[]     @relation("PartnerContractUploadedBy")
-  termsAccepted      Partner[]     @relation("PartnerTermsAcceptedBy")
+  sessions           Session[]
+  authTokens         AuthToken[]
+  auditLogs          AuditLog[]
+  invitationsSent    Invitation[]           @relation("InvitationInvitedBy")
+  partnersApproved   Partner[]              @relation("PartnerApprovedBy")
+  partnersRejected   Partner[]              @relation("PartnerRejectedBy")
+  partnersSuspended  Partner[]              @relation("PartnerSuspendedBy")
+  partnersBlocked    Partner[]              @relation("PartnerBlockedBy")
+  partnersTerminated Partner[]              @relation("PartnerTerminatedBy")
+  contractsUploaded  Partner[]              @relation("PartnerContractUploadedBy")
+  termsAccepted      Partner[]              @relation("PartnerTermsAcceptedBy")
   productAccessGiven PartnerProductAccess[] @relation("ProductAccessCreatedBy")
-  filesUploaded     FileAsset[]    @relation("FileUploadedBy")
-  bookingsMade      HotelBooking[] @relation("BookingBookedBy")
-  holdsCreated      BookingHold[]  @relation("HoldCreatedBy")
+  filesUploaded      FileAsset[]            @relation("FileUploadedBy")
+  bookingsMade       HotelBooking[]         @relation("BookingBookedBy")
+  holdsCreated       BookingHold[]          @relation("HoldCreatedBy")
 
   transferBookingsMade TransferBooking[] @relation("TransferBookingBookedBy")
   tourBookingsMade     TourBooking[]     @relation("TourBookingBookedBy")
@@ -3609,17 +3655,17 @@ model User {
   bookingRequestsAnswered      HotelBookingRequest[]      @relation("BookingRequestRespondedBy")
   hotelDocumentsUploaded       HotelDocument[]            @relation("HotelDocumentUploadedBy")
 
-  serviceBookingsMade ServiceBooking[] @relation("ServiceBookingBookedBy")
-  ordersMade          Order[]          @relation("OrderBookedBy")
+  serviceBookingsMade     ServiceBooking[]  @relation("ServiceBookingBookedBy")
+  ordersMade              Order[]           @relation("OrderBookedBy")
   /// The desk: bookings this member of staff is looking after.
   managedHotelBookings    HotelBooking[]    @relation("HotelBookingManager")
   managedTransferBookings TransferBooking[] @relation("TransferBookingManager")
   managedTourBookings     TourBooking[]     @relation("TourBookingManager")
   managedServiceBookings  ServiceBooking[]  @relation("ServiceBookingManager")
   managedOrders           Order[]           @relation("OrderManager")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
-  paymentsRecorded    PaymentRecord[]  @relation("PaymentRecordedBy")
+  createdAt               DateTime          @default(now()) @map("created_at")
+  updatedAt               DateTime          @updatedAt @map("updated_at")
+  paymentsRecorded        PaymentRecord[]   @relation("PaymentRecordedBy")
 
   /// What the account may do comes from here, never from `role` alone: every
   /// role it holds, plus or minus the overrides written for it by name.
@@ -3767,23 +3813,23 @@ model Partner {
   /// Counts only that currency's open receivables; nothing is summed across
   /// exchange rates. BLOCK refuses the booking that would pass it; WARN lets
   /// it through and tells finance.
-  creditLimitCents    Int?            @map("credit_limit_cents")
-  creditLimitCurrency String?         @map("credit_limit_currency") @db.Char(3)
-  creditLimitMode     CreditLimitMode @default(BLOCK) @map("credit_limit_mode")
-  penalties           PenaltyEntry[]  @relation("PartnerPenalties")
+  creditLimitCents    Int?             @map("credit_limit_cents")
+  creditLimitCurrency String?          @map("credit_limit_currency") @db.Char(3)
+  creditLimitMode     CreditLimitMode  @default(BLOCK) @map("credit_limit_mode")
+  penalties           PenaltyEntry[]   @relation("PartnerPenalties")
   reminderPolicies    ReminderPolicy[] @relation("PartnerReminderPolicies")
 
   /// The signed contract, as a private file; approval waits for it unless
   /// `contractRequired` was switched off (partners approved before the gate
   /// existed, or on an admin's say-so, audited).
-  contractAssetId          String?   @unique @map("contract_asset_id")
+  contractAssetId          String?    @unique @map("contract_asset_id")
   contractAsset            FileAsset? @relation("PartnerContract", fields: [contractAssetId], references: [id], onDelete: SetNull)
-  contractSignedAt         DateTime? @map("contract_signed_at")
-  contractVersion          String?   @map("contract_version")
-  contractUploadedAt       DateTime? @map("contract_uploaded_at")
-  contractUploadedByUserId String?   @map("contract_uploaded_by_user_id")
-  contractUploadedByUser   User?     @relation("PartnerContractUploadedBy", fields: [contractUploadedByUserId], references: [id], onDelete: SetNull)
-  contractRequired         Boolean   @default(true) @map("contract_required")
+  contractSignedAt         DateTime?  @map("contract_signed_at")
+  contractVersion          String?    @map("contract_version")
+  contractUploadedAt       DateTime?  @map("contract_uploaded_at")
+  contractUploadedByUserId String?    @map("contract_uploaded_by_user_id")
+  contractUploadedByUser   User?      @relation("PartnerContractUploadedBy", fields: [contractUploadedByUserId], references: [id], onDelete: SetNull)
+  contractRequired         Boolean    @default(true) @map("contract_required")
 
   /// The platform terms the company last accepted. The portal is shut until
   /// this matches the current version.
@@ -3792,14 +3838,14 @@ model Partner {
   termsAcceptedByUserId String?   @map("terms_accepted_by_user_id")
   termsAcceptedByUser   User?     @relation("PartnerTermsAcceptedBy", fields: [termsAcceptedByUserId], references: [id], onDelete: SetNull)
 
-  blockedAt         DateTime? @map("blocked_at")
-  blockedByUserId   String?   @map("blocked_by_user_id")
-  blockedByUser     User?     @relation("PartnerBlockedBy", fields: [blockedByUserId], references: [id], onDelete: SetNull)
-  blockedReason     String?   @map("blocked_reason")
-  terminatedAt      DateTime? @map("terminated_at")
-  terminatedByUserId String?  @map("terminated_by_user_id")
-  terminatedByUser  User?     @relation("PartnerTerminatedBy", fields: [terminatedByUserId], references: [id], onDelete: SetNull)
-  terminatedReason  String?   @map("terminated_reason")
+  blockedAt          DateTime? @map("blocked_at")
+  blockedByUserId    String?   @map("blocked_by_user_id")
+  blockedByUser      User?     @relation("PartnerBlockedBy", fields: [blockedByUserId], references: [id], onDelete: SetNull)
+  blockedReason      String?   @map("blocked_reason")
+  terminatedAt       DateTime? @map("terminated_at")
+  terminatedByUserId String?   @map("terminated_by_user_id")
+  terminatedByUser   User?     @relation("PartnerTerminatedBy", fields: [terminatedByUserId], references: [id], onDelete: SetNull)
+  terminatedReason   String?   @map("terminated_reason")
 
   /// What goes on the company's invoices: its VAT or tax number, and the
   /// language they are written in (an InvoiceOcean code; `en` when unset).
@@ -3807,11 +3853,11 @@ model Partner {
   taxId       String? @map("tax_id")
   invoiceLang String? @map("invoice_lang")
 
-  productAccess PartnerProductAccess[] @relation("PartnerProductAccess")
-  receivables      Receivable[]        @relation("PartnerReceivables")
-  supplierPayables SupplierPayable[]   @relation("PartnerSupplierPayables")
-  paymentRecords   PaymentRecord[]     @relation("PartnerPaymentRecords")
-  invoicingCustomers InvoicingCustomer[] @relation("PartnerInvoicingCustomers")
+  productAccess      PartnerProductAccess[] @relation("PartnerProductAccess")
+  receivables        Receivable[]           @relation("PartnerReceivables")
+  supplierPayables   SupplierPayable[]      @relation("PartnerSupplierPayables")
+  paymentRecords     PaymentRecord[]        @relation("PartnerPaymentRecords")
+  invoicingCustomers InvoicingCustomer[]    @relation("PartnerInvoicingCustomers")
 
   @@index([status])
   @@index([country])
@@ -4135,6 +4181,11 @@ model TransferProvider {
   /// When and how this supplier is paid, and what it is owed after a cancellation.
   paymentTerms SupplierPaymentTerms?
 
+  /// How a guest pays for this provider's transfers: a TRANSFER template, or
+  /// null for the platform default (settle with the driver).
+  paymentPolicyId String?        @map("payment_policy_id")
+  paymentPolicy   PaymentPolicy? @relation(fields: [paymentPolicyId], references: [id], onDelete: Restrict)
+
   @@index([partnerId])
   @@index([status])
   @@map("transfer_providers")
@@ -4434,12 +4485,12 @@ model TransferBooking {
   luggage   Int   @default(0)
   cabinBags Int   @default(0) @map("cabin_bags")
 
-  currency       String @db.Char(3)
-  netTotalCents  Int    @map("net_total_cents")
-  sellTotalCents Int    @map("sell_total_cents")
-  markupBps      Int    @map("markup_bps")
+  currency          String @db.Char(3)
+  netTotalCents     Int    @map("net_total_cents")
+  sellTotalCents    Int    @map("sell_total_cents")
+  markupBps         Int    @map("markup_bps")
   /// The agency's own commission rate when it booked, beside the markup actually applied (a pricing rule may have won).
-  commissionRateBps Int? @map("commission_rate_bps")
+  commissionRateBps Int?   @map("commission_rate_bps")
 
   leadPassengerName  String  @map("lead_passenger_name")
   leadPassengerEmail String  @map("lead_passenger_email")
@@ -4781,6 +4832,12 @@ enum NotificationKind {
   DEADLINE_CANCELLATION_UPCOMING
   DEADLINE_CONFIRMATION_UPCOMING
   MAIL_PROVIDER_ALERT
+  // Card payments: what finance must look at.
+  PSP_PAYMENT_MISMATCH
+  PSP_CALLBACK_REJECTED
+  PSP_REFUND_FAILED
+  PSP_RECONCILIATION_MISMATCH
+  PSP_ALERT
 
   @@map("notification_kind")
 }
@@ -5384,6 +5441,202 @@ enum PaymentMethod {
   @@map("payment_method")
 }
 
+// --- Card payments through a provider ------------------------------------------
+//
+// A `PspPayment` is one attempt by a buyer to settle a receivable by card
+// through a payment service provider (Flitt first). It is the attempt, not
+// the money: the money is a `PaymentRecord` written exactly once when the
+// provider says the charge went through. See docs/plans/FLITT_INTEGRATION_PLAN.md.
+
+enum PaymentProvider {
+  FLITT
+
+  @@map("payment_provider")
+}
+
+/// Which merchant credentials made the row. Test rows never carry real money
+/// and are shown as such everywhere.
+enum PspMode {
+  TEST
+  LIVE
+
+  @@map("psp_mode")
+}
+
+enum PspPaymentStatus {
+  /// Row written; the provider not yet asked.
+  CREATED
+  /// The provider gave us a checkout URL; the buyer may be on its page.
+  REDIRECT_READY
+  /// The provider reports the buyer started paying.
+  PROCESSING
+  /// Charged. A PaymentRecord exists.
+  APPROVED
+  /// The bank said no. The buyer may try again on a new attempt.
+  DECLINED
+  /// The provider's order lifetime passed without a payment.
+  EXPIRED
+  /// The buyer backed out, or the attempt was closed unpaid.
+  CANCELLED
+  /// Charged, then fully reversed at the provider.
+  REVERSED
+  /// The provider approved something other than what we asked for: a human decides.
+  MISMATCH
+  /// The provider could not even create the order.
+  FAILED
+
+  @@map("psp_payment_status")
+}
+
+enum PspRefundStatus {
+  REQUESTED
+  SUBMITTED
+  APPROVED
+  DECLINED
+  FAILED
+
+  @@map("psp_refund_status")
+}
+
+model PspPayment {
+  id        String           @id @default(cuid())
+  /// Public reference, e.g. PAY-000001, from a Postgres sequence.
+  reference String           @unique
+  provider  PaymentProvider  @default(FLITT)
+  mode      PspMode
+  status    PspPaymentStatus @default(CREATED)
+
+  receivableId String     @map("receivable_id")
+  receivable   Receivable @relation(fields: [receivableId], references: [id], onDelete: Restrict)
+
+  /// Copied from the receivable for guest access checks and admin filters.
+  debtorEmail      String          @map("debtor_email")
+  bookingType      FinanceProduct? @map("booking_type")
+  bookingReference String          @map("booking_reference")
+
+  amountCents       Int     @map("amount_cents")
+  currency          String  @db.Char(3)
+  /// What the provider says it actually charged (actual_amount / actual_currency).
+  actualAmountCents Int?    @map("actual_amount_cents")
+  actualCurrency    String? @map("actual_currency") @db.Char(3)
+  reversedCents     Int     @default(0) @map("reversed_cents")
+
+  /// The order id sent to the provider. Unique per merchant on its side, so
+  /// it carries a per-deploy prefix.
+  merchantOrderId       String  @map("merchant_order_id")
+  /// The provider's own ids, as text.
+  providerPaymentId     String? @map("provider_payment_id")
+  providerTransactionId String? @map("provider_transaction_id")
+  checkoutUrl           String? @map("checkout_url")
+  /// For an embedded widget later; unused by the hosted redirect.
+  checkoutToken         String? @map("checkout_token")
+
+  /// The provider's last word, raw, beside our reading of it.
+  providerOrderStatus String? @map("provider_order_status")
+  providerOrderTime   String? @map("provider_order_time")
+  responseCode        Int?    @map("response_code")
+  responseDescription String? @map("response_description")
+  maskedCard          String? @map("masked_card")
+  cardType            String? @map("card_type")
+  cardBin             String? @map("card_bin")
+  paymentSystem       String? @map("payment_system")
+  approvalCode        String? @map("approval_code")
+  rrn                 String?
+  eci                 String?
+
+  paymentRecordId String?        @unique @map("payment_record_id")
+  paymentRecord   PaymentRecord? @relation("PspPaymentRecord", fields: [paymentRecordId], references: [id], onDelete: Restrict)
+
+  idempotencyKey String  @unique @map("idempotency_key")
+  lang           String? @db.Char(2)
+  createdIp      String? @map("created_ip")
+
+  lifetimeSeconds   Int       @map("lifetime_seconds")
+  expiresAt         DateTime  @map("expires_at")
+  redirectReadyAt   DateTime? @map("redirect_ready_at")
+  returnedAt        DateTime? @map("returned_at")
+  lastCallbackAt    DateTime? @map("last_callback_at")
+  lastStatusCheckAt DateTime? @map("last_status_check_at")
+  completedAt       DateTime? @map("completed_at")
+  reconciledAt      DateTime? @map("reconciled_at")
+  failureReason     String?   @map("failure_reason")
+
+  callbacks PspCallbackEvent[]
+  refunds   PspRefund[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, mode, merchantOrderId])
+  @@unique([provider, mode, providerPaymentId])
+  @@index([receivableId, status])
+  @@index([status, expiresAt])
+  @@index([status, lastStatusCheckAt])
+  @@index([debtorEmail])
+  @@index([createdAt])
+  @@map("psp_payments")
+}
+
+/// One delivery of a provider callback, kept whether or not it verified.
+/// The hash of the raw body makes a retried delivery a no-op; what the row
+/// says is never acted on directly — the sweeper re-reads the provider.
+model PspCallbackEvent {
+  id                String          @id @default(cuid())
+  provider          PaymentProvider @default(FLITT)
+  mode              PspMode
+  bodyHash          String          @map("body_hash")
+  merchantOrderId   String?         @map("merchant_order_id")
+  providerPaymentId String?         @map("provider_payment_id")
+  orderStatus       String?         @map("order_status")
+  signatureValid    Boolean         @map("signature_valid")
+  sourceIp          String?         @map("source_ip")
+  /// The fields as received, minus the signature.
+  payload           Json
+  paymentId         String?         @map("payment_id")
+  payment           PspPayment?     @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  receivedAt        DateTime        @default(now()) @map("received_at")
+  processedAt       DateTime?       @map("processed_at")
+  error             String?
+
+  @@unique([provider, bodyHash])
+  @@index([processedAt, receivedAt])
+  @@index([paymentId])
+  @@map("psp_callback_events")
+}
+
+/// Money going back to the card, through the provider. Opened by an approved
+/// refund request; the ledger row is written when the provider agrees.
+model PspRefund {
+  id        String          @id @default(cuid())
+  paymentId String          @map("payment_id")
+  payment   PspPayment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  status    PspRefundStatus @default(REQUESTED)
+
+  amountCents Int    @map("amount_cents")
+  currency    String @db.Char(3)
+  /// Sent to the provider as its idempotent key: one value per refund, on every retry.
+  reverseId   String @unique @map("reverse_id")
+
+  approvalRequestId     String?        @map("approval_request_id")
+  paymentRecordId       String?        @unique @map("payment_record_id")
+  paymentRecord         PaymentRecord? @relation("PspRefundRecord", fields: [paymentRecordId], references: [id], onDelete: Restrict)
+  providerTransactionId String?        @map("provider_transaction_id")
+  responseCode          Int?           @map("response_code")
+  responseDescription   String?        @map("response_description")
+  reason                String
+  requestedByUserId     String?        @map("requested_by_user_id")
+  attempts              Int            @default(0)
+  lastError             String?        @map("last_error")
+  submittedAt           DateTime?      @map("submitted_at")
+  completedAt           DateTime?      @map("completed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([paymentId, status])
+  @@map("psp_refunds")
+}
+
 /// One row per Hotel, TransferProvider, Tour or Service (exactly one, CHECK).
 /// No row means no terms: a single BALANCE instalment with no due date, and
 /// PROPORTIONAL on cancellation.
@@ -5538,6 +5791,15 @@ model Receivable {
   notes               String?
   allocations         PaymentAllocation[]
   invoices            Invoice[]
+  /// The payment rule the buyer agreed to, frozen when the receivable opened
+  /// (docs/plans/FLITT_INTEGRATION_PLAN.md §4.4). A policy edited later does
+  /// not reach a booking already made.
+  paymentTiming       PaymentTiming?      @map("payment_timing")
+  unpaidCancelHours   Int?                @map("unpaid_cancel_hours")
+  /// PAY_NOW guests only: when the booking is cancelled if still unpaid.
+  autoCancelAt        DateTime?           @map("auto_cancel_at")
+  autoCancelledAt     DateTime?           @map("auto_cancelled_at")
+  pspPayments         PspPayment[]
   createdAt           DateTime            @default(now()) @map("created_at")
   updatedAt           DateTime            @updatedAt @map("updated_at")
 
@@ -5546,6 +5808,7 @@ model Receivable {
   @@index([debtorEmail])
   @@index([debtorCustomerId])
   @@index([currency, status])
+  @@index([autoCancelAt, status])
   @@map("receivables")
 }
 
@@ -5575,6 +5838,9 @@ model PaymentRecord {
   idempotencyKey        String?             @unique @map("idempotency_key")
   externalPaymentId     String?             @map("external_payment_id")
   allocations           PaymentAllocation[]
+  /// The card attempt or refund this row is the money of, when it came through a provider.
+  pspPayment            PspPayment?         @relation("PspPaymentRecord")
+  pspRefund             PspRefund?          @relation("PspRefundRecord")
   createdAt             DateTime            @default(now()) @map("created_at")
   updatedAt             DateTime            @updatedAt @map("updated_at")
 
@@ -5834,8 +6100,8 @@ model RoleCapability {
 }
 
 model UserRole {
-  userId          String   @map("user_id")
-  user            User     @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
+  userId          String     @map("user_id")
+  user            User       @relation("UserRoles", fields: [userId], references: [id], onDelete: Cascade)
   roleId          String     @map("role_id")
   role            AccessRole @relation(fields: [roleId], references: [id], onDelete: Restrict)
   grantedByUserId String?    @map("granted_by_user_id")
@@ -5901,8 +6167,8 @@ model ApprovalRequest {
   status    ApprovalStatus @default(PENDING)
 
   /// What the action is about: a receivable, a payable, or (for a refund) the receivable or instalment it settles.
-  subjectType String @map("subject_type")
-  subjectId   String @map("subject_id")
+  subjectType String  @map("subject_type")
+  subjectId   String  @map("subject_id")
   /// The exact body the executing service runs with on approval.
   payload     Json
   amountCents Int?    @map("amount_cents")
@@ -6004,8 +6270,8 @@ model BookingIndex {
 
   /// HOTEL | TRANSFER | TOUR | SERVICE | ORDER, and the row in that table.
   product   String
-  bookingId String @map("booking_id")
-  reference String @unique
+  bookingId String  @map("booking_id")
+  reference String  @unique
   status    String
   /// An order's kind; null for a product booking.
   kind      String?
@@ -6014,8 +6280,8 @@ model BookingIndex {
   customerId            String? @map("customer_id")
   assignedManagerUserId String? @map("assigned_manager_user_id")
   /// The order a child booking belongs to, when it does.
-  orderId        String? @map("order_id")
-  orderReference String? @map("order_reference")
+  orderId               String? @map("order_id")
+  orderReference        String? @map("order_reference")
 
   leadName      String  @map("lead_name")
   leadEmail     String  @map("lead_email")
@@ -6104,9 +6370,9 @@ model BookingDeadline {
   source DeadlineSource @default(SYSTEM)
 
   /// HOTEL | TRANSFER | TOUR | SERVICE | ORDER, and the row in that table.
-  product   String
-  bookingId String @map("booking_id")
-  reference String
+  product      String
+  bookingId    String  @map("booking_id")
+  reference    String
   /// PAYMENT only: the receivable whose `dueAt` this mirrors.
   receivableId String? @map("receivable_id")
 
@@ -6178,11 +6444,11 @@ model DeadlineReminder {
 model ReminderPolicy {
   id String @id @default(cuid())
 
-  kind  DeadlineKind
+  kind      DeadlineKind
   /// "PLATFORM", or the partner's id: what the unique is on.
-  scope String @default("PLATFORM")
-  partnerId String?  @map("partner_id")
-  partner   Partner? @relation("PartnerReminderPolicies", fields: [partnerId], references: [id], onDelete: Cascade)
+  scope     String       @default("PLATFORM")
+  partnerId String?      @map("partner_id")
+  partner   Partner?     @relation("PartnerReminderPolicies", fields: [partnerId], references: [id], onDelete: Cascade)
 
   /// Calendar days before the deadline: 7, 3, 1, 0.
   offsetsDays Int[]    @map("offsets_days")
@@ -6243,8 +6509,8 @@ model PartnerProductAccess {
   mode        AccessMode
   note        String?
 
-  createdByUserId String? @map("created_by_user_id")
-  createdByUser   User?   @relation("ProductAccessCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdByUserId String?  @map("created_by_user_id")
+  createdByUser   User?    @relation("ProductAccessCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@unique([partnerId, productType, productId])

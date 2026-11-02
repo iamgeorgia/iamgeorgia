@@ -338,7 +338,9 @@ export const recordPaymentInTx = async (tx, input, actor, req, via = null) => {
             reason: input.reason ?? null,
             recordedByUserId: actor?.id ?? null,
             attachmentAssetId: input.attachmentAssetId ?? null,
-            idempotencyKey: input.idempotencyKey ?? null
+            idempotencyKey: input.idempotencyKey ?? null,
+            // The provider's own id for money that came through a card gateway.
+            externalPaymentId: input.externalPaymentId ?? null
         }
     });
 

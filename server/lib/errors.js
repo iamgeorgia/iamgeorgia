@@ -75,3 +75,11 @@ export class BadGatewayError extends HttpError {
         super(502, message, details);
     }
 }
+
+// A feature that is switched off, or an upstream we know to be down. 503
+// says "not now" rather than "not ever" (404) or "you asked wrong" (4xx).
+export class ServiceUnavailableError extends HttpError {
+    constructor(message = 'Service unavailable', details) {
+        super(503, message, details);
+    }
+}

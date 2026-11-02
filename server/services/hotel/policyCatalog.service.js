@@ -34,13 +34,18 @@ const assertHotel = async (client, hotelId) => {
  * copied, so improving a template improves it everywhere it has not been
  * overridden.
  */
+// A hotel's template is one with no owner and no product kind: payment
+// templates for tours, transfers and packages carry a `productKind` and are
+// not offered to a rate plan.
+const templateWhere = (delegate) => (delegate === 'paymentPolicy' ? { hotelId: null, tourId: null, productKind: null } : { hotelId: null });
+
 const listPolicies = (delegate) => async (hotelId, { includeInactive, includeTemplates } = {}) => {
     await assertHotel(prisma, hotelId);
 
     return prisma[delegate].findMany({
         where: {
             ...(includeInactive ? {} : { isActive: true }),
-            ...(includeTemplates ? { OR: [{ hotelId }, { hotelId: null }] } : { hotelId })
+            ...(includeTemplates ? { OR: [{ hotelId }, templateWhere(delegate)] } : { hotelId })
         },
         ...(delegate === 'cancellationPolicy'
             ? { include: { rules: { orderBy: { hoursBeforeCheckIn: 'desc' } } } }
@@ -60,7 +65,7 @@ export const listPaymentPolicies = listPolicies('paymentPolicy');
  */
 export const findUsablePolicy = async (client, delegate, hotelId, policyId) => {
     const policy = await client[delegate].findFirst({
-        where: { id: policyId, OR: [{ hotelId }, { hotelId: null }] }
+        where: { id: policyId, OR: [{ hotelId }, templateWhere(delegate)] }
     });
 
     if (!policy) {
@@ -196,12 +201,13 @@ export const seedPolicyTemplates = async (client = prisma) => {
     }
 
     for (const template of PAYMENT_TEMPLATES) {
+        const productKind = template.productKind ?? null;
         const existing = await client.paymentPolicy.findFirst({
-            where: { hotelId: null, name: template.name }
+            where: { hotelId: null, tourId: null, productKind, name: template.name }
         });
 
         if (!existing) {
-            await client.paymentPolicy.create({ data: { ...template, hotelId: null } });
+            await client.paymentPolicy.create({ data: { ...template, productKind, hotelId: null } });
             created += 1;
         }
     }

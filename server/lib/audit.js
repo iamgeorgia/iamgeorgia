@@ -76,5 +76,9 @@ export const AUDIT_ENTITY = {
     customer: 'Customer',
     bookingDeadline: 'BookingDeadline',
     reminderPolicy: 'ReminderPolicy',
-    mailProvider: 'MailProviderCredential'
+    mailProvider: 'MailProviderCredential',
+    pspPayment: 'PspPayment',
+    pspRefund: 'PspRefund',
+    pspCallbackEvent: 'PspCallbackEvent',
+    paymentPolicy: 'PaymentPolicy'
 };
