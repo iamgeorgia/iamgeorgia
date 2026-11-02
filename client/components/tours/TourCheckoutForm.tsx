@@ -27,6 +27,9 @@ import type { BookingGuestType } from "@/types/booking";
 import type { TourTravellerInput } from "@/types/tour";
 import { cn } from "@/lib/utils";
 import { BookingErrorText } from "@/components/booking/BookingErrorText";
+import { PaymentMethodChoice } from "@/components/booking/PaymentMethodChoice";
+import { startCardPayment } from "@/lib/payments/cardPayment";
+import { usePaymentChoice } from "@/lib/payments/usePaymentChoice";
 
 interface TourCheckoutFormProps {
   /** From the URL, so a refresh resumes the same hold rather than taking another. */
@@ -50,7 +53,8 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
   const router = useRouter();
   const path = useLocalePath();
-  const { t, intlLocale } = useI18n();
+  const { t, intlLocale, locale } = useI18n();
+  const paymentChoice = usePaymentChoice(holdToken ? { tourHold: [holdToken] } : null);
 
   const stored = useSyncExternalStore(
     subscribeTourCheckoutDraft,
@@ -154,10 +158,32 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
       });
 
       clearTourCheckoutDraft();
+
+      // Card chosen: open the payment and leave for the bank. The booking
+      // already exists, so a payment that cannot start never costs the guest it.
+      let paymentFailed = false;
+
+      // An on-request departure has nothing to pay until the operator says yes.
+      if (paymentChoice.cardSelected && !onRequest) {
+        const started = await startCardPayment({
+          reference: booking.reference,
+          email: leadEmail,
+          locale,
+          idempotencyKey: `${draft?.idempotencyKey ?? fallbackKey}:pay`,
+        });
+
+        if (started) return;
+        paymentFailed = true;
+      }
+
       // `replace`, so the back button cannot return to a checkout whose hold
       // has just been committed.
       router.replace(
-        path(`/booking/confirmation/${booking.reference}?email=${encodeURIComponent(leadEmail)}`),
+        path(
+          `/booking/confirmation/${booking.reference}?email=${encodeURIComponent(leadEmail)}${
+            paymentFailed ? "&payment=failed" : ""
+          }`,
+        ),
       );
     } catch (error) {
       if (error instanceof ApiError && error.status === 400) {
@@ -507,16 +533,26 @@ export function TourCheckoutForm({ holdToken }: TourCheckoutFormProps) {
                 </p>
               )}
 
+              {!onRequest && (
+                <PaymentMethodChoice
+                  choice={paymentChoice}
+                  product="tour"
+                  className="mt-12 border-t border-line pt-10"
+                />
+              )}
+
               <p className="type-caption mt-8 flex items-start gap-2 text-muted">
                 <ShieldCheck size={14} className="mt-0.5 shrink-0 text-brand-text" aria-hidden />
                 {t.tours.checkout.terms}
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-4">
-                <Button type="submit" size="lg" disabled={submitting}>
+                <Button type="submit" size="lg" disabled={submitting || paymentChoice.loading}>
                   {submitting
                     ? t.tours.checkout.confirming
-                    : onRequest
+                    : paymentChoice.cardSelected && !onRequest
+                      ? t.payment.choice.payButton
+                      : onRequest
                       ? t.tours.checkout.request
                       : t.tours.checkout.confirm}
                 </Button>

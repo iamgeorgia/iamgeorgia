@@ -3,6 +3,7 @@ import { CircleCheck } from "lucide-react";
 
 import { BookingDetail } from "@/components/booking/BookingDetail";
 import { BookingSteps } from "@/components/booking/BookingSteps";
+import { PaymentStatusPanel } from "@/components/booking/PaymentStatusPanel";
 import { PrintButton } from "@/components/booking/PrintButton";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -156,6 +157,13 @@ export default async function BookingConfirmationPage(
 
       <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
+          <PaymentStatusPanel
+            payment={booking.payment}
+            reference={booking.reference}
+            email={booking.leadGuestEmail}
+            currency={booking.currency}
+            className="mb-8 border border-line bg-surface p-6"
+          />
           <BookingDetail booking={booking} />
         </div>
 

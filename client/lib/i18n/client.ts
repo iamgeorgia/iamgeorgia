@@ -27,6 +27,7 @@ export const SITE_NAMESPACES = [
   "nav",
   "orders",
   "packages",
+  "payment",
   "share",
   "tours",
   "transfers",
@@ -51,6 +52,7 @@ export const PANEL_NAMESPACES = [
   "hotels",
   "orders",
   "packages",
+  "payment",
   "tours",
   "units",
 ] as const satisfies readonly ClientNamespace[];

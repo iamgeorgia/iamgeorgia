@@ -45,6 +45,10 @@ import type {
   OrderTraveller,
 } from "@/types/order";
 import { cn } from "@/lib/utils";
+import { PaymentMethodChoice } from "@/components/booking/PaymentMethodChoice";
+import { startCardPayment } from "@/lib/payments/cardPayment";
+import { usePaymentChoice } from "@/lib/payments/usePaymentChoice";
+import type { CheckoutRuleParams } from "@/types/payments";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -105,7 +109,7 @@ type HoldFailure = { key: string; kind: "UNAVAILABLE" | "DISABLED" | "generic"; 
 export function CartCheckoutForm() {
   const router = useRouter();
   const path = useLocalePath();
-  const { t, intlLocale } = useI18n();
+  const { t, intlLocale, locale } = useI18n();
 
   const cart = useCart();
   const stored = useSyncExternalStore(
@@ -117,6 +121,20 @@ export function CartCheckoutForm() {
   const ready = cart.ready && stored.ready;
   const items = cart.items;
   const key = keyOf(items);
+
+  // The strictest rule among the held hotel stays and tours decides what the
+  // whole cart may be paid with. Lines without a hold (transfers, services)
+  // are not named, so they never loosen or tighten it.
+  const ruleParams: CheckoutRuleParams = { hotelHold: [], tourHold: [] };
+  items.forEach((item, index) => {
+    const held = draft?.holds[String(index)];
+
+    if (typeof held !== "string") return;
+    if (item.payload.type === "HOTEL_STAY") ruleParams.hotelHold?.push(held);
+    if (item.payload.type === "TOUR") ruleParams.tourHold?.push(held);
+  });
+  const hasRuleParams = Boolean(ruleParams.hotelHold?.length || ruleParams.tourHold?.length);
+  const paymentChoice = usePaymentChoice(hasRuleParams ? ruleParams : null);
 
   const [openedAt] = useState(() => Date.now());
   /** The expiry the countdown reached, so a fresh hold is not born expired. */
@@ -280,10 +298,31 @@ export function CartCheckoutForm() {
       // The holds are spent, not released: the order now owns the rooms.
       clearCart();
       clearCartCheckoutDraft();
+
+      // Card chosen: open the payment and leave for the bank. The order already
+      // exists, so a payment that cannot start never costs the guest it.
+      let paymentFailed = false;
+
+      if (paymentChoice.cardSelected) {
+        const started = await startCardPayment({
+          reference: order.reference,
+          email: leadEmail,
+          locale,
+          idempotencyKey: `${draft.idempotencyKey}:pay`,
+        });
+
+        if (started) return;
+        paymentFailed = true;
+      }
+
       // `replace`, so the back button cannot return to a checkout whose holds
       // have just been committed.
       router.replace(
-        path(`/booking/confirmation/${order.reference}?email=${encodeURIComponent(leadEmail)}`),
+        path(
+          `/booking/confirmation/${order.reference}?email=${encodeURIComponent(leadEmail)}${
+            paymentFailed ? "&payment=failed" : ""
+          }`,
+        ),
       );
     } catch (error) {
       handleFailure(error);
@@ -813,11 +852,25 @@ export function CartCheckoutForm() {
                 </p>
               </section>
 
+              <PaymentMethodChoice
+                choice={paymentChoice}
+                product="other"
+                className="mt-12 border-t border-line pt-10"
+              />
+
               <p className="type-caption mt-8 text-muted">{t.orders.checkout.terms}</p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Button type="submit" size="lg" disabled={submitting || !draftMatches}>
-                  {submitting ? t.orders.checkout.confirming : t.orders.cart.confirm}
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={submitting || !draftMatches || paymentChoice.loading}
+                >
+                  {submitting
+                    ? t.orders.checkout.confirming
+                    : paymentChoice.cardSelected
+                      ? t.payment.choice.payButton
+                      : t.orders.cart.confirm}
                 </Button>
                 <Button variant="ghost" onClick={() => void abandon()}>
                   {t.orders.cart.backToCart}

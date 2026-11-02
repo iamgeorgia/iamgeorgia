@@ -21,6 +21,9 @@ import { cn } from "@/lib/utils";
 import type { DriverChoiceValue } from "@/types/driver";
 import type { PlacedLocation } from "@/types/geo";
 import type { TransferOffer, TransferPoint } from "@/types/transfer";
+import { PaymentMethodChoice } from "@/components/booking/PaymentMethodChoice";
+import { startCardPayment } from "@/lib/payments/cardPayment";
+import { usePaymentChoice } from "@/lib/payments/usePaymentChoice";
 
 interface FormValues {
   firstName: string;
@@ -89,7 +92,9 @@ interface TransferBookingFormProps {
 export function TransferBookingForm({ offer, query, from, to, canChooseDriver = false }: TransferBookingFormProps) {
   const router = useRouter();
   const path = useLocalePath();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  // The vehicle class decides the supplier, and the supplier carries the payment rule.
+  const paymentChoice = usePaymentChoice({ vehicleId: [offer.vehicle.id] });
   const [values, setValues] = useState<FormValues>(initialValues);
   const [errors, setErrors] = useState<Errors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -184,13 +189,29 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
         preferredFleetVehicleId: driverChoice?.fleetVehicleId,
       });
 
+      // Card chosen: open the payment and leave for the bank. The transfer is
+      // already booked, so a payment that cannot start never costs the guest it.
+      let paymentFailed = false;
+
+      if (paymentChoice.cardSelected) {
+        const started = await startCardPayment({
+          reference: booking.reference,
+          email: booking.leadPassengerEmail,
+          locale,
+          idempotencyKey: `${idempotencyKey}:pay`,
+        });
+
+        if (started) return;
+        paymentFailed = true;
+      }
+
       // The email is in the URL because the reference alone is not a
       // credential: references come from a sequence, and the confirmation page
       // has to prove who is asking.
       router.push(
         `${path(`/transfers/confirmation/${booking.reference}`)}?email=${encodeURIComponent(
           booking.leadPassengerEmail,
-        )}`,
+        )}${paymentFailed ? "&payment=failed" : ""}`,
       );
     } catch (error) {
       setSubmitting(false);
@@ -487,6 +508,13 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
         />
       </section>
 
+      <PaymentMethodChoice
+        choice={paymentChoice}
+        product="transfer"
+        disabled={submitting}
+        className="mt-12 border-t border-line pt-10"
+      />
+
       <p className="type-caption mt-8 flex items-start gap-2.5 rounded-sm bg-surface-soft p-4 text-body">
         <Info size={15} className="mt-px shrink-0 text-brand-text" aria-hidden />
         {t.transfers.booking.paymentNote}
@@ -506,8 +534,18 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
         </p>
       )}
 
-      <Button type="submit" size="lg" fullWidth className="mt-6" disabled={submitting}>
-        {submitting ? t.transfers.booking.submitting : t.transfers.booking.submit}
+      <Button
+        type="submit"
+        size="lg"
+        fullWidth
+        className="mt-6"
+        disabled={submitting || paymentChoice.loading}
+      >
+        {submitting
+          ? t.transfers.booking.submitting
+          : paymentChoice.cardSelected
+            ? t.payment.choice.payButton
+            : t.transfers.booking.submit}
       </Button>
       <AddToCartButton item={cartItem} size="lg" fullWidth className="mt-3" disabled={submitting} />
     </form>

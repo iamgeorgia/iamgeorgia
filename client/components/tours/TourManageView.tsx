@@ -1,5 +1,6 @@
 import { PrintButton } from "@/components/booking/PrintButton";
 import { CancelTourBooking } from "@/components/tours/CancelTourBooking";
+import { PaymentStatusPanel } from "@/components/booking/PaymentStatusPanel";
 import { TourBookingDetail } from "@/components/tours/TourBookingDetail";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { Container } from "@/components/ui/Container";
@@ -39,6 +40,13 @@ export async function TourManageView({ booking, email }: { booking: TourBooking;
 
       <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
+          <PaymentStatusPanel
+            payment={booking.payment}
+            reference={booking.reference}
+            email={email}
+            currency={booking.currency}
+            className="mb-8 border border-line bg-surface p-6"
+          />
           <TourBookingDetail booking={booking} />
         </div>
 

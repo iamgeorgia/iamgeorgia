@@ -29,6 +29,9 @@ import { formatMoney } from "@/lib/money";
 import type { PlacedLocation } from "@/types/geo";
 import type { OrderPriceChangedDetails, OrderTraveller, OrderUnavailableDetails } from "@/types/order";
 import { cn } from "@/lib/utils";
+import { PaymentMethodChoice } from "@/components/booking/PaymentMethodChoice";
+import { startCardPayment } from "@/lib/payments/cardPayment";
+import { usePaymentChoice } from "@/lib/payments/usePaymentChoice";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -48,7 +51,7 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function OrderCheckoutForm() {
   const router = useRouter();
   const path = useLocalePath();
-  const { t, intlLocale } = useI18n();
+  const { t, intlLocale, locale } = useI18n();
 
   const stored = useSyncExternalStore(
     subscribeOrderCheckoutDraft,
@@ -57,6 +60,8 @@ export function OrderCheckoutForm() {
   );
   const draft = stored.draft;
   const hydrated = stored.ready;
+  // The package carries its own payment rule; the card is offered on top of it.
+  const paymentChoice = usePaymentChoice(draft ? { packageSlug: [draft.packageSlug] } : null);
 
   // Set once, by the countdown, when the hold lapses; the synchronous check
   // covers a draft that was already stale when the page loaded, so the
@@ -160,10 +165,32 @@ export function OrderCheckoutForm() {
       });
 
       clearOrderCheckoutDraft();
+
+      // Card chosen: open the payment and leave for the bank. The order already
+      // exists, so a payment that cannot start never costs the guest it. An
+      // order with an on-request part has nothing to pay until it is confirmed.
+      let paymentFailed = false;
+
+      if (paymentChoice.cardSelected && !hasOnRequestSlot(draft.quote)) {
+        const started = await startCardPayment({
+          reference: order.reference,
+          email: leadEmail,
+          locale,
+          idempotencyKey: `${draft.idempotencyKey ?? fallbackKey}:pay`,
+        });
+
+        if (started) return;
+        paymentFailed = true;
+      }
+
       // `replace`, so the back button cannot return to a checkout whose holds
       // have just been committed.
       router.replace(
-        path(`/booking/confirmation/${order.reference}?email=${encodeURIComponent(leadEmail)}`),
+        path(
+          `/booking/confirmation/${order.reference}?email=${encodeURIComponent(leadEmail)}${
+            paymentFailed ? "&payment=failed" : ""
+          }`,
+        ),
       );
     } catch (error) {
       handleFailure(error);
@@ -588,13 +615,23 @@ export function OrderCheckoutForm() {
                 </p>
               </section>
 
+              {!onRequest && (
+                <PaymentMethodChoice
+                  choice={paymentChoice}
+                  product="other"
+                  className="mt-12 border-t border-line pt-10"
+                />
+              )}
+
               <p className="type-caption mt-8 text-muted">{t.orders.checkout.terms}</p>
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
-                <Button type="submit" size="lg" disabled={submitting}>
+                <Button type="submit" size="lg" disabled={submitting || paymentChoice.loading}>
                   {submitting
                     ? t.orders.checkout.confirming
-                    : onRequest
+                    : paymentChoice.cardSelected && !onRequest
+                      ? t.payment.choice.payButton
+                      : onRequest
                       ? t.orders.checkout.request
                       : t.orders.checkout.confirm}
                 </Button>

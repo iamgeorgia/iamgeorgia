@@ -2,6 +2,7 @@ import { CircleCheck, Clock } from "lucide-react";
 
 import { BookingSteps } from "@/components/booking/BookingSteps";
 import { PrintButton } from "@/components/booking/PrintButton";
+import { PaymentStatusPanel } from "@/components/booking/PaymentStatusPanel";
 import { OrderDetail } from "@/components/packages/OrderDetail";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -69,6 +70,13 @@ export async function OrderConfirmationView({ order }: { order: Order }) {
 
       <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
+          <PaymentStatusPanel
+            payment={order.payment}
+            reference={order.reference}
+            email={order.leadEmail}
+            currency={order.currency}
+            className="mb-8 border border-line bg-surface p-6"
+          />
           <OrderDetail order={order} />
         </div>
 

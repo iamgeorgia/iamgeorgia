@@ -1,5 +1,6 @@
 import { PrintButton } from "@/components/booking/PrintButton";
 import { CancelOrder } from "@/components/packages/CancelOrder";
+import { PaymentStatusPanel } from "@/components/booking/PaymentStatusPanel";
 import { OrderDetail } from "@/components/packages/OrderDetail";
 import { Breadcrumbs } from "@/components/ui/Breadcrumbs";
 import { Container } from "@/components/ui/Container";
@@ -59,6 +60,13 @@ export async function OrderManageView({ order, email, basePath }: OrderManageVie
 
       <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
+          <PaymentStatusPanel
+            payment={order.payment}
+            reference={order.reference}
+            email={email ?? null}
+            currency={order.currency}
+            className="mb-8 border border-line bg-surface p-6"
+          />
           <OrderDetail order={order} cancel={live ? { quote, email } : null} />
         </div>
 

@@ -2,6 +2,7 @@ import { CircleCheck, Clock } from "lucide-react";
 
 import { BookingSteps } from "@/components/booking/BookingSteps";
 import { PrintButton } from "@/components/booking/PrintButton";
+import { PaymentStatusPanel } from "@/components/booking/PaymentStatusPanel";
 import { TourBookingDetail } from "@/components/tours/TourBookingDetail";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -60,6 +61,13 @@ export async function TourConfirmationView({ booking }: { booking: TourBooking }
 
       <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
+          <PaymentStatusPanel
+            payment={booking.payment}
+            reference={booking.reference}
+            email={booking.leadTravellerEmail}
+            currency={booking.currency}
+            className="mb-8 border border-line bg-surface p-6"
+          />
           <TourBookingDetail booking={booking} />
         </div>
 

@@ -536,7 +536,7 @@ export const en = {
       specialRequestsHint:
         "Mobility, a birthday on the road, a photographer in the group. Passed on, never guaranteed.",
       terms:
-        "By confirming you accept the cancellation terms shown. Payment is settled with the operator, not on this site.",
+        "By confirming you accept the cancellation terms shown. You pay by card through our payment partner Flitt, or settle with the operator, as chosen at checkout.",
       onRequestNotice:
         "This departure is confirmed by the operator. Your seats are held now; you will hear within 48 hours, and nothing is charged if it cannot run.",
       confirm: "Confirm booking",
@@ -722,7 +722,7 @@ export const en = {
       board: "Board",
       roomFor: "{room} for {party}",
       freeUntil: "Free cancellation until {date}",
-      payAtProperty: "{amount} payable at the property",
+      payAtProperty: "{amount} payable at the property if you pay later",
       pickupAt: "Pick-up {time}",
       departsAt: "Departs {time}",
       forParty: "for {count} travellers",
@@ -732,7 +732,7 @@ export const en = {
       discount: "Package discount",
       supplement: "Package supplement",
       total: "Total",
-      totalHint: "For the whole party. Settled with us, not on this page.",
+      totalHint: "For the whole party. Paid by card through Flitt, or settled with us later.",
       margin: "Margin",
       net: "Net",
       reserve: "Reserve this trip",
@@ -821,7 +821,7 @@ export const en = {
       specialRequestsHint:
         "Mobility, a birthday on the road, an early arrival. Passed to everyone involved, never guaranteed.",
       terms:
-        "By confirming you accept the cancellation terms shown for each part. Payment is settled with us, not on this page.",
+        "By confirming you accept the cancellation terms shown for each part. You can pay by card through Flitt or pay later, as shown at checkout.",
       onRequestNotice:
         "Part of this trip is confirmed by the operator: {items}. The rest is booked outright, and you will hear about these within 48 hours. Nothing is charged for a part that cannot run.",
       confirm: "Confirm the trip",
@@ -1007,7 +1007,7 @@ export const en = {
       discounts: "Package discounts",
       total: "Total",
       totalWhenAdded: "Total when added",
-      totalHint: "Checked against today\u2019s prices. Payment is settled with us after booking, not on this page.",
+      totalHint: "Checked against today\u2019s prices. You can pay by card through Flitt at checkout, or settle with us after booking.",
       checkout: "Checkout",
       keepBrowsing: "Keep browsing",
       disabledTitle: "The cart is not open",
@@ -1319,7 +1319,7 @@ export const en = {
     bookThis: "Request this experience",
     preferredDate: "Preferred date",
     guests: "Guests",
-    noPayment: "No payment is taken at this stage.",
+    noPayment: "Nothing is charged until you choose to pay at checkout.",
     relatedEyebrow: "More to do",
     relatedTitle: "Other experiences",
     emptyTitle: "Nothing in that category yet",
@@ -1436,7 +1436,7 @@ export const en = {
         },
       ],
       disclaimer:
-        "The fare you see is the fare you pay: it is fixed when you book, and your reference is confirmed by email. No card is needed — you settle with the driver, in cash or by card, on the day.",
+        "The fare you see is the fare you pay: it is fixed when you book, and your reference is confirmed by email. Pay securely by card through our partner Flitt, or settle with the driver on the day, in cash or by card. You choose at checkout.",
     },
 
     search: {
@@ -1642,7 +1642,7 @@ export const en = {
       cancellationNote:
         "Cancellation terms are set by {provider} and confirmed in writing when the transfer is booked.",
       backToResults: "Back to results",
-      noPaymentStep: "No payment is taken at this step.",
+      noPaymentStep: "You choose how to pay on the next step.",
       priceThis: "Price this transfer",
       priceThisBody:
         "Fares depend on the route, so tell us where you are travelling between and we will price this vehicle for your journey.",
@@ -1699,7 +1699,7 @@ export const en = {
         "Child seats, extra stops, oversized luggage, a wheelchair — tell us and we will confirm before the day.",
       requestsPlaceholder: "Anything the driver should know in advance…",
       paymentNote:
-        "No card is needed. We confirm the booking now and you settle with the driver, in cash or by card, on the day.",
+        "Depending on the booking, you can pay now by card through Flitt, or settle with the driver on the day, in cash or by card.",
       errorOne: "One detail still needs your attention.",
       errorMany: "{count} details still need your attention.",
       submit: "Continue to confirmation",
@@ -1806,7 +1806,7 @@ export const en = {
     howBody2:
       "Confirm with the lead traveller's details and you receive a reference by email. Some tours are sold on request, in which case we say plainly that the operator still has to accept.",
     howBody3:
-      "There is no online payment. You settle with the property, operator or driver directly, on the terms shown at checkout, and the cancellation policy you agreed to is the one that applies.",
+      "Depending on the booking, you either pay by card online through our payment partner Flitt, or settle with the property, operator or driver directly. Either way, the cancellation policy you agreed to is the one that applies.",
     howImageAlt: "Fog lying across the hills of the Khada gorge",
     valuesEyebrow: "What we hold to",
     valuesTitle: "Four things you can expect",
@@ -1901,7 +1901,7 @@ export const en = {
         {
           heading: "Payment",
           body: [
-            "We take no payment online. You pay the property, operator or driver directly, so we never see or store card details.",
+            "Card payments are processed by Flitt; we never see or store card numbers; we keep the masked card, the amount and the result. Where you settle with the property, operator or driver directly, that payment is between you and them.",
           ],
         },
         {
@@ -1962,7 +1962,7 @@ export const en = {
         {
           heading: "Payment",
           body: [
-            "We take no payment online. You pay the property, operator or driver directly, on the terms shown at checkout — on arrival, for example, or to the driver on the day. Where a supplier requires a card to guarantee a room, that arrangement is between you and the supplier.",
+            "You pay either by card online, processed by our payment partner Flitt, or directly to the property, operator or driver on the terms shown at checkout. Where a booking requires payment, it is cancelled if payment is not completed within the time shown at checkout. Refunds go back to the card used, usually within 3–10 business days. Where a supplier requires a card to guarantee a room, that arrangement is between you and the supplier.",
           ],
         },
         {
@@ -2248,7 +2248,7 @@ export const en = {
       extraBeds: "Includes {count} extra beds",
       extraGuests: "Includes {count} extra guests",
       taxesIncluded: "Taxes included",
-      payAtProperty: "{amount} payable at the property",
+      payAtProperty: "{amount} payable at the property if you pay later",
       totalForStay: "Total for {nights}",
       showBreakdown: "Night by night",
       hideBreakdown: "Hide breakdown",
@@ -2294,7 +2294,7 @@ export const en = {
       specialRequestsHint:
         "A late arrival, a quiet room, a wheelchair. Requests are passed on but never guaranteed.",
       terms:
-        "By confirming you accept the cancellation terms shown above. Payment is taken by the property, not on this site.",
+        "By confirming you accept the cancellation terms shown above. You pay by card through Flitt, or at the property, as you choose below.",
       confirmStay: "Confirm booking",
       confirming: "Confirming…",
       summary: "Your stay",
@@ -2304,7 +2304,7 @@ export const en = {
       total: "Total",
       taxesIncluded: "Taxes included",
       payAtProperty: "Payable at the property",
-      payAtPropertyHint: "Charged by the hotel on arrival, not by us.",
+      payAtPropertyHint: "If you pay later, the hotel charges you on arrival.",
       required: "Required",
       invalidEmail: "That does not look like an email address.",
       noHoldTitle: "Nothing to check out",
@@ -2324,7 +2324,7 @@ export const en = {
       whatNext: "What happens now",
       whatNextSteps: {
         one: "The property has your booking and your requests.",
-        two: "Payment is settled with the property, not with us.",
+        two: "You pay by card, or settle with the property, as you chose.",
         three: "You can review or cancel from your booking page, under the terms below.",
       },
       manageBooking: "View or cancel this booking",
@@ -2442,6 +2442,101 @@ export const en = {
     tomorrow: "Tomorrow",
     inDays: "In {count} days",
     daysLate: "{count} days late",
+  },
+  /** Card payments through Flitt: the checkout choice, the result page and the status panel. */
+  payment: {
+    stepLabel: "Payment",
+    metaTitle: "Payment status",
+    testChip: "Test payments: no real money is charged",
+    choice: {
+      legend: "How would you like to pay?",
+      loading: "Checking payment options…",
+      card: "Pay securely by card",
+      cardHint: "You will be taken to our payment partner Flitt to complete the payment",
+      laterHotel: "Pay at the property",
+      laterTour: "Settle with the operator",
+      laterTransfer: "Settle with the driver",
+      laterOther: "Pay later",
+      requiredNotice:
+        "Payment is required to confirm this booking. Unpaid bookings are cancelled after {hours} hours",
+      requiredNoticeNoHours:
+        "Payment is required to confirm this booking. Unpaid bookings are cancelled automatically",
+      payButton: "Pay securely",
+      redirecting: "Redirecting to the bank…",
+      schemes: {
+        visa: "Visa",
+        mastercard: "Mastercard",
+        applePay: "Apple Pay",
+        googlePay: "Google Pay",
+      },
+    },
+    notice: {
+      startFailed:
+        "Your booking is confirmed. We could not start the card payment; you can pay from this page.",
+    },
+    panel: {
+      title: "Payment",
+      status: {
+        NONE: "Not billed yet",
+        UNPAID: "Open",
+        PARTIAL: "Partially paid",
+        OVERDUE: "Overdue",
+        PAID: "Paid",
+        WAIVED: "Waived",
+        VOID: "Void",
+      },
+      amountDue: "Amount due",
+      payNow: "Pay now by card",
+      starting: "Redirecting to the bank…",
+      startError: "We could not start the payment. Try again in a moment.",
+      payBefore: "Pay before {date} or the booking is cancelled",
+      cancelledUnpaid: "Cancelled: payment was not received",
+      afterConfirmed: "You will be able to pay once the booking is confirmed",
+    },
+    result: {
+      processingTitle: "Confirming your payment with the bank…",
+      processingBody:
+        "Please keep this page open. If you close it, your booking page will show the result.",
+      approvedTitle: "Payment received",
+      approvedBody: "Thank you. Your payment was successful and your booking is paid.",
+      amount: "Amount",
+      card: "Card",
+      paymentReference: "Payment reference",
+      bookingReference: "Booking reference",
+      receiptSent: "Receipt sent to your email",
+      viewBooking: "View booking",
+      findBooking: "Find your booking",
+      declinedTitle: "Payment declined",
+      notCompletedTitle: "The payment was not completed",
+      noMoneyTaken: "No money was taken",
+      tryAgain: "Try again",
+      payLater: "Pay later",
+      failedTitle: "We could not reach the payment provider",
+      failedBody: "Nothing was charged and your booking stands. Please try again in a moment.",
+      mismatchTitle: "Your payment is being verified",
+      mismatchBody: "We will email you as soon as it is confirmed.",
+      reversedTitle: "This payment was refunded",
+      reversedBody: "The money is on its way back to your card, usually within 3–10 business days.",
+      pendingTitle: "We are still waiting for the bank",
+      pendingBody:
+        "We could not confirm the result yet. Your payment reference is {reference}. Check again in a moment; if money left your card we will email you.",
+      unknownTitle: "We could not check your payment",
+      unknownBody: "Check your connection and try again. Your payment reference is {reference}.",
+      checkAgain: "Check again",
+      missingTitle: "This payment link is incomplete",
+      missingBody: "Open the link from your booking page, or find your booking to pay again.",
+      retryFailed: "We could not start a new payment. Try again in a moment.",
+      payBefore: "Pay before {date}",
+    },
+    declineReasons: {
+      insufficientFunds: "The card has insufficient funds.",
+      invalidCvv: "The security code (CVV) was not accepted.",
+      threeDsFailed: "The 3-D Secure check with your bank failed.",
+      invalidExpiry: "The card expiry date was not accepted.",
+      fraudCheck: "The payment was declined by a fraud check.",
+      orderExpired: "The payment session expired.",
+      generic: "Your bank did not approve the payment.",
+    },
   },
 };
 

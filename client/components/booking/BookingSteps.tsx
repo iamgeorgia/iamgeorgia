@@ -3,27 +3,28 @@ import { Check } from "lucide-react";
 import { getI18n } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
-type Step = "choose" | "details" | "confirm";
+type Step = "choose" | "details" | "pay" | "confirm";
+type LabelledStep = Exclude<Step, "pay">;
 
-const ORDER: Step[] = ["choose", "details", "confirm"];
+const ORDER: Step[] = ["choose", "details", "pay", "confirm"];
 
 interface BookingStepsProps {
   current: Step;
   /** The wording, when the product is not a hotel stay — a tour names its steps differently. */
-  labels?: Record<Step, string>;
+  labels?: Record<LabelledStep, string>;
 }
 
 /**
  * Where the traveller is in the booking.
  *
- * Three steps because there are three: pick a room, say who you are, and it is
- * done. It is an `<ol>` with the current step marked `aria-current` rather than
+ * Four steps because there are four: pick a room, say who you are, pay (or
+ * choose to pay later), and it is done. It is an `<ol>` with the current step marked `aria-current` rather than
  * a row of decorated divs — a progress indicator that a screen reader cannot
  * read is decoration, and this one is carrying real orientation.
  */
 export async function BookingSteps({ current, labels }: BookingStepsProps) {
   const { t } = await getI18n();
-  const words = labels ?? t.booking.checkout.steps;
+  const words: Record<Step, string> = { ...(labels ?? t.booking.checkout.steps), pay: t.payment.stepLabel };
   const currentIndex = ORDER.indexOf(current);
 
   return (

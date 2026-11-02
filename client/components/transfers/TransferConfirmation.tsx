@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { RequestedDriver } from "./RequestedDriver";
 import { TransferSteps } from "./TransferSteps";
+import { PaymentStatusPanel } from "@/components/booking/PaymentStatusPanel";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Container } from "@/components/ui/Container";
@@ -99,6 +100,14 @@ export function TransferConfirmation({ booking }: { booking: TransferBooking }) 
               </Badge>
             )}
           </div>
+
+          <PaymentStatusPanel
+            payment={booking.payment}
+            reference={booking.reference}
+            email={booking.leadPassengerEmail}
+            currency={booking.currency}
+            className="mt-10 border border-line bg-surface p-6"
+          />
 
           <section className="mt-10">
             <h2 className="type-h3">{t.transfers.confirmation.leadPassenger}</h2>

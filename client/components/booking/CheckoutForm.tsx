@@ -38,6 +38,9 @@ import { formatMoney } from "@/lib/money";
 import type { BookingGuestInput, BookingGuestType, BookingRequestInput } from "@/types/booking";
 import { cn } from "@/lib/utils";
 import { BookingErrorText } from "@/components/booking/BookingErrorText";
+import { PaymentMethodChoice } from "@/components/booking/PaymentMethodChoice";
+import { startCardPayment } from "@/lib/payments/cardPayment";
+import { usePaymentChoice } from "@/lib/payments/usePaymentChoice";
 
 interface CheckoutFormProps {
   /** From the URL, so a refresh resumes the same hold rather than taking another. */
@@ -63,7 +66,9 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export function CheckoutForm({ holdToken }: CheckoutFormProps) {
   const router = useRouter();
   const path = useLocalePath();
-  const { t, intlLocale } = useI18n();
+  const { t, intlLocale, locale } = useI18n();
+  // What the held room may be paid with: card, pay at the property, or card only.
+  const paymentChoice = usePaymentChoice(holdToken ? { hotelHold: [holdToken] } : null);
 
   // sessionStorage is an external store, and `ready` is what distinguishes
   // "not read yet" from "nothing there" — a skeleton from a wrong message.
@@ -178,11 +183,31 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
       });
 
       clearCheckoutDraft();
+
+      // Card chosen: open the payment and leave for the bank. The booking
+      // already exists, so a payment that cannot start never costs the guest it.
+      let paymentFailed = false;
+
+      if (paymentChoice.cardSelected) {
+        const started = await startCardPayment({
+          reference: booking.reference,
+          email: leadEmail,
+          locale,
+          idempotencyKey: `${draft?.idempotencyKey ?? fallbackKey}:pay`,
+        });
+
+        // The page is navigating away; keep the form busy until it does.
+        if (started) return;
+        paymentFailed = true;
+      }
+
       // `replace`, so the back button cannot return to a checkout whose hold
       // has just been committed.
       router.replace(
         path(
-          `/booking/confirmation/${booking.reference}?email=${encodeURIComponent(leadEmail)}`,
+          `/booking/confirmation/${booking.reference}?email=${encodeURIComponent(leadEmail)}${
+            paymentFailed ? "&payment=failed" : ""
+          }`,
         ),
       );
     } catch (error) {
@@ -500,6 +525,12 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
                 />
               </section>
 
+              <PaymentMethodChoice
+                choice={paymentChoice}
+                product="hotel"
+                className="mt-12 border-t border-line pt-10"
+              />
+
               {errorKey && (
                 <p
                   role="alert"
@@ -528,8 +559,12 @@ export function CheckoutForm({ holdToken }: CheckoutFormProps) {
               </p>
 
               <div className="mt-6 flex flex-wrap items-center gap-4">
-                <Button type="submit" size="lg" disabled={submitting}>
-                  {submitting ? t.booking.checkout.confirming : t.booking.checkout.confirmStay}
+                <Button type="submit" size="lg" disabled={submitting || paymentChoice.loading}>
+                  {submitting
+                    ? t.booking.checkout.confirming
+                    : paymentChoice.cardSelected
+                      ? t.payment.choice.payButton
+                      : t.booking.checkout.confirmStay}
                 </Button>
                 <button
                   type="button"
