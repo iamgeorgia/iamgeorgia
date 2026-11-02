@@ -45,6 +45,7 @@ adminBadgeRoutes.get('/', async (req, res) => {
     const dispatch = can(req.user, CAPABILITIES.DISPATCH_READ);
     const payables = can(req.user, CAPABILITIES.FINANCE_PAYABLES_READ);
     const approves = can(req.user, CAPABILITIES.BOOKINGS_APPROVE);
+    const cardPayments = can(req.user, CAPABILITIES.FINANCE_PAYMENTS_READ);
 
     // The list takes `from`/`to` as calendar dates and treats `to` as
     // inclusive (`< to + 1 day`); the same arithmetic here keeps the badge and
@@ -61,7 +62,8 @@ adminBadgeRoutes.get('/', async (req, res) => {
         paymentsDue,
         unreadNotifications,
         pendingApprovals,
-        pendingBookingApprovals
+        pendingBookingApprovals,
+        cardPaymentsAttention
     ] = await Promise.all([
         partners ? prisma.partner.count({ where: { status: { in: PENDING_PARTNER_STATUSES } } }) : null,
         bookings ? prisma.hotelBooking.count({ where: { status: { in: ACTIVE_BOOKING_STATUSES } } }) : null,
@@ -80,7 +82,11 @@ adminBadgeRoutes.get('/', async (req, res) => {
         // Requests waiting on this viewer's decision; null for someone who decides none.
         countPendingApprovals(req.user),
         // Bookings waiting for the platform's yes (OD1): the approvals queue.
-        approves ? countPendingBookingApprovals() : null
+        approves ? countPendingBookingApprovals() : null,
+        // Card payments a person must look at: approved for the wrong amount,
+        // callbacks that did not verify in the last day, refunds the gateway
+        // refused. The Finance -> Card payments badge.
+        cardPayments ? countCardPaymentsAttention() : null
     ]);
 
     res.json({
@@ -92,6 +98,18 @@ adminBadgeRoutes.get('/', async (req, res) => {
         paymentsDue,
         unreadNotifications,
         pendingApprovals,
-        pendingBookingApprovals
+        pendingBookingApprovals,
+        cardPaymentsAttention
     });
 });
+
+const countCardPaymentsAttention = async () => {
+    const dayAgo = new Date(Date.now() - 24 * 3_600_000);
+    const [mismatches, rejected, failedRefunds] = await Promise.all([
+        prisma.pspPayment.count({ where: { status: 'MISMATCH' } }),
+        prisma.pspCallbackEvent.count({ where: { signatureValid: false, receivedAt: { gte: dayAgo } } }),
+        prisma.pspRefund.count({ where: { status: { in: ['DECLINED', 'FAILED'] }, completedAt: { gte: dayAgo } } })
+    ]);
+
+    return mismatches + rejected + failedRefunds;
+};
