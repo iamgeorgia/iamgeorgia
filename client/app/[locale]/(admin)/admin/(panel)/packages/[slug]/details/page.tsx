@@ -10,6 +10,7 @@ import {
 import { PackageDetailsEditor } from "@/components/admin/PackageDetailsEditor";
 import { ApiError } from "@/lib/api/client";
 import { getPackage } from "@/lib/api/packages";
+import { listPaymentPolicyTemplates } from "@/lib/api/payments";
 import { getI18n } from "@/lib/i18n/server";
 import { requireScreen } from "@/lib/auth/session";
 
@@ -32,6 +33,12 @@ export default async function AdminPackageDetailsPage({
     throw error;
   }
 
+  // Reading the templates needs catalogue.read; a role without it simply gets
+  // no picker rather than a broken page.
+  const paymentPolicies = await listPaymentPolicyTemplates({ productKind: "PACKAGE" })
+    .then((result) => result.data)
+    .catch(() => []);
+
   return (
     <AdminContainer>
       <AdminBreadcrumbs
@@ -49,7 +56,7 @@ export default async function AdminPackageDetailsPage({
 
       <div className="mt-8">
         <AdminPanel title="Package">
-          <PackageDetailsEditor pkg={pkg} />
+          <PackageDetailsEditor pkg={pkg} paymentPolicies={paymentPolicies} />
         </AdminPanel>
       </div>
     </AdminContainer>

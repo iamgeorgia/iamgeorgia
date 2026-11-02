@@ -163,6 +163,8 @@ export interface PackageInput {
   maxPax?: number | null;
   adjustmentKind?: "NONE" | "DISCOUNT_BPS" | "FIXED_SELL" | "PER_PERSON_FIXED";
   adjustmentValue?: number;
+  /** A payment policy template of kind PACKAGE; null = the platform default. */
+  paymentPolicyId?: string | null;
   adjustmentAppliesTo?: "REQUIRED_ONLY" | "ALL_ITEMS";
   sellableFrom?: string | null;
   sellableUntil?: string | null;

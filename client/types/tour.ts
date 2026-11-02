@@ -1,4 +1,4 @@
-import type { CancellationPolicy, ImageAsset, Money } from "./catalogue";
+import type { CancellationPolicy, ImageAsset, Money, PaymentPolicy } from "./catalogue";
 import type {
   BookingApproval,
   BookingDesk,
@@ -167,6 +167,8 @@ export interface TourOption {
   horizonDays: number;
   sortOrder: number;
   cancellation: CancellationPolicy | null;
+  /** The card rule attached to the option; null = the platform default. */
+  payment?: PaymentPolicy | null;
   /** staff only */
   seasons?: TourSeason[];
 }

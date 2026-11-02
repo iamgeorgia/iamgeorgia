@@ -1,4 +1,7 @@
+import { Suspense } from "react";
+
 import { AdminShell } from "@/components/admin/AdminShell";
+import { PspModeBanner } from "@/components/admin/finance/PspModeBanner";
 import { NO_BADGES, getAdminBadges } from "@/lib/api/admin";
 import { requireAdminSession } from "@/lib/auth/session";
 
@@ -29,6 +32,10 @@ export default async function PanelLayout({ children }: { children: React.ReactN
 
   return (
     <AdminShell badges={badges} user={session.user}>
+      {/* Streams in on its own: the banner is a courtesy and never holds a page back. */}
+      <Suspense fallback={null}>
+        <PspModeBanner />
+      </Suspense>
       {children}
     </AdminShell>
   );

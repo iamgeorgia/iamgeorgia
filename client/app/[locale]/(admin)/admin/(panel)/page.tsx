@@ -1,4 +1,8 @@
+import { CircleAlert, CreditCard } from "lucide-react";
+
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
+import { StatCard } from "@/components/admin/StatCard";
+import { startOfDay, tbilisiDay } from "@/components/admin/finance/PaymentFormat";
 import {
   ApplicationsWidget,
   ApprovalsWidget,
@@ -32,15 +36,53 @@ import { listDeadlines } from "@/lib/api/deadlines";
 import { listDispatchLegs } from "@/lib/api/dispatch";
 import { getFinanceSummary, getPaymentsDue, listPayments, listReceivables } from "@/lib/api/finance";
 import { listInvoices } from "@/lib/api/invoices";
+import { getPaymentsSettings, listCardPayments } from "@/lib/api/payments";
 import { listAdminOrders } from "@/lib/api/orders";
 import { listPartners } from "@/lib/api/partners";
 import { listAdminTourBookings } from "@/lib/api/tours";
 import { requireScreen } from "@/lib/auth/session";
+import { formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
 import { can } from "@/types/auth";
 
 /** How far ahead the queues look: the same week the sidebar badges and the reminders count. */
 const WINDOW_DAYS = 7;
+
+/**
+ * Card payments approved today (count and sum) and open mismatches, for a
+ * viewer who reads payments. Two list requests after one settings read, and
+ * the whole thing is decoration: any failure (payments off, a role the API
+ * refuses, the gateway tables missing) is read as "show nothing".
+ *
+ * The sum adds the amounts on the first page of a hundred rows only — an
+ * approximation that is exact on any day with fewer than a hundred card
+ * payments, which is the scale this panel runs at; the count is always exact.
+ */
+async function cardPaymentFigures() {
+  try {
+    const settings = await getPaymentsSettings();
+    if (!settings.enabled) return null;
+
+    const [approved, mismatches] = await Promise.all([
+      listCardPayments({ status: "APPROVED", from: startOfDay(tbilisiDay()), pageSize: 100 }),
+      listCardPayments({ status: "MISMATCH", pageSize: 1 }),
+    ]);
+
+    const sums = new Map<string, number>();
+    for (const payment of approved.data) {
+      sums.set(payment.currency, (sums.get(payment.currency) ?? 0) + payment.amountCents);
+    }
+
+    return {
+      count: approved.total,
+      sum: [...sums].map(([currency, cents]) => formatMoney(cents, currency)).join(" + ") || "—",
+      partial: approved.total > approved.data.length,
+      mismatches: mismatches.total,
+    };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The overview — everyone's landing page, and different for everyone.
@@ -92,6 +134,7 @@ export default async function AdminOverviewPage() {
     recentPayments,
     deadlinesUpcoming,
     deadlinesOverdue,
+    cardFigures,
   ] = await Promise.all([
     shown.has("bookingApprovals") ? listBookingApprovals({ pageSize: 5 }) : null,
     shown.has("tourRequests") ? listAdminTourBookings({ status: "PENDING", pageSize: 5 }) : null,
@@ -113,6 +156,7 @@ export default async function AdminOverviewPage() {
       ? listDeadlines({ status: "OPEN", from: now.toISOString(), to: `${addDaysISO(today, WINDOW_DAYS)}T23:59:59.999Z`, sort: "soonest", pageSize: 500 })
       : null,
     shown.has("deadlinesWeek") ? listDeadlines({ status: "OPEN", to: now.toISOString(), pageSize: 1 }) : null,
+    can(session, "finance.payments.read") ? cardPaymentFigures() : null,
   ]);
 
   const quickStart = quickStartFor(capabilities);
@@ -196,6 +240,23 @@ export default async function AdminOverviewPage() {
               offered={legsOffered?.total ?? 0}
             />
           )}
+        </div>
+      )}
+
+      {cardFigures && (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          <StatCard
+            label="Card payments today"
+            value={String(cardFigures.count)}
+            icon={CreditCard}
+            hint={`${cardFigures.sum} approved${cardFigures.partial ? " (first 100 payments)" : ""}`}
+          />
+          <StatCard
+            label="Open mismatches"
+            value={String(cardFigures.mismatches)}
+            icon={CircleAlert}
+            hint={cardFigures.mismatches > 0 ? "Amount or currency differed from the request" : "Nothing to look at"}
+          />
         </div>
       )}
 

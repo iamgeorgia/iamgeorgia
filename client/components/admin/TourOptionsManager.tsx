@@ -8,6 +8,7 @@ import { Loader2, Plus, X } from "lucide-react";
 import { AdminPanel } from "./AdminPage";
 import { useCan } from "./AdminViewerContext";
 import { CheckboxField, NumberInput, SelectInput, TextInput } from "./FormControls";
+import { PaymentPolicySelect } from "./PaymentPolicySelect";
 import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   archiveTourOption,
@@ -28,7 +29,7 @@ import {
 import { formatMoney, toMajorUnits, toMinorUnits } from "@/lib/money";
 import { useLocalePath } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
-import type { CancellationPolicy } from "@/types/catalogue";
+import type { CancellationPolicy, PaymentPolicy } from "@/types/catalogue";
 import type {
   ConfirmationMode,
   Tour,
@@ -62,9 +63,12 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export function TourOptionsManager({
   tour,
   policies,
+  paymentPolicies = [],
 }: {
   tour: Tour;
   policies: CancellationPolicy[];
+  /** Active TOUR payment templates; empty when the viewer cannot list them. */
+  paymentPolicies?: PaymentPolicy[];
 }) {
   const router = useRouter();
   const can = useCan();
@@ -108,13 +112,14 @@ export function TourOptionsManager({
           tour={tour}
           option={option}
           policies={policies}
+          paymentPolicies={paymentPolicies}
           useAction={useAction}
           canEdit={canEdit}
         />
       ))}
 
       {canEdit ? (
-        <OptionForm tour={tour} policies={policies} useAction={useAction} />
+        <OptionForm tour={tour} policies={policies} paymentPolicies={paymentPolicies} useAction={useAction} />
       ) : (
         <ReadOnlyNote
           needs={["catalogue.write", "tours.write"]}
@@ -131,12 +136,14 @@ function OptionCard({
   tour,
   option,
   policies,
+  paymentPolicies,
   useAction,
   canEdit,
 }: {
   tour: Tour;
   option: TourOption;
   policies: CancellationPolicy[];
+  paymentPolicies: PaymentPolicy[];
   useAction: ActionHook;
   /** Whether the viewer may change options and price sheets; a reader keeps the Departures link only. */
   canEdit: boolean;
@@ -192,6 +199,7 @@ function OptionCard({
           tour={tour}
           option={option}
           policies={policies}
+          paymentPolicies={paymentPolicies}
           useAction={useAction}
           onDone={() => setEditing(false)}
         />
@@ -329,12 +337,14 @@ function OptionForm({
   tour,
   option,
   policies,
+  paymentPolicies = [],
   useAction,
   onDone,
 }: {
   tour: Tour;
   option?: TourOption;
   policies: CancellationPolicy[];
+  paymentPolicies?: PaymentPolicy[];
   useAction: ActionHook;
   onDone?: () => void;
 }) {
@@ -356,6 +366,7 @@ function OptionForm({
   const [horizonDays, setHorizonDays] = useState(option?.horizonDays ?? 365);
   const [policyId, setPolicyId] = useState(option?.cancellation?.id ?? policies[0]?.id ?? "");
   const [active, setActive] = useState(option ? option.status === "ACTIVE" : true);
+  const [paymentPolicyId, setPaymentPolicyId] = useState(option?.payment?.id ?? "");
 
   if (!open && !option) {
     return (
@@ -393,6 +404,7 @@ function OptionForm({
       noticeHours,
       horizonDays,
       cancellationPolicyId: policyId,
+      paymentPolicyId: paymentPolicyId || null,
       ...(option ? { status: active ? "ACTIVE" : "INACTIVE" } : {}),
     };
 
@@ -477,6 +489,12 @@ function OptionForm({
           placeholder="Choose…"
           options={policies.map((policy) => ({ value: policy.id, label: policy.name }))}
           hint="Platform templates priced against the whole total."
+        />
+        <PaymentPolicySelect
+          value={paymentPolicyId}
+          current={option?.payment}
+          policies={paymentPolicies}
+          onChange={setPaymentPolicyId}
         />
         <NumberInput label="Notice (hours)" min={0} max={1440} value={noticeHours} onChange={(e) => setNoticeHours(Number(e.target.value) || 0)} />
         <NumberInput label="Horizon (days)" min={1} max={730} value={horizonDays} onChange={(e) => setHorizonDays(Number(e.target.value) || 1)} />

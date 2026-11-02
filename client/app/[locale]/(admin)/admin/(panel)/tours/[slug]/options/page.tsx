@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { TourOptionsManager } from "@/components/admin/TourOptionsManager";
+import { listPaymentPolicyTemplates } from "@/lib/api/payments";
 import { getTour, listTourCancellationPolicies } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
@@ -24,12 +25,16 @@ export default async function TourOptionsPage({ params }: PageProps<"/[locale]/a
 
   // Independent reads, so they go out together; the 404 is decided once both
   // are back rather than costing the policies a round trip of their own.
-  const [tour, policies] = await Promise.all([
+  const [tour, policies, paymentPolicies] = await Promise.all([
     getTour(slug).catch((error: unknown) => {
       if (error instanceof ApiError && error.status === 404) return null;
       throw error;
     }),
     listTourCancellationPolicies(),
+    // Needs catalogue.read; a tour operator without it gets no picker, not an error.
+    listPaymentPolicyTemplates({ productKind: "TOUR" })
+      .then((result) => result.data)
+      .catch(() => []),
   ]);
   if (!tour) notFound();
 
@@ -48,7 +53,7 @@ export default async function TourOptionsPage({ params }: PageProps<"/[locale]/a
       />
 
       <div className="mt-8">
-        <TourOptionsManager tour={tour} policies={policies.data} />
+        <TourOptionsManager tour={tour} policies={policies.data} paymentPolicies={paymentPolicies} />
       </div>
     </AdminContainer>
   );

@@ -13,11 +13,13 @@ import {
   TextInput,
 } from "./FormControls";
 import { useCan } from "./AdminViewerContext";
+import { PaymentPolicySelect } from "./PaymentPolicySelect";
 import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { updatePackage } from "@/lib/api/packages";
 import { adjustmentKindLabels, adjustmentScopeLabels, adjustmentValueUnit } from "@/lib/admin/packages";
 import { formatBps, formatMoney, toMinorUnits } from "@/lib/money";
+import type { PaymentPolicy } from "@/types/catalogue";
 import type { PackageAdjustmentKind, PackageWithChecklist } from "@/types/package";
 
 const KINDS: PackageAdjustmentKind[] = ["NONE", "DISCOUNT_BPS", "FIXED_SELL", "PER_PERSON_FIXED"];
@@ -48,7 +50,14 @@ const adjustmentSummary = (pkg: PackageWithChecklist): string => {
  * one row and ten currency units in the next is exactly the sort of ambiguity
  * that gets a package sold below cost.
  */
-export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
+export function PackageDetailsEditor({
+  pkg,
+  paymentPolicies = [],
+}: {
+  pkg: PackageWithChecklist;
+  /** Active PACKAGE payment templates; empty when the viewer cannot list them. */
+  paymentPolicies?: PaymentPolicy[];
+}) {
   const router = useRouter();
   const can = useCan();
   const canEdit = can("catalogue.write");
@@ -71,6 +80,7 @@ export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
   const [validUntil, setValidUntil] = useState(pkg.validUntil ?? "");
   const [sellableFrom, setSellableFrom] = useState(pkg.sellableFrom ?? "");
   const [sellableUntil, setSellableUntil] = useState(pkg.sellableUntil ?? "");
+  const [paymentPolicyId, setPaymentPolicyId] = useState(pkg.payment?.id ?? "");
 
   const [kind, setKind] = useState<PackageAdjustmentKind>(pkg.adjustment?.kind ?? "NONE");
   const [value, setValue] = useState(() => {
@@ -120,6 +130,7 @@ export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
         validUntil: validUntil || null,
         sellableFrom: sellableFrom || null,
         sellableUntil: sellableUntil || null,
+        paymentPolicyId: paymentPolicyId || null,
         ...(canPrice
           ? { adjustmentKind: kind, adjustmentValue, adjustmentAppliesTo: appliesTo }
           : {}),
@@ -193,6 +204,16 @@ export function PackageDetailsEditor({ pkg }: { pkg: PackageWithChecklist }) {
           onChange={(event) => {
             dirty();
             setImage(event.target.value);
+          }}
+        />
+        <PaymentPolicySelect
+          className="sm:col-span-2"
+          value={paymentPolicyId}
+          current={pkg.payment}
+          policies={paymentPolicies}
+          onChange={(next) => {
+            dirty();
+            setPaymentPolicyId(next);
           }}
         />
       </div>

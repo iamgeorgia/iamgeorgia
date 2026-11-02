@@ -1,7 +1,18 @@
 import { apiFetch, serverFetch } from "./client";
 import { toQueryString } from "./query";
-import type { CheckoutPaymentRule } from "@/types/catalogue";
-import type { CheckoutRuleParams, GuestPayment, PaymentSettings } from "@/types/payments";
+import type { CheckoutPaymentRule, PaymentPolicy } from "@/types/catalogue";
+import type {
+  CardPaymentList,
+  CardPaymentQuery,
+  CheckoutRuleParams,
+  GuestPayment,
+  PaymentPolicyInput,
+  PaymentPolicyProductKind,
+  PaymentSettings,
+  PaymentsSettings,
+  PspPaymentStatus,
+  StaffPayment,
+} from "@/types/payments";
 
 /**
  * Guest card payments (Flitt).
@@ -46,4 +57,44 @@ export const retryPayment = (id: string, token: string, locale?: string) =>
   apiFetch<GuestPayment>(`/api/payments/${id}/retry${toQueryString({ t: token })}`, {
     method: "POST",
     body: { locale },
+  });
+
+// --- Staff side (admin panel) ------------------------------------------------
+
+/** Server-component read; any staff member may ask. */
+export const getPaymentsSettings = () => serverFetch<PaymentsSettings>("/api/admin/payments/settings");
+
+export const listCardPayments = (query: CardPaymentQuery = {}) =>
+  serverFetch<CardPaymentList>(`/api/admin/payments${toQueryString(query)}`);
+
+export const getCardPayment = (id: string) => serverFetch<StaffPayment>(`/api/admin/payments/${id}`);
+
+/** Asks the gateway now and applies the answer through the one transition function. */
+export const checkCardPaymentStatus = (id: string) =>
+  apiFetch<{ status: PspPaymentStatus; changed: boolean; stale?: boolean; payment: StaffPayment }>(
+    `/api/admin/payments/${id}/check-status`,
+    { method: "POST" },
+  );
+
+/** Opens a refund approval; the money moves only after a second person approves it. */
+export const requestCardRefund = (id: string, body: { amountCents: number; reason: string; note?: string }) =>
+  apiFetch<{ id: string; reference: string }>(`/api/admin/payments/${id}/refunds`, {
+    method: "POST",
+    body,
+  });
+
+export const listPaymentPolicyTemplates = (
+  query: { productKind?: PaymentPolicyProductKind; includeInactive?: boolean } = {},
+) => serverFetch<{ data: PaymentPolicy[] }>(`/api/admin/payment-policies${toQueryString(query)}`);
+
+export const createPaymentPolicyTemplate = (body: PaymentPolicyInput) =>
+  apiFetch<PaymentPolicy>("/api/admin/payment-policies", { method: "POST", body });
+
+export const updatePaymentPolicyTemplate = (id: string, body: Partial<PaymentPolicyInput>) =>
+  apiFetch<PaymentPolicy>(`/api/admin/payment-policies/${id}`, { method: "PATCH", body });
+
+export const setTransferProviderPaymentPolicy = (providerId: string, policyId: string | null) =>
+  apiFetch<unknown>(`/api/admin/transfers/providers/${providerId}`, {
+    method: "PATCH",
+    body: { paymentPolicyId: policyId },
   });

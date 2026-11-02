@@ -1,4 +1,4 @@
-import type { ImageAsset, KosherCertificationScope, KosherServiceLevel, Money } from "./catalogue";
+import type { ImageAsset, KosherCertificationScope, KosherServiceLevel, Money, PaymentPolicy } from "./catalogue";
 import type { GalleryImage } from "./common";
 import type { ConfirmationMode, TourOptionKind, TourSearchResult } from "./tour";
 import type { TransferOffer, TransferPoint, TransferTripType, TransferVehicleClass } from "./transfer";
@@ -180,6 +180,8 @@ export interface PackageComponent {
 }
 
 export interface PackageDetail extends PackageSummary {
+  /** The card rule attached to the package; null = the platform default. */
+  payment?: PaymentPolicy | null;
   description: string[];
   gallery: GalleryImage[];
   images: PackageImage[];

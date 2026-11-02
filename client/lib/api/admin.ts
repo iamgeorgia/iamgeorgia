@@ -21,6 +21,8 @@ interface BadgesResponse {
   pendingOrders: number | null;
   paymentsDue: number | null;
   pendingApprovals: number | null;
+  /** Null for a viewer who cannot read card payments; absent on an older server. */
+  cardPaymentsAttention?: number | null;
   unreadNotifications: number;
 }
 
@@ -52,6 +54,7 @@ export const NO_BADGES: AdminBadges = {
   pendingOrders: 0,
   paymentsDue: 0,
   pendingApprovals: 0,
+  cardPaymentsAttention: 0,
   unreadNotifications: 0,
 };
 
@@ -65,6 +68,7 @@ const toAdminBadges = (badges: BadgesResponse): AdminBadges => ({
   pendingOrders: badges.pendingOrders ?? 0,
   paymentsDue: badges.paymentsDue ?? 0,
   pendingApprovals: badges.pendingApprovals ?? 0,
+  cardPaymentsAttention: badges.cardPaymentsAttention ?? 0,
   unreadNotifications: badges.unreadNotifications ?? 0,
 });
 

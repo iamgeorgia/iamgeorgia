@@ -20,6 +20,7 @@ import {
   ConciergeBell,
   Contact,
   ClipboardCheck,
+  CreditCard,
   Gavel,
   Globe2,
   ChartColumn,
@@ -37,6 +38,7 @@ import {
   Star,
   UserRound,
   UsersRound,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -75,6 +77,8 @@ export type AdminBadgeKey =
   | "paymentsDue"
   /** Money changes waiting for a second person to approve them — Finance → Approvals. */
   | "pendingApprovals"
+  /** Card payments needing a human: mismatches, rejected callbacks (24 h), failed refunds. */
+  | "cardPaymentsAttention"
   /** The viewer's own unread notices: the bell and the Notifications row. */
   | "unreadNotifications";
 
@@ -470,6 +474,14 @@ export const adminNavigation: AdminNavGroup[] = [
       // only name a hotel, a route or a tour that already exists.
       { label: "Packages", href: "/admin/packages", icon: Boxes, capability: "catalogue.write", acts: "catalogue.write" },
       { label: "Services", href: "/admin/services", icon: ConciergeBell, capability: "catalogue.write", acts: "catalogue.write" },
+      // Last: not a product but a rule the products above are sold under.
+      {
+        label: "Payment terms",
+        href: "/admin/catalogue/payment-policies",
+        icon: Wallet,
+        capability: "catalogue.write",
+        acts: "catalogue.write",
+      },
     ],
   },
   {
@@ -544,6 +556,16 @@ export const adminNavigation: AdminNavGroup[] = [
         label: "Payments",
         href: "/admin/finance/payments",
         icon: Banknote,
+        capability: "finance.payments.read",
+        acts: "finance.payments.write",
+      },
+      // Card payments through the gateway: the attempts, the callbacks and the
+      // refunds, badged with the ones that need a person to look.
+      {
+        label: "Card payments",
+        href: "/admin/finance/card-payments",
+        icon: CreditCard,
+        badgeKey: "cardPaymentsAttention",
         capability: "finance.payments.read",
         acts: "finance.payments.write",
       },

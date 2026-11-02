@@ -136,6 +136,8 @@ export const SCREENS: ScreenRule[] = [
   ...vertical("/admin/transfers/points", "id", { open: CATALOGUE, create: CATALOGUE_WRITE }),
   ...vertical("/admin/transfers/vehicles", "id", { open: CATALOGUE, create: CATALOGUE_WRITE }),
   rule("/admin/transfers/extras", CATALOGUE),
+  // The card rules tours, packages and transfer suppliers are sold under.
+  rule("/admin/catalogue/payment-policies", CATALOGUE),
 
   // --- Partners --------------------------------------------------------------
   rule("/admin/partners", PARTNERS),
@@ -152,6 +154,8 @@ export const SCREENS: ScreenRule[] = [
   rule("/admin/finance/penalties", "finance.receivables.read"),
   rule("/admin/finance/payments", "finance.payments.read"),
   rule("/admin/finance/payments/[id]", "finance.payments.read"),
+  rule("/admin/finance/card-payments", "finance.payments.read"),
+  rule("/admin/finance/card-payments/[id]", "finance.payments.read"),
   rule("/admin/finance/invoices", "invoices.read"),
   rule("/admin/finance/invoices/sync-events", "invoices.read"),
   rule("/admin/finance/invoices/[id]", "invoices.read"),

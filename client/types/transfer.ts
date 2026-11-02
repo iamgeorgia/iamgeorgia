@@ -18,6 +18,7 @@
  * compute fares from coordinates; it now asks and is told. A price the browser
  * computes is a price the browser can change.
  */
+import type { PaymentPolicy } from "./catalogue";
 import type { BookingApproval, BookingDesk, BookingPayment, BookingSource } from "./booking";
 import type { PlaceRef, PlacedLocation } from "./geo";
 
@@ -102,6 +103,8 @@ export interface TransferProvider {
   reviewCount: number;
   verified: boolean;
   yearsActive: number;
+  /** Staff reads only: the card rule for this supplier; null = the platform default. */
+  payment?: PaymentPolicy | null;
 }
 
 export interface TransferVehicle {
