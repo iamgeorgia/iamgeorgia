@@ -104,6 +104,11 @@ export const paymentPolicySchema = z
         timing: z.enum(PAYMENT_TIMINGS),
         depositBps: z.number().int().min(0).max(10_000).nullish(),
         balanceDueDaysBeforeCheckIn: z.number().int().min(0).max(365).nullish(),
+        // Card payments (docs/plans/FLITT_INTEGRATION_PLAN.md §4.4): how long
+        // an unpaid PAY_NOW booking survives (null = never cancelled), and
+        // whether a PAY_AT_HOTEL rate also offers a card.
+        unpaidCancelHours: z.number().int().min(1).max(720).nullish(),
+        cardOptional: z.boolean().optional(),
         description: textField(1000).nullish(),
         isActive: z.boolean().default(true)
     })

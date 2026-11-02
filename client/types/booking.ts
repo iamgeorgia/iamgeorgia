@@ -1,4 +1,4 @@
-import type { KosherSummary, MealPlan, Money, PaymentPolicy } from "./catalogue";
+import type { KosherSummary, MealPlan, Money, PaymentPolicy, PaymentTiming } from "./catalogue";
 
 /**
  * Search offers and bookings, mirroring `server/serializers/search.js` and
@@ -59,7 +59,23 @@ export interface BookingPayment {
   amountCents: number | null;
   paidCents: number | null;
   outstandingCents: number | null;
+  /** The card rule frozen when the bill was raised (`PaymentTiming`), null before then. */
+  timing: PaymentTiming | null;
+  /** PAY_NOW guests: when the booking is cancelled if still unpaid. */
+  autoCancelAt: string | null;
+  autoCancelledAt: string | null;
+  /** Whether "pay by card" can be offered right now, and why not. */
+  card: { available: boolean; reason: CardUnavailableReason | null };
 }
+
+export type CardUnavailableReason =
+  | "NO_RECEIVABLE"
+  | "PAYMENTS_DISABLED"
+  | "PARTNER_RECEIVABLE"
+  | "BOOKING_CANCELLED"
+  | "NOTHING_TO_PAY"
+  | "CARD_NOT_OFFERED"
+  | "CURRENCY_NOT_SUPPORTED";
 
 /** Which register a booking awaiting approval belongs to. */
 export type BookingApprovalProduct = "HOTEL" | "TRANSFER" | "TOUR" | "SERVICE" | "ORDER";

@@ -161,6 +161,54 @@ describe('card payments: HTTP', { skip: dbAvailable ? false : 'Postgres is not r
             assert.equal((await request(app).post(`/api/payments/${payment.id}/retry`).send({})).status, 404);
         });
 
+        it('tells a checkout the rule it will book under, strictest first', async () => {
+            const later = await request(app).get(`/api/payments/rules?vehicleId=${vehicle.id}`);
+            assert.equal(later.status, 200, JSON.stringify(later.body));
+            assert.equal(later.body.timing, 'PAY_LATER');
+            assert.deepEqual(later.body.options, { card: true, later: true, required: false, timing: 'PAY_LATER' });
+            assert.equal(later.body.mode, 'TEST');
+            assert.equal(later.body.resolved.vehicles, 1);
+
+            const payNow = await prisma.paymentPolicy.create({ data: { name: `Flitt http pay now ${Date.now()}`, timing: 'PAY_NOW', productKind: 'TRANSFER', unpaidCancelHours: 6 } });
+            const strict = tracker.transferProvider(await makeTransferProvider({ paymentPolicyId: payNow.id }));
+            const strictVehicle = tracker.transferVehicle(await makeTransferVehicle({ providerId: strict.id }));
+
+            const mixed = await request(app).get(`/api/payments/rules?vehicleId=${vehicle.id}&vehicleId=${strictVehicle.id}`);
+            assert.equal(mixed.body.timing, 'PAY_NOW');
+            assert.equal(mixed.body.unpaidCancelHours, 6);
+            assert.deepEqual(mixed.body.options, { card: true, later: false, required: true, timing: 'PAY_NOW' });
+
+            const none = await request(app).get('/api/payments/rules?hotelHold=no-such-hold');
+            assert.equal(none.body.timing, 'PAY_LATER', 'nothing resolved: the product default');
+            assert.equal(none.body.resolved.hotelHolds, 0);
+
+            config.payments.flitt.enabled = false;
+            try {
+                const off = await request(app).get(`/api/payments/rules?vehicleId=${strictVehicle.id}`);
+                assert.deepEqual(off.body.options, { card: false, later: true, required: false, timing: 'PAY_NOW' });
+                assert.equal(off.body.mode, null);
+            } finally {
+                config.payments.flitt.enabled = true;
+            }
+        });
+
+        it('carries the frozen rule and card availability on the booking itself', async () => {
+            const { booking, payment } = await open();
+            const seen = await request(app).get(`/api/transfers/bookings/${booking.reference}?email=${encodeURIComponent(booking.leadPassengerEmail)}`);
+
+            assert.equal(seen.status, 200, JSON.stringify(seen.body));
+            assert.equal(seen.body.payment.timing, 'PAY_LATER');
+            assert.equal(seen.body.payment.autoCancelAt, null);
+            assert.deepEqual(seen.body.payment.card, { available: true, reason: null });
+
+            stub.approve((await prisma.pspPayment.findUnique({ where: { id: payment.id } })).merchantOrderId);
+            await request(app).get(`/api/payments/${payment.id}?t=${payment.token}`);
+
+            const paid = await request(app).get(`/api/transfers/bookings/${booking.reference}?email=${encodeURIComponent(booking.leadPassengerEmail)}`);
+            assert.equal(paid.body.payment.status, 'PAID');
+            assert.deepEqual(paid.body.payment.card, { available: false, reason: 'NOTHING_TO_PAY' });
+        });
+
         it('answers 503 when the gateway is switched off', async () => {
             const { booking } = await booked();
             config.payments.flitt.enabled = false;

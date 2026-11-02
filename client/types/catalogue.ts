@@ -324,9 +324,28 @@ export interface PaymentPolicy {
   timing: PaymentTiming;
   depositBps: number | null;
   balanceDueDaysBeforeCheckIn: number | null;
+  /** PAY_NOW: hours after confirmation before an unpaid guest booking is cancelled; null = never. */
+  unpaidCancelHours: number | null;
+  /** PAY_AT_HOTEL: also offer a card at checkout. */
+  cardOptional: boolean;
+  /** Which product a template is for; null = hotels. */
+  productKind: "HOTEL" | "TRANSFER" | "TOUR" | "SERVICE" | "PACKAGE" | null;
   description: string | null;
   isActive: boolean;
   isTemplate: boolean;
+}
+
+/**
+ * The rule a checkout will book under (`GET /api/payments/rules`), and a
+ * booking's frozen rule: what may be offered to this buyer right now.
+ */
+export interface CheckoutPaymentRule {
+  timing: PaymentTiming;
+  unpaidCancelHours: number | null;
+  cardOptional: boolean;
+  policyName: string | null;
+  options: { card: boolean; later: boolean; required: boolean; timing: PaymentTiming };
+  mode: "TEST" | "LIVE" | null;
 }
 
 export interface RatePlanRestriction {

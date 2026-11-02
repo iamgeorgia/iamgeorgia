@@ -43,9 +43,13 @@ export const toPaymentPolicy = (policy) =>
               timing: policy.timing,
               depositBps: policy.depositBps ?? null,
               balanceDueDaysBeforeCheckIn: policy.balanceDueDaysBeforeCheckIn ?? null,
+              // Card payments (docs/plans/FLITT_INTEGRATION_PLAN.md §4.4).
+              unpaidCancelHours: policy.unpaidCancelHours ?? null,
+              cardOptional: Boolean(policy.cardOptional),
+              productKind: policy.productKind ?? null,
               description: policy.description ?? null,
               isActive: policy.isActive,
-              isTemplate: policy.hotelId === null
+              isTemplate: policy.hotelId === null && (policy.tourId ?? null) === null
           }
         : null;
 

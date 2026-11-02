@@ -29,6 +29,18 @@ export const createPaymentSchema = z
 
 export const paymentIdParamSchema = z.object({ id: idField }).strict();
 
+const listParam = z.union([z.string().min(1).max(200), z.array(z.string().min(1).max(200)).max(20)]).transform((value) => (Array.isArray(value) ? value : [value]));
+
+/** What a checkout holds, to learn the rule it will book under. Repeated parameters for a cart. */
+export const checkoutRulesQuerySchema = z
+    .object({
+        hotelHold: listParam.optional(),
+        tourHold: listParam.optional(),
+        vehicleId: listParam.optional(),
+        packageSlug: listParam.optional()
+    })
+    .strict();
+
 /** The return URL's path: the payment and the token handed out with its checkout URL. */
 export const returnParamSchema = z.object({ id: idField, token: z.string().min(16).max(64) }).strict();
 

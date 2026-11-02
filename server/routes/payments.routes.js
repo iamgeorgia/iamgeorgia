@@ -6,8 +6,9 @@ import { CAPABILITIES, can } from '../lib/permissions.js';
 import { optionalAuthenticate } from '../middleware/auth.js';
 import { paymentCreateLimiter } from '../middleware/rateLimit.js';
 import { validate } from '../middleware/validate.js';
+import { resolveCheckoutRule } from '../services/payments/payment-rules.service.js';
 import { createPayment, getPayment, retryPayment, toGuestPayment, toStaffPayment } from '../services/payments/psp-payment.service.js';
-import { createPaymentSchema, paymentIdParamSchema, paymentReadQuerySchema, retryPaymentSchema } from '../validation/payments.js';
+import { checkoutRulesQuerySchema, createPaymentSchema, paymentIdParamSchema, paymentReadQuerySchema, retryPaymentSchema } from '../validation/payments.js';
 
 /**
  * Card payments, as a guest sees them.
@@ -29,6 +30,17 @@ const flitt = () => config.payments.flitt;
 /** What the checkout needs to decide whether to offer a card: on or off, test or live. */
 paymentRoutes.get('/settings', (req, res) => {
     res.json({ enabled: flitt().enabled, provider: 'FLITT', mode: flitt().enabled ? (flitt().mode === 'live' ? 'LIVE' : 'TEST') : null });
+});
+
+/**
+ * The rule a checkout will book under, from the holds and items it carries:
+ * `?hotelHold=…&tourHold=…&vehicleId=…&packageSlug=…`, repeated for a cart.
+ * Answers the strictest rule and what may be offered to this buyer.
+ */
+paymentRoutes.get('/rules', optionalAuthenticate, validate({ query: checkoutRulesQuerySchema }), async (req, res) => {
+    const { hotelHold = [], tourHold = [], vehicleId = [], packageSlug = [] } = req.valid.query;
+
+    res.json(await resolveCheckoutRule({ hotelHolds: hotelHold, tourHolds: tourHold, vehicleIds: vehicleId, packageSlugs: packageSlug }, req.user ?? null));
 });
 
 paymentRoutes.post('/', paymentCreateLimiter, optionalAuthenticate, validate({ body: createPaymentSchema }), async (req, res) => {

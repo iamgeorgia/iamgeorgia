@@ -102,6 +102,18 @@ export const autoCancelAtFor = (rule, { from, paymentsEnabled = false, partner =
     return new Date((from ?? new Date()).getTime() + rule.unpaidCancelHours * 3_600_000);
 };
 
+/**
+ * The rule as a checkout or a booking page reads it: the timing, the words,
+ * and what may be offered to this buyer right now.
+ */
+export const ruleSummary = (rule, { paymentsEnabled = false, partner = false } = {}) => ({
+    timing: rule.timing,
+    unpaidCancelHours: rule.unpaidCancelHours ?? null,
+    cardOptional: Boolean(rule.cardOptional),
+    policyName: rule.policyName ?? null,
+    options: paymentOptionsFor(rule, { paymentsEnabled, partner })
+});
+
 /** True when a card payment may be created against a receivable frozen under this timing. */
 export const cardAllowedFor = (timing, { cardOptional = false } = {}) => {
     if (!timing) return true;
