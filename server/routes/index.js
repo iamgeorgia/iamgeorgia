@@ -15,6 +15,8 @@ import { partnerTeamRoutes } from './partner.team.routes.js';
 import { adminFinanceRoutes } from './admin.finance.routes.js';
 import { adminInvoiceRoutes } from './admin.invoices.routes.js';
 import { invoiceOceanWebhookRoutes } from './integrations.invoiceocean.routes.js';
+import { paymentRoutes } from './payments.routes.js';
+import { adminPaymentRoutes } from './admin.payments.routes.js';
 import { partnerFinanceRoutes } from './partner.finance.routes.js';
 import { adminNotificationRoutes } from './admin.notifications.routes.js';
 import { partnerNotificationRoutes } from './partner.notifications.routes.js';
@@ -117,6 +119,10 @@ routes.use('/admin/finance', adminFinanceRoutes);
 routes.use('/admin/invoices', adminInvoiceRoutes);
 // Inbound from InvoiceOcean: no session, a shared secret instead.
 routes.use('/integrations/invoiceocean', invoiceOceanWebhookRoutes);
+// Card payments: the guest's side here; the gateway's callback and return are
+// mounted in app.js ahead of the limiter and the origin check.
+routes.use('/payments', paymentRoutes);
+routes.use('/admin/payments', adminPaymentRoutes);
 routes.use('/admin/notifications', adminNotificationRoutes);
 routes.use('/admin/outbox', adminOutboxRoutes);
 // Settings → Email. Its OAuth callback is the one admin route with no session.

@@ -33,6 +33,10 @@ export const adminReceivableUrl = (id) => link(`/admin/finance/receivables/${enc
 export const portalFinanceUrl = () => link('/portal/finance');
 export const adminApprovalUrl = (id) => link(`/admin/finance/approvals/${encodeURIComponent(id)}`);
 export const adminInvoiceUrl = (id) => link(`/admin/finance/invoices/${encodeURIComponent(id)}`);
+/** Card payments: the finance screen for one attempt, and the guest's result page (token, never email). */
+export const adminCardPaymentUrl = (id) => link(`/admin/finance/card-payments/${encodeURIComponent(id)}`);
+export const paymentResultUrl = (id, token, locale = 'en') =>
+    link(`${locale && locale !== 'en' ? `/${locale}` : ''}/booking/payment/${encodeURIComponent(id)}?t=${encodeURIComponent(token)}`);
 /** The booking's page in the panel, by product: where an approval is decided. */
 export const adminBookingUrl = (product, reference) => {
     const path = { HOTEL: 'bookings', TRANSFER: 'transfers/bookings', TOUR: 'tours/bookings', SERVICE: 'services/bookings', ORDER: 'orders' }[product] ?? 'bookings';
@@ -1418,6 +1422,108 @@ export const templates = {
     },
 
     /** We received a buyer's money and applied it. To the agency, or to the guest who paid; only the agency has a statement (`url`) to open. */
+    /** A guest paid by card through the gateway. */
+    cardPaymentReceipt: ({ name, paymentReference, bookingReference, bookingType, amountCents, currency, maskedCard, cardType, paidAt, testMode, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const card = maskedCard ? `${cardType ? `${cardType} ` : ''}${maskedCard.replace(/X+/g, '••••')}` : 'card';
+        const what = { HOTEL: 'hotel booking', TOUR: 'tour booking', TRANSFER: 'transfer booking', SERVICE: 'booking' }[bookingType] ?? 'order';
+        const test = testMode ? '[TEST] ' : '';
+
+        return {
+            subject: `${test}Payment received: ${amount} for ${bookingReference}`,
+            text: plain([
+                hello(name),
+                testMode ? 'This is a TEST payment. No money was taken.' : null,
+                `We have received your card payment of ${amount} for ${what} ${bookingReference} on ${formatDay(paidAt)}. Thank you.`,
+                `Card: ${card}. Payment reference: ${paymentReference}.`,
+                url ? `Your booking:\n${url}` : null
+            ]),
+            html: layout({
+                eyebrow: `${test}Receipt · ${paymentReference}`,
+                heading: 'Payment received',
+                preheader: `${amount} for ${bookingReference}`,
+                paragraphs: [
+                    helloHtml(name),
+                    testMode ? '<strong>This is a TEST payment. No money was taken.</strong>' : null,
+                    `We have received your card payment of <strong>${escapeHtml(amount)}</strong> for ${escapeHtml(what)} <strong>${escapeHtml(bookingReference)}</strong>. Thank you.`
+                ],
+                facts: [
+                    { label: 'Amount', value: amount, strong: true },
+                    { label: 'Paid', value: formatDay(paidAt) },
+                    { label: 'Card', value: card },
+                    { label: 'Booking', value: bookingReference },
+                    { label: 'Payment reference', value: paymentReference }
+                ],
+                cta: url ? { label: 'View your booking', url } : undefined
+            })
+        };
+    },
+
+    /** The bank declined, or the payment page was left: the booking still stands, here is the way back. */
+    cardPaymentFailed: ({ name, paymentReference, bookingReference, amountCents, currency, status, responseDescription, payBefore, testMode, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const why = status === 'DECLINED' ? `Your bank did not approve the payment${responseDescription ? ` (${responseDescription})` : ''}.` : 'The payment was not completed.';
+        const deadline = payBefore ? `Please pay before ${formatDay(payBefore)}, or the booking will be cancelled.` : 'No money was taken.';
+        const test = testMode ? '[TEST] ' : '';
+
+        return {
+            subject: `${test}Payment not completed for ${bookingReference}`,
+            text: plain([hello(name), `${why} No money was taken.`, `Booking ${bookingReference} is still held for you. Amount due: ${amount}.`, deadline, url ? `Try again:\n${url}` : null]),
+            html: layout({
+                eyebrow: `${test}Payment · ${paymentReference}`,
+                heading: 'Payment not completed',
+                preheader: `${why} ${deadline}`,
+                paragraphs: [helloHtml(name), `${escapeHtml(why)} No money was taken.`, `Booking <strong>${escapeHtml(bookingReference)}</strong> is still held for you.`],
+                facts: [
+                    { label: 'Amount due', value: amount, strong: true },
+                    payBefore ? { label: 'Pay before', value: formatDay(payBefore) } : null,
+                    { label: 'Booking', value: bookingReference }
+                ],
+                cta: url ? { label: 'Try the payment again', url } : undefined,
+                footer: escapeHtml(deadline)
+            })
+        };
+    },
+
+    /** A PAY_NOW booking cancelled by the clock. */
+    bookingAutoCancelledUnpaid: ({ name, reference, product, hours, amountCents, currency, url }) => {
+        const what = { HOTEL: 'hotel booking', TOUR: 'tour booking', TRANSFER: 'transfer booking', SERVICE: 'booking', ORDER: 'order' }[product] ?? 'booking';
+        const within = hours ? ` within ${hours} hours` : '';
+
+        return {
+            subject: `Your ${what} ${reference} was cancelled: payment not received`,
+            text: plain([
+                hello(name),
+                `${what[0].toUpperCase()}${what.slice(1)} ${reference} required payment by card${within}, and no payment was received, so it has been cancelled. No money was taken.`,
+                amountCents ? `Amount that was due: ${formatMoney(amountCents, currency)}.` : null,
+                'You are welcome to book again; availability and prices may have changed.',
+                url ? `Book again:\n${url}` : null
+            ]),
+            html: layout({
+                eyebrow: `${what} · ${reference}`,
+                heading: 'Cancelled: payment not received',
+                preheader: `${reference} needed a card payment${within} and none arrived.`,
+                paragraphs: [helloHtml(name), `Your ${escapeHtml(what)} <strong>${escapeHtml(reference)}</strong> required payment by card${escapeHtml(within)}, and no payment was received, so it has been cancelled. No money was taken.`, 'You are welcome to book again; availability and prices may have changed.'],
+                facts: [{ label: 'Reference', value: reference }, amountCents ? { label: 'Amount that was due', value: formatMoney(amountCents, currency) } : null],
+                cta: url ? { label: 'Book again', url } : undefined
+            })
+        };
+    },
+
+    /** Finance: something about a card payment needs a person. */
+    cardPaymentAlert: ({ title, kind, paymentReference, bookingReference, facts = [], url }) => ({
+        subject: `[Payments] ${title}${paymentReference ? ` (${paymentReference})` : ''}`,
+        text: plain([title, paymentReference ? `Payment: ${paymentReference}` : null, bookingReference ? `Booking: ${bookingReference}` : null, facts.length > 0 ? facts.join('\n') : null, url ? `Open:\n${url}` : null]),
+        html: layout({
+            eyebrow: `Card payments · ${kind}`,
+            heading: title,
+            preheader: title,
+            paragraphs: [facts.length > 0 ? facts.map(escapeHtml).join('<br>') : 'See the payment for details.'],
+            facts: [paymentReference ? { label: 'Payment', value: paymentReference } : null, bookingReference ? { label: 'Booking', value: bookingReference } : null],
+            cta: url ? { label: 'Open the payment', url } : undefined
+        })
+    }),
+
     paymentReceipt: ({ partnerName, amountCents, currency, paidAt, method, reference, allocations, unallocatedCents, url }) => {
         const amount = formatMoney(amountCents, currency);
         const methodLabel = { BANK_TRANSFER: 'bank transfer', CASH: 'cash', CARD: 'card', OTHER: 'other' }[method] ?? 'payment';

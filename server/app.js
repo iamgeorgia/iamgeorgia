@@ -9,6 +9,7 @@ import { logger } from './lib/logger.js';
 import { prisma } from './db/index.js';
 import { routes } from './routes/index.js';
 import { mediaRoutes } from './routes/media.routes.js';
+import { paymentsFlittRoutes } from './routes/payments.flitt.routes.js';
 import { isLocalDriver } from './services/media/storage.service.js';
 import { notFoundHandler, errorHandler } from './middleware/errors.js';
 import { globalLimiter } from './middleware/rateLimit.js';
@@ -46,6 +47,14 @@ export const createApp = () => {
             autoLogging: { ignore: (req) => req.url.startsWith('/health') }
         })
     );
+
+    // The payment gateway's callback and the guest's return from its page:
+    // before the global limiter (the gateway's addresses must not share a
+    // bucket with the public), before the origin check (a browser arriving
+    // from pay.flitt.com is cross-site by definition) and before the JSON
+    // parser (the signature covers the raw bytes). Each has its own limiter
+    // and reads its own body. See routes/payments.flitt.routes.js.
+    app.use('/api/payments/flitt', paymentsFlittRoutes);
 
     app.use(globalLimiter);
 

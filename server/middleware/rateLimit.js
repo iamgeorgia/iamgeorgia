@@ -348,6 +348,44 @@ export const visitorKey = (req) => {
 };
 
 /**
+ * Opening a card payment makes a gateway call and a row: a guest needs a
+ * handful an hour (a decline, a retry), a script needs none. Per visitor.
+ */
+export const paymentCreateLimiter = rateLimit({
+    ...base,
+    store: store('payment-create'),
+    windowMs: 10 * 60 * 1000,
+    limit: config.payments.flitt.createLimitPer10Min,
+    keyGenerator: visitorKey,
+    handler: handler('Too many payment attempts. Please wait a few minutes and try again.')
+});
+
+/**
+ * The gateway's server-to-server callback. Outside the global limiter — it
+ * is mounted before it — because the gateway's two addresses must never be
+ * throttled by a busy day; generous, per source address, so a flood from
+ * anywhere else still costs nothing but a cheap signature check each.
+ */
+export const pspCallbackLimiter = rateLimit({
+    ...base,
+    store: store('psp-callback'),
+    windowMs: 60 * 1000,
+    limit: 600,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
+    handler: handler('Too many requests')
+});
+
+/** The guest's return from the payment page: a redirect, nothing more. */
+export const pspReturnLimiter = rateLimit({
+    ...base,
+    store: store('psp-return'),
+    windowMs: 60 * 1000,
+    limit: 60,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
+    handler: handler('Too many requests')
+});
+
+/**
  * The blanket per-IP limit applied to every request.
  *
  * Shares the `handler` above deliberately: the library's own rejection is

@@ -9,6 +9,7 @@ import { drainOutbox } from './services/notifications/outbox.service.js';
 import { sweepReminders } from './services/transfer/reminder.service.js';
 import { sweepFinanceReminders } from './services/finance/reminder.service.js';
 import { applySyncEvents, pollInvoices } from './services/invoicing/sync.service.js';
+import { sweepPspPayments } from './services/payments/psp-sweeper.service.js';
 import { auditTourSweep, sweepExpiredTourHolds } from './services/tour/availability.service.js';
 import { sweepCompletedTourBookings, sweepOverdueTourRequests } from './services/tour/booking.service.js';
 import { sweepCompletedHotelBookings } from './services/hotel/booking.service.js';
@@ -146,6 +147,25 @@ const start = async () => {
     invoiceSyncApplier?.unref();
     invoicePoller?.unref();
 
+    /**
+     * Card payments: stored callbacks are applied, open attempts are asked
+     * about, lapsed ones closed, and PAY_NOW bookings nobody paid for are
+     * cancelled. Nothing runs while the gateway is switched off.
+     */
+    const pspSweeper = config.payments.flitt.enabled
+        ? setInterval(() => {
+              sweepPspPayments()
+                  .then((result) => {
+                      if (result.skipped) return;
+                      const moved = (result.callbacks?.applied ?? 0) + (result.expired ?? 0) + (result.failed ?? 0) + (result.unpaid?.cancelled ?? 0);
+                      if (moved > 0) logger.info(result, 'Card payments swept');
+                  })
+                  .catch((err) => logger.error({ err }, 'Card payment sweep failed'));
+          }, config.payments.flitt.sweepIntervalMs)
+        : null;
+
+    pspSweeper?.unref();
+
     /** Tour holds: the same counter-and-sweeper discipline as room holds. */
     const tourHoldSweeper = setInterval(() => {
         sweepExpiredTourHolds()
@@ -273,6 +293,7 @@ const start = async () => {
         clearInterval(financeReminderSweeper);
         if (invoiceSyncApplier) clearInterval(invoiceSyncApplier);
         if (invoicePoller) clearInterval(invoicePoller);
+        if (pspSweeper) clearInterval(pspSweeper);
         clearInterval(tourHoldSweeper);
         clearInterval(tourCompletionSweeper);
         clearInterval(tourRequestSweeper);

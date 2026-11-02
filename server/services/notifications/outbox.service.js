@@ -26,6 +26,7 @@ import { issueRatingToken } from '../../lib/transfer/ratingToken.js';
 import { usersWithCapability } from '../rbac/access.js';
 import { APPROVE_CAPABILITY_FOR_KIND } from '../finance/approval.service.js';
 import { cancelInvoiceRemote, issueInvoice, recordProviderPayment, sendInvoice } from '../invoicing/invoice.service.js';
+import { createPspOutboxHandlers } from '../payments/psp.outbox.js';
 import { contactRevealed } from '../../serializers/dispatch.js';
 import { sendTransferVoucher } from '../transfer/notify.service.js';
 import { categoryOf } from '../../lib/notifications/categories.js';
@@ -258,6 +259,10 @@ const orderMailData = (order) => {
 };
 
 const handlers = {
+    // Card payments (services/payments/psp.outbox.js): receipts, retry notes,
+    // finance alerts, unpaid auto-cancellations.
+    ...createPspOutboxHandlers({ notify }),
+
     [TOPICS.ASSIGNMENT_OFFERED]: async ({ legId, driverId, assignmentId, onBehalf }) => {
         const [leg, driver] = await Promise.all([legWithContext(legId), driverWithUser(driverId)]);
         if (!leg || !driver) return;

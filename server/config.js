@@ -385,6 +385,9 @@ export const config = {
             reuseWindowSeconds: numberEnv('FLITT_REUSE_WINDOW_SECONDS', 120),
             // The result page may ask Flitt for a fresh status at most this often.
             statusPollMinSeconds: numberEnv('FLITT_STATUS_POLL_MIN_SECONDS', 5),
+            // Attempts one visitor may open in ten minutes: a few declines and
+            // retries, never a script. The test suite raises it.
+            createLimitPer10Min: numberEnv('FLITT_CREATE_LIMIT_PER_10_MIN', 10),
             sweepIntervalMs: numberEnv('FLITT_SWEEP_INTERVAL_MS', 60 * 1000),
             // A checkout design preset from the Merchant Portal; blank = default.
             designId: process.env.FLITT_DESIGN_ID || null,
@@ -969,6 +972,7 @@ export const assertPaymentsConfig = (flitt, { deployed = isDeployed } = {}) => {
         ['FLITT_REQUEST_TIMEOUT_MS', flitt.requestTimeoutMs, 1000, 120_000],
         ['FLITT_REUSE_WINDOW_SECONDS', flitt.reuseWindowSeconds, 0, 3600],
         ['FLITT_STATUS_POLL_MIN_SECONDS', flitt.statusPollMinSeconds, 1, 300],
+        ['FLITT_CREATE_LIMIT_PER_10_MIN', flitt.createLimitPer10Min, 1, 100_000],
         ['FLITT_SWEEP_INTERVAL_MS', flitt.sweepIntervalMs, 1000, 3_600_000]
     ]) {
         if (!Number.isInteger(value) || value < min || value > max) {
