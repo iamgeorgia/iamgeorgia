@@ -1,0 +1,23 @@
+{
+ "createRequest": {
+  "order_id": "iag-fixture-1793656065686",
+  "merchant_id": 1549901,
+  "order_desc": "Fixture",
+  "amount": 12345,
+  "currency": "GEL",
+  "server_callback_url": "https://example.invalid/cb",
+  "response_url": "https://example.invalid/r",
+  "lifetime": 600,
+  "merchant_data": "{\"paymentId\":\"fixture\"}",
+  "version": "1.0.1",
+  "signature": "de0f178727bf309fe7b6f66a31fa99613b396f83"
+ },
+ "createResponse": "{\"response\": {\"checkout_url\": \"https://pay.flitt.com/merchants/6aa79957f6f8336b820e6c82b7634f0c/default/index.html?token=90e15b1713fe54c2df0066fb72802e4106e690f6\", \"payment_id\": \"1027740454\", \"response_status\": \"success\"}}",
+ "statusRequest": {
+  "order_id": "iag-fixture-1793656065686",
+  "merchant_id": 1549901,
+  "version": "1.0.1",
+  "signature": "bb6b3e9bb6ca3a6f1e3a04d9d275e9d90c8b4775"
+ },
+ "statusResponse": "{\"response\": {\"rrn\": \"\", \"masked_card\": \"\", \"sender_cell_phone\": \"\", \"sender_account\": \"\", \"currency\": \"GEL\", \"fee\": \"\", \"reversal_amount\": \"0\", \"settlement_amount\": \"0\", \"actual_amount\": \"\", \"response_description\": \"\", \"sender_email\": \"\", \"order_status\": \"created\", \"response_status\": \"success\", \"order_time\": \"02.11.2026 23:47:45\", \"actual_currency\": \"\", \"order_id\": \"iag-fixture-1793656065686\", \"tran_type\": \"purchase\", \"eci\": \"\", \"settlement_date\": \"\", \"payment_system\": \"\", \"approval_code\": \"\", \"merchant_id\": 1549901, \"settlement_currency\": \"\", \"payment_id\": 1027740454, \"card_bin\": \"\", \"response_code\": \"\", \"card_type\": \"\", \"amount\": \"12345\", \"signature\": \"89643a7043a6b7cb96cd37e9035ee8f1b70ba10a\", \"product_id\": \"\", \"merchant_data\": \"{\\\"paymentId\\\":\\\"fixture\\\"}\", \"rectoken\": \"\", \"rectoken_lifetime\": \"\", \"verification_status\": \"\", \"parent_order_id\": \"\", \"additional_info\": \"{\\\"capture_status\\\": null, \\\"capture_amount\\\": null, \\\"reservation_data\\\": \\\"{}\\\", \\\"transaction_id\\\": null, \\\"bank_response_code\\\": null, \\\"bank_response_description\\\": null, \\\"client_fee\\\": null, \\\"settlement_fee\\\": 0.0, \\\"bank_name\\\": null, \\\"bank_country\\\": null, \\\"card_type\\\": null, \\\"card_product\\\": null, \\\"card_category\\\": null, \\\"timeend\\\": null, \\\"ipaddress_v4\\\": \\\"5.178.180.226\\\", \\\"payment_method\\\": null}\", \"fee_oplata\": \"0\", \"response_signature_string\": \"**********|{\\\"capture_status\\\": null, \\\"capture_amount\\\": null, \\\"reservation_data\\\": \\\"{}\\\", \\\"transaction_id\\\": null, \\\"bank_response_code\\\": null, \\\"bank_response_description\\\": null, \\\"client_fee\\\": null, \\\"settlement_fee\\\": 0.0, \\\"bank_name\\\": null, \\\"bank_country\\\": null, \\\"card_type\\\": null, \\\"card_product\\\": null, \\\"card_category\\\": null, \\\"timeend\\\": null, \\\"ipaddress_v4\\\": \\\"5.178.180.226\\\", \\\"payment_method\\\": null}|12345|GEL|0|{\\\"paymentId\\\":\\\"fixture\\\"}|1549901|iag-fixture-1793656065686|created|02.11.2026 23:47:45|1027740454|success|0|0|purchase\"}}"
+}

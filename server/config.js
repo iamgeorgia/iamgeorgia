@@ -156,6 +156,12 @@ export const config = {
     // this, so it is separate from clientOrigin only to allow a proxy in front.
     appUrl: process.env.APP_URL || clientOrigin,
 
+    // Where the outside world reaches *this* API — the origin a payment
+    // provider posts its callbacks to. Nothing in the system knew this before
+    // card payments: CLIENT_ORIGIN and APP_URL both describe the front end.
+    // Null until set; the payments block below refuses to enable without it.
+    apiPublicUrl: process.env.API_PUBLIC_URL ? process.env.API_PUBLIC_URL.replace(/\/+$/, '') : null,
+
     // Without this the rate limiters behind a reverse proxy see one IP for the
     // whole internet, which makes a per-IP login limit worse than useless.
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
@@ -334,6 +340,60 @@ export const config = {
             pollIntervalMs: numberEnv('INVOICEOCEAN_POLL_INTERVAL_MS', 15 * 60 * 1000),
             syncApplyIntervalMs: numberEnv('INVOICEOCEAN_SYNC_APPLY_INTERVAL_MS', 60 * 1000),
             requestTimeoutMs: numberEnv('INVOICEOCEAN_REQUEST_TIMEOUT_MS', 15 * 1000)
+        }
+    },
+
+    // Card payments through Flitt (docs/plans/FLITT_INTEGRATION_PLAN.md). Off
+    // by default: with `enabled` false no route is mounted, no timer runs and
+    // the checkout shows what it shows today. `mode` is a property of the
+    // configuration, not of a request: `test` pins Flitt's public test
+    // merchant and every payment row is stamped with it; `live` refuses the
+    // test merchant. The two can never be mixed on one deploy.
+    payments: {
+        flitt: {
+            enabled: process.env.FLITT_ENABLED === 'true',
+            mode: process.env.FLITT_MODE || 'test',
+            merchantId: process.env.FLITT_MERCHANT_ID ? Number(process.env.FLITT_MERCHANT_ID) : null,
+            // The payment key from the Merchant Portal (never the payout key).
+            secretKey: process.env.FLITT_SECRET_KEY || null,
+            // One host for test and live; the merchant's status decides.
+            // Overridable so a stub can stand in for the gateway.
+            apiBaseUrl: (process.env.FLITT_API_BASE_URL || 'https://pay.flitt.com').replace(/\/+$/, ''),
+            // Where Flitt posts the result (server-to-server) and sends the
+            // guest back (browser). Derived from API_PUBLIC_URL unless set,
+            // which a developer does for a tunnel.
+            callbackUrl: process.env.FLITT_CALLBACK_URL || (process.env.API_PUBLIC_URL ? `${process.env.API_PUBLIC_URL.replace(/\/+$/, '')}/api/payments/flitt/callback` : null),
+            returnUrl: process.env.FLITT_RETURN_URL || (process.env.API_PUBLIC_URL ? `${process.env.API_PUBLIC_URL.replace(/\/+$/, '')}/api/payments/flitt/return` : null),
+            // Signs the per-payment token in the return URL, so a result page
+            // can be opened only by the browser that was sent to pay.
+            returnTokenSecret: process.env.FLITT_RETURN_TOKEN_SECRET || (isDeployed ? null : 'dev-flitt-return-token-secret-not-for-production'),
+            // Flitt's order_id is unique per merchant, and the public test
+            // merchant is shared with every developer on earth: the prefix
+            // keeps this deploy's orders apart from theirs.
+            orderPrefix: process.env.FLITT_ORDER_PREFIX || (process.env.FLITT_MODE === 'live' ? 'IAG' : 'IAGT'),
+            // How long the guest has on Flitt's page before the order expires.
+            orderLifetimeSeconds: numberEnv('FLITT_ORDER_LIFETIME_SECONDS', 30 * 60),
+            requestTimeoutMs: numberEnv('FLITT_REQUEST_TIMEOUT_MS', 15 * 1000),
+            // What createPayment will send; the merchant must have each enabled.
+            currencies: (process.env.FLITT_CURRENCIES || 'GEL').split(',').map((code) => code.trim().toUpperCase()).filter(Boolean),
+            // The addresses Flitt documents for callbacks. Enforced in live
+            // mode; logged in test mode, where tunnels and stubs are normal.
+            callbackIps: (process.env.FLITT_CALLBACK_IPS || '54.154.216.60,3.75.125.89').split(',').map((ip) => ip.trim()).filter(Boolean),
+            callbackIpEnforce: process.env.FLITT_CALLBACK_IP_ENFORCE ? process.env.FLITT_CALLBACK_IP_ENFORCE === 'true' : process.env.FLITT_MODE === 'live',
+            // A second click within this window gets the same checkout URL
+            // rather than a second Flitt order.
+            reuseWindowSeconds: numberEnv('FLITT_REUSE_WINDOW_SECONDS', 120),
+            // The result page may ask Flitt for a fresh status at most this often.
+            statusPollMinSeconds: numberEnv('FLITT_STATUS_POLL_MIN_SECONDS', 5),
+            sweepIntervalMs: numberEnv('FLITT_SWEEP_INTERVAL_MS', 60 * 1000),
+            // A checkout design preset from the Merchant Portal; blank = default.
+            designId: process.env.FLITT_DESIGN_ID || null,
+            // Merchants Flitt keeps in test status besides the public one, so
+            // the owner's own account can be used in `test` mode.
+            testMerchantIds: [1549901, ...(process.env.FLITT_TEST_MERCHANT_IDS || '').split(',').map((id) => Number(id.trim())).filter((id) => Number.isInteger(id) && id > 0)],
+            // Test mode on a deployed host is only ever the preview
+            // environment, and it has to say so.
+            allowTestModeWhenDeployed: process.env.FLITT_ALLOW_TEST_MODE_WHEN_DEPLOYED === 'true'
         }
     },
 
@@ -886,9 +946,115 @@ const assertInvoicingConfig = () => {
     }
 };
 
+export const FLITT_MODES = Object.freeze(['test', 'live']);
+export const FLITT_PUBLIC_TEST_MERCHANT_ID = 1549901;
+export const FLITT_PUBLIC_TEST_SECRET = 'test';
+
+/**
+ * Card payments are checked at boot for a sharper reason than the others: a
+ * deploy that thinks it is taking real money on the public test merchant
+ * would confirm bookings nobody paid for, and a deploy that pointed test
+ * mode at a live key would charge real cards from a test checkout.
+ *
+ * Pure over its arguments so the combinations can be unit-tested without
+ * booting the server. `config.js` calls it with its own values.
+ */
+export const assertPaymentsConfig = (flitt, { deployed = isDeployed } = {}) => {
+    if (!FLITT_MODES.includes(flitt.mode)) {
+        throw new Error(`FLITT_MODE must be one of ${FLITT_MODES.join(', ')} — got "${flitt.mode}"`);
+    }
+
+    for (const [key, value, min, max] of [
+        ['FLITT_ORDER_LIFETIME_SECONDS', flitt.orderLifetimeSeconds, 60, 69_120_000],
+        ['FLITT_REQUEST_TIMEOUT_MS', flitt.requestTimeoutMs, 1000, 120_000],
+        ['FLITT_REUSE_WINDOW_SECONDS', flitt.reuseWindowSeconds, 0, 3600],
+        ['FLITT_STATUS_POLL_MIN_SECONDS', flitt.statusPollMinSeconds, 1, 300],
+        ['FLITT_SWEEP_INTERVAL_MS', flitt.sweepIntervalMs, 1000, 3_600_000]
+    ]) {
+        if (!Number.isInteger(value) || value < min || value > max) {
+            throw new Error(`${key} must be a whole number between ${min} and ${max}, got "${value}"`);
+        }
+    }
+
+    if (flitt.currencies.length === 0 || flitt.currencies.some((code) => !/^[A-Z]{3}$/.test(code))) {
+        throw new Error(`FLITT_CURRENCIES must be comma-separated ISO-4217 codes, got "${flitt.currencies.join(',')}"`);
+    }
+
+    if (!/^[A-Za-z0-9]{1,12}$/.test(flitt.orderPrefix)) {
+        throw new Error(`FLITT_ORDER_PREFIX must be 1–12 letters or digits, got "${flitt.orderPrefix}"`);
+    }
+
+    if (!flitt.enabled) {
+        return;
+    }
+
+    const missingKeys = [
+        ['FLITT_MERCHANT_ID', flitt.merchantId],
+        ['FLITT_SECRET_KEY', flitt.secretKey],
+        ['API_PUBLIC_URL or FLITT_CALLBACK_URL', flitt.callbackUrl],
+        ['API_PUBLIC_URL or FLITT_RETURN_URL', flitt.returnUrl],
+        ['FLITT_RETURN_TOKEN_SECRET', flitt.returnTokenSecret]
+    ]
+        .filter(([, value]) => !value)
+        .map(([key]) => key);
+
+    if (missingKeys.length > 0) {
+        throw new Error(`FLITT_ENABLED=true needs ${missingKeys.join(', ')}`);
+    }
+
+    if (!Number.isInteger(flitt.merchantId) || flitt.merchantId <= 0) {
+        throw new Error(`FLITT_MERCHANT_ID must be a positive whole number, got "${flitt.merchantId}"`);
+    }
+
+    if (deployed && flitt.returnTokenSecret.length < 32) {
+        throw new Error('FLITT_RETURN_TOKEN_SECRET must be at least 32 characters');
+    }
+
+    for (const [key, value] of [['FLITT_CALLBACK_URL', flitt.callbackUrl], ['FLITT_RETURN_URL', flitt.returnUrl]]) {
+        let parsed;
+
+        try {
+            parsed = new URL(value);
+        } catch {
+            throw new Error(`${key} is not a URL: "${value}"`);
+        }
+
+        if (deployed && parsed.protocol !== 'https:') {
+            throw new Error(`${key} must be https on a deployed host, got "${value}"`);
+        }
+    }
+
+    const isTestMerchant = flitt.testMerchantIds.includes(flitt.merchantId);
+    const isTestSecret = flitt.secretKey === FLITT_PUBLIC_TEST_SECRET;
+
+    if (flitt.mode === 'test') {
+        if (!isTestMerchant) {
+            throw new Error(
+                `FLITT_MODE=test only accepts Flitt's test merchant ${FLITT_PUBLIC_TEST_MERCHANT_ID} or one listed in FLITT_TEST_MERCHANT_IDS — got ${flitt.merchantId}. ` +
+                    'A live merchant in test mode would take real money from a test checkout.'
+            );
+        }
+
+        if (deployed && !flitt.allowTestModeWhenDeployed) {
+            throw new Error('FLITT_MODE=test on a deployed host needs FLITT_ALLOW_TEST_MODE_WHEN_DEPLOYED=true (the preview environment only)');
+        }
+    }
+
+    if (flitt.mode === 'live') {
+        if (isTestMerchant || isTestSecret) {
+            throw new Error('FLITT_MODE=live refuses the test merchant and the test key: nothing paid there is real money');
+        }
+
+        if (!deployed) {
+            throw new Error('FLITT_MODE=live is not accepted in development or test');
+        }
+    }
+};
+
 assertMailConfig();
 assertMediaConfig();
 assertFinanceConfig();
 assertInvoicingConfig();
+assertPaymentsConfig(config.payments.flitt);
 
 export default config;

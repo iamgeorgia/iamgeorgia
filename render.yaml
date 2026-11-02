@@ -171,6 +171,31 @@ services:
       - key: INVOICEOCEAN_REQUEST_TIMEOUT_MS
         value: "15000"
 
+      # Card payments through Flitt (docs/plans/FLITT_INTEGRATION_PLAN.md).
+      # Off until switched on by hand. The preview service runs `test` mode
+      # on the public test merchant with FLITT_ALLOW_TEST_MODE_WHEN_DEPLOYED;
+      # production runs `live` with the merchant's own id and key.
+      - key: FLITT_ENABLED
+        value: "false"
+      - key: FLITT_MODE
+        value: test
+      - key: FLITT_MERCHANT_ID
+        sync: false
+      - key: FLITT_SECRET_KEY
+        sync: false
+      # This API's public origin (https, no redirect): callbacks are posted here.
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: FLITT_RETURN_TOKEN_SECRET
+        generateValue: true
+      - key: FLITT_ALLOW_TEST_MODE_WHEN_DEPLOYED
+        value: "false"
+      # Optional, with defaults: see server/.env.example.
+      # - key: FLITT_ORDER_PREFIX
+      #   value: IAGT
+      # - key: FLITT_CALLBACK_IP_ENFORCE
+      #   value: "false"
+
       # Media on Cloudflare R2
       - key: MEDIA_DRIVER
         value: s3
