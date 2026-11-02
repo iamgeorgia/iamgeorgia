@@ -25,6 +25,7 @@ const base = () => ({
     callbackIpEnforce: false,
     reuseWindowSeconds: 120,
     statusPollMinSeconds: 5,
+    createLimitPer10Min: 10,
     sweepIntervalMs: 60_000,
     designId: null,
     testMerchantIds: [FLITT_PUBLIC_TEST_MERCHANT_ID],
