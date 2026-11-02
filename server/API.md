@@ -1732,6 +1732,170 @@ partners only, always scoped to the session's company.
 | GET | `/partner/finance/payables?status&page&pageSize` | For a supplier: what we owe it for its own bookings — its net and its schedule, nothing of ours |
 | GET | `/partner/finance/invoices` · `/invoices/:id` · `/invoices/:id/pdf` | `partner.invoices.read`: the company's own proformas and invoices, and their PDFs — see Invoices above |
 
+## Card payments — Flitt
+
+Card payments through Flitt (docs/plans/FLITT_INTEGRATION_PLAN.md). Off
+until `FLITT_ENABLED=true`; off, `GET /payments/settings` says so, every
+other payment route answers 503 `PAYMENTS_DISABLED` (the gateway routes 404),
+no timer runs, and every booking page shows what it showed before.
+
+**What is paid.** A card payment settles the **receivable** the ledger opened
+at confirmation — the balance of a standalone booking, or of an order. The
+booking itself is created first, exactly as without a card; the payment is a
+separate attempt (`PspPayment`, reference `PAY-000001`) against that
+receivable. No request ever carries an amount: the server charges
+`amountCents - paidCents`.
+
+**Whether a card is required, offered or absent** is a rule of the item sold
+(owner decision 2026-11-03), carried by its payment policy: a hotel rate
+plan's (`/admin/hotels/:id/policies/payment`), a tour option's, a package's
+or a transfer provider's — a template of that product kind, or, for tours,
+a policy the tour owns. `timing` reads: `PAY_NOW` card required, the
+booking cancelled if unpaid after the policy's `unpaidCancelHours` (default
+24, null never); `PAY_LATER` card offered beside "pay later"; `PAY_AT_HOTEL`
+pay later only, unless `cardOptional`; `DEPOSIT` behaves as `PAY_NOW` for the
+full amount until the deposit flow exists; `CREDIT_ACCOUNT` partners only.
+An order takes the strictest rule of its lines. The rule is **frozen on the
+receivable** when it is opened (`payment.timing`, `payment.autoCancelAt` on
+every booking payload) — a policy edited later does not reach a booking
+already made — and a `PAY_NOW` rule sets no deadline while the gateway is
+off, so nothing is cancelled that nobody could pay.
+
+### Guest routes — `/payments`
+
+- `GET /payments/settings` → `{ enabled, provider: "FLITT", mode: "TEST" |
+  "LIVE" | null }`.
+- `GET /payments/rules?hotelHold=&tourHold=&vehicleId=&packageSlug=`
+  (repeat a parameter for a cart) → the rule a checkout will book under:
+  `{ timing, unpaidCancelHours, cardOptional, policyName, options: { card,
+  later, required }, mode, resolved }`. Nothing resolved: the product
+  default. A signed-in partner is never offered a card.
+- `POST /payments` `{ reference, email, locale? }`, header `Idempotency-Key`
+  (else the receivable and its attempt number are the key, so two clicks
+  land on one row) → 201 (200 when an open attempt younger than
+  `FLITT_REUSE_WINDOW_SECONDS` is handed back) with the guest shape:
+  `id, reference, status, mode, amountCents, currency, bookingReference,
+  bookingType, maskedCard, cardType, checkoutUrl (while open), expiresAt,
+  completedAt, canRetry, receivable: { status, amountCents, paidCents,
+  autoCancelAt }, token, reused`. Send the guest to `checkoutUrl`. Refused:
+  404 (wrong email, unknown reference), 409 `RECEIVABLE_NOT_PAYABLE` |
+  `CARD_NOT_OFFERED` | `PARTNER_RECEIVABLE`, 410 `BOOKING_CANCELLED`, 422
+  `CURRENCY_NOT_SUPPORTED`, 502 `PROVIDER_UNAVAILABLE` (the row is `FAILED`,
+  nothing was charged, the booking stands, try again), 429 after
+  `FLITT_CREATE_LIMIT_PER_10_MIN` attempts from one address.
+- `GET /payments/:id?t=<token>` → the same shape. The token came with the
+  checkout URL (HMAC of the payment id, no email in it). While the attempt is
+  open and the gateway was not asked in the last
+  `FLITT_STATUS_POLL_MIN_SECONDS`, the server asks it now — so polling this
+  is how a result page converges when the callback never came.
+- `POST /payments/:id/retry?t=<token>` `{ locale? }` → a new attempt (new
+  order id at the gateway), from `DECLINED | EXPIRED | CANCELLED | FAILED`
+  only (409 `NOT_RETRIABLE`).
+
+Statuses: `CREATED` (row written, gateway not yet asked), `REDIRECT_READY`
+(checkout URL in hand), `PROCESSING`, `APPROVED` (one `PaymentRecord`
+`method: CARD` exists; the receivable is settled), `DECLINED`
+(`responseCode`, `responseDescription` from the gateway), `EXPIRED`,
+`CANCELLED` (the guest backed out, confirmed with the gateway first),
+`REVERSED` (fully refunded at the gateway), `MISMATCH` (approved for a
+different amount, currency, merchant or mode: nothing in the ledger, a
+person decides), `FAILED` (the gateway could not create the order).
+
+### The gateway's routes — `/payments/flitt`
+
+Mounted ahead of the global limiter, the origin check and the JSON parser.
+
+- `POST /payments/flitt/callback`: Flitt's server-to-server callback, raw
+  body (JSON or form-encoded, 64 kB), signed with the merchant key (SHA-1
+  over `key|value|value…` of every non-empty parameter sorted by name). The
+  delivery is stored in an inbox keyed on the hash of its body (a redelivery
+  is `duplicate: true`) and answered 200 at once; a bad signature, a foreign
+  merchant or — in live mode — an unknown source address is 400, stored
+  with `signatureValid: false`, audited (`PSP_CALLBACK_REJECTED`) and raised
+  to finance. **What the callback says is never acted on**: applying it
+  means asking the gateway for the order's status under our own signed
+  request (`POST /api/status/order_id`) and handing *that* to the one
+  transition function, under the payment's row lock. Stale reports (an older
+  state than the row holds) change nothing; an approval is checked against
+  the amount and currency we asked for before it becomes a ledger row.
+- `GET|POST /payments/flitt/return/:id/:token`: where Flitt sends the guest
+  back. Any parameters are ignored; it stamps `returnedAt` and 303s to
+  `<APP_URL>/<locale>/booking/payment/<id>?t=<token>`. With `?cancel=1` (the
+  cancel link on the payment page) the attempt is closed as the guest's
+  choice — after the gateway confirms nobody paid.
+
+**The sweeper** (every `FLITT_SWEEP_INTERVAL_MS`, 60 s) applies stored
+callbacks, asks the gateway about attempts open for a minute, closes
+attempts past their lifetime once the gateway agrees, fails `CREATED` rows
+whose gateway call died with the process, and **cancels `PAY_NOW` bookings
+nobody paid for** once `autoCancelAt` passes — through the product's normal
+cancellation with the charge waived, never while an attempt is `PROCESSING`
+or `APPROVED`, with the usual cancellation emails plus one that says why
+(`BOOKING_AUTO_CANCELLED_UNPAID` on the trail).
+
+**Emails and notices.** An approval queues the guest's receipt
+(`cardPaymentReceipt`, subject prefixed `[TEST]` in test mode); a decline or
+expiry a "payment not completed" note with the way back and the deadline
+when there is one; a mismatch, a rejected callback, a callback for an order
+this deploy never made, a second approval on a paid receivable
+(`OVERPAYMENT`, recorded unallocated) and an auto-cancellation notify
+everyone with `finance.payments.read` in-app (`PSP_*` kinds, finance tab)
+and `FINANCE_OPS_EMAIL` when set.
+
+### Finance — `/admin/payments`
+
+`finance.payments.read` to read, `finance.payments.write` to act.
+
+- `GET /admin/payments/settings` (any staff) → `{ enabled, mode, merchantId,
+  apiBaseUrl, callbackUrl, currencies, orderLifetimeSeconds }` — never the
+  key; drives the test-mode banner.
+- `GET /admin/payments?status=&mode=&q=&from=&to=&attention=&page=&pageSize=`
+  → paged list in the staff shape (the guest shape plus the gateway's words:
+  `merchantOrderId`, `providerPaymentId`, `providerTransactionId`,
+  `actualAmountCents`, `reversedCents`, `rrn`, `approvalCode`, `eci`,
+  `paymentRecordId`, the timestamps). `attention=true` lists mismatches,
+  rejected callbacks and failed refunds.
+- `GET /admin/payments/:id` → the staff shape with `callbacks[]` (each
+  delivery, its payload minus the signature, valid or not, applied or not)
+  and `refunds[]`.
+- `POST /admin/payments/:id/check-status` → asks the gateway now, applies
+  the answer, audits `PSP_STATUS_CHECKED`.
+
+Refunds through the gateway (Phase 5 of the plan) open through the approvals
+module; until then a refund is recorded the way it was before.
+
+### Payment policy templates — `/admin/payment-policies`
+
+`catalogue.read` to list, `catalogue.write` to change. Templates for tours,
+transfers and packages (`productKind`), beside the hotel catalogue that stays
+under `/admin/hotels/:id/policies/payment` and never shows these.
+
+- `GET /admin/payment-policies?productKind=&includeInactive=` → `{ data }`.
+- `POST /admin/payment-policies` `{ productKind, name, timing, depositBps?,
+  balanceDueDaysBeforeCheckIn?, unpaidCancelHours?, cardOptional?,
+  description?, isActive? }` → 201.
+- `PATCH /admin/payment-policies/:id` → the same fields, any subset.
+- Attaching: `paymentPolicyId` (nullable) on `PATCH /admin/tours/:id/options/:optionId`
+  and on `PATCH /admin/packages/:id`; `PATCH /admin/transfers/providers/:providerId`
+  `{ paymentPolicyId }`. A policy of another product kind is 400; null
+  returns the item to the platform default. Each serializer carries the
+  attached policy as `payment`.
+
+Seeded templates (`scripts/seed-reference.js`): "Pay later" and "Pay now by
+card" for tours and packages, "Settle with the driver" and "Pay now by card"
+for transfers.
+
+### Test mode
+
+`FLITT_MODE=test` pins Flitt's public test merchant (`1549901`, key `test`,
+cards at docs.flitt.com/api/testing — `4444555566661111` approves,
+`4444111166665555` declines). Every row is stamped `mode: TEST`, ledger
+notes say `TEST MODE`, receipts are prefixed `[TEST]`, the panel shows a
+banner. The configuration refuses a live-looking merchant in test mode, the
+test merchant or the test key in live mode, live mode outside a deployed
+host, and test mode on a deployed host without
+`FLITT_ALLOW_TEST_MODE_WHEN_DEPLOYED=true` (the preview environment only).
+
 ## Supplier extranet
 
 `/partner/hotels`, guarded by `authenticate + requireApprovedPartner`, scoped to
