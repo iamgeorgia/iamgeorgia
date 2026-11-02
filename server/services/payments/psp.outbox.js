@@ -6,6 +6,7 @@ import { TOPICS } from '../../lib/outbox.js';
 import { issueReturnToken } from '../../lib/payments/returnToken.js';
 import { CAPABILITIES } from '../../lib/permissions.js';
 import { usersWithCapability } from '../rbac/access.js';
+import { executePspRefund } from './psp-refund.service.js';
 
 /**
  * What the outbox does with card payment events: the guest's receipt, the
@@ -117,6 +118,11 @@ export const createPspOutboxHandlers = ({ notify }) => ({
                 data: { title, kind, paymentReference, bookingReference, facts, url: paymentId ? adminCardPaymentUrl(paymentId) : null }
             });
         }
+    },
+
+    /** An approved refund: one reversal request to the gateway, retried on a dropped connection with the same key. */
+    [TOPICS.PSP_REFUND_REQUESTED]: async ({ refundId }) => {
+        await executePspRefund(refundId);
     },
 
     /** A PAY_NOW booking cancelled by the clock: the guest hears why, finance sees it happened. */
