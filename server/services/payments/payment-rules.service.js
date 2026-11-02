@@ -35,9 +35,19 @@ export const resolveCheckoutRule = async ({ hotelHolds = [], tourHolds = [], veh
 
     const product = packageSlugs.length > 0 || rules.length > 1 ? 'PACKAGE' : hotelHolds.length > 0 ? 'HOTEL' : tourHolds.length > 0 ? 'TOUR' : vehicleIds.length > 0 ? 'TRANSFER' : 'PACKAGE';
     const rule = resolvePaymentRule(rules, { product });
+    const summary = ruleSummary(rule, { paymentsEnabled: config.payments.flitt.enabled, partner: Boolean(viewer?.partnerId) });
+
+    // With platform approval on (owner decision OD1 of the booking programme)
+    // a booking has no bill until an operator says yes, so nothing can be
+    // charged at checkout: the guest pays from the booking page, from the
+    // "complete your payment" email, once the bill exists. The rule itself
+    // still freezes on the receivable then.
+    const approvalFirst = config.booking.approvalEnabled && summary.options.card;
 
     return {
-        ...ruleSummary(rule, { paymentsEnabled: config.payments.flitt.enabled, partner: Boolean(viewer?.partnerId) }),
+        ...summary,
+        options: approvalFirst ? { ...summary.options, card: false, later: true, required: false } : summary.options,
+        approvalFirst,
         resolved: { hotelHolds: holds.length, tourHolds: tours.length, vehicles: vehicles.length, packages: packages.length },
         mode: config.payments.flitt.enabled ? (config.payments.flitt.mode === 'live' ? 'LIVE' : 'TEST') : null
     };

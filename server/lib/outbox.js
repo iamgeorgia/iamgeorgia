@@ -102,6 +102,8 @@ export const TOPICS = Object.freeze({
     // transaction that applied the provider's verified status (the receipt,
     // the "try again" note); the refund one asks the drain to call the
     // provider; the alert is for finance to look at something.
+    /** A guest's bill opened under a card rule: "complete your payment", unless already paid by then. */
+    PSP_PAYMENT_DUE: 'psp.payment.due',
     PSP_PAYMENT_APPROVED: 'psp.payment.approved',
     PSP_PAYMENT_FAILED: 'psp.payment.failed',
     PSP_REFUND_REQUESTED: 'psp.refund.requested',

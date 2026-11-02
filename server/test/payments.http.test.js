@@ -192,6 +192,37 @@ describe('card payments: HTTP', { skip: dbAvailable ? false : 'Postgres is not r
             }
         });
 
+        it('offers no card at checkout while bookings wait for approval, and says so', async () => {
+            const was = config.booking.approvalEnabled;
+            config.booking.approvalEnabled = true;
+            try {
+                const res = await request(app).get(`/api/payments/rules?vehicleId=${vehicle.id}`);
+                assert.equal(res.body.timing, 'PAY_LATER');
+                assert.equal(res.body.approvalFirst, true);
+                assert.deepEqual(res.body.options, { card: false, later: true, required: false, timing: 'PAY_LATER' });
+            } finally {
+                config.booking.approvalEnabled = was;
+            }
+        });
+
+        it('emails "pay by card" when a guest bill opens unpaid, and not when it was paid at once', async () => {
+            const { booking, receivable } = await booked();
+            const due = await prisma.outboxEvent.findFirst({ where: { topic: TOPICS.PSP_PAYMENT_DUE, entityId: receivable.id } });
+            assert.ok(due, 'the ledger queued the note with the bill');
+            assert.equal(await processEvent(due), true);
+            const mail = mailOutbox.find((m) => m.to === booking.leadPassengerEmail && /Pay by card/.test(m.subject));
+            assert.ok(mail, JSON.stringify(mailOutbox.map((m) => m.subject)));
+            assert.match(mail.text, new RegExp(`/booking/manage/${booking.reference}`));
+
+            clearOutbox();
+            const paid = await open();
+            stub.approve((await prisma.pspPayment.findUnique({ where: { id: paid.payment.id } })).merchantOrderId);
+            await request(app).get(`/api/payments/${paid.payment.id}?t=${paid.payment.token}`);
+            const dueAfterPaying = await prisma.outboxEvent.findFirst({ where: { topic: TOPICS.PSP_PAYMENT_DUE, entityId: paid.receivable.id } });
+            assert.equal(await processEvent(dueAfterPaying), true);
+            assert.equal(mailOutbox.some((m) => /Pay by card/.test(m.subject)), false, 'paid already: no note');
+        });
+
         it('carries the frozen rule and card availability on the booking itself', async () => {
             const { booking, payment } = await open();
             const seen = await request(app).get(`/api/transfers/bookings/${booking.reference}?email=${encodeURIComponent(booking.leadPassengerEmail)}`);

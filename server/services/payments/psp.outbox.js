@@ -45,6 +45,34 @@ const ALERT_TITLE = {
 const money = (cents, currency) => `${(cents / 100).toFixed(2)} ${currency}`;
 
 export const createPspOutboxHandlers = ({ notify }) => ({
+    /** The bill exists and a card can settle it: here is where, and by when — unless it was paid meanwhile. */
+    [TOPICS.PSP_PAYMENT_DUE]: async ({ receivableId }) => {
+        const receivable = await prisma.receivable.findUnique({
+            where: { id: receivableId },
+            select: { id: true, reference: true, status: true, amountCents: true, paidCents: true, currency: true, debtorName: true, debtorEmail: true, debtorPartnerId: true, paymentTiming: true, autoCancelAt: true, autoCancelledAt: true, pspPayments: { select: { status: true } } }
+        });
+
+        if (!receivable || receivable.debtorPartnerId || receivable.autoCancelledAt) return;
+        if (!['OPEN', 'PARTIAL'].includes(receivable.status) || receivable.amountCents - receivable.paidCents <= 0) return;
+        // Already paying or paid: the receipt says it all.
+        if (receivable.pspPayments.some((p) => ['APPROVED', 'PROCESSING', 'REDIRECT_READY'].includes(p.status))) return;
+
+        await sendMail({
+            to: receivable.debtorEmail,
+            template: 'cardPaymentDue',
+            data: {
+                name: receivable.debtorName,
+                bookingReference: receivable.reference,
+                amountCents: receivable.amountCents - receivable.paidCents,
+                currency: receivable.currency,
+                required: receivable.paymentTiming === 'PAY_NOW' || receivable.paymentTiming === 'DEPOSIT',
+                payBefore: receivable.autoCancelAt,
+                testMode: config.payments.flitt.mode !== 'live',
+                url: bookingManageUrl(receivable.reference, receivable.debtorEmail)
+            }
+        });
+    },
+
     /** The guest's receipt: what was charged, on which card, for which booking. */
     [TOPICS.PSP_PAYMENT_APPROVED]: async ({ paymentId }) => {
         const payment = await paymentForMail(paymentId);

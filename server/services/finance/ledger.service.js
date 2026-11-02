@@ -4,7 +4,8 @@ import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { upsertPenaltyInTx } from './penalty.service.js';
 import { onReceivableAmountChangedInTx, onReceivableCreatedInTx } from '../invoicing/invoice.service.js';
 import { addDays, todayInTimezone, toDateOnly, zonedTimeToInstant } from '../../lib/time.js';
-import { autoCancelAtFor, resolvePaymentRule, ruleFrom } from '../../lib/payments/policy.js';
+import { autoCancelAtFor, cardAllowedFor, resolvePaymentRule, ruleFrom } from '../../lib/payments/policy.js';
+import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 
 /**
  * The finance ledger: what we owe suppliers and what buyers owe us.
@@ -504,6 +505,13 @@ const createReceivable = async (tx, subject, { reference, partner, customer = nu
     // The proforma: a draft and an event, in this transaction; the provider
     // is called by the outbox drain afterwards. Nothing when invoicing is off.
     await onReceivableCreatedInTx(tx, receivable, actor, req);
+
+    // A guest's bill that a card can settle: the "complete your payment"
+    // note, with the deadline when there is one. The drain skips it if the
+    // guest has paid by the time it runs (a card checkout pays at once).
+    if (rule && !partner && amountCents > 0 && config.payments.flitt.enabled && cardAllowedFor(rule.timing, rule)) {
+        await enqueueEvent(tx, { topic: TOPICS.PSP_PAYMENT_DUE, payload: { receivableId: receivable.id }, entityType: AUDIT_ENTITY.receivable, entityId: receivable.id });
+    }
 
     return receivable;
 };

@@ -1422,6 +1422,27 @@ export const templates = {
     },
 
     /** We received a buyer's money and applied it. To the agency, or to the guest who paid; only the agency has a statement (`url`) to open. */
+    /** A guest's bill is open and a card can settle it: the way to pay, and the deadline when there is one. */
+    cardPaymentDue: ({ name, bookingReference, amountCents, currency, required, payBefore, testMode, url }) => {
+        const amount = formatMoney(amountCents, currency);
+        const deadline = payBefore ? `Please pay before ${formatDay(payBefore)}; after that the booking is cancelled.` : required ? 'Please pay to keep the booking.' : 'You can pay now or settle later, as you prefer.';
+        const test = testMode ? '[TEST] ' : '';
+
+        return {
+            subject: `${test}${required ? 'Payment needed' : 'Pay by card'} for ${bookingReference}: ${amount}`,
+            text: plain([hello(name), `${required ? 'Your booking' : 'Booking'} ${bookingReference} ${required ? 'needs' : 'can take'} a card payment of ${amount}.`, deadline, `Pay securely:\n${url}`]),
+            html: layout({
+                eyebrow: `${test}Payment · ${bookingReference}`,
+                heading: required ? 'Complete your payment' : 'Pay by card',
+                preheader: `${amount} for ${bookingReference}. ${deadline}`,
+                paragraphs: [helloHtml(name), `${required ? 'Your booking' : 'Booking'} <strong>${escapeHtml(bookingReference)}</strong> ${required ? 'needs' : 'can take'} a card payment of <strong>${escapeHtml(amount)}</strong>.`],
+                facts: [{ label: 'Amount', value: amount, strong: true }, payBefore ? { label: 'Pay before', value: formatDay(payBefore) } : null, { label: 'Booking', value: bookingReference }],
+                cta: { label: 'Pay securely', url },
+                footer: escapeHtml(deadline)
+            })
+        };
+    },
+
     /** A guest paid by card through the gateway. */
     cardPaymentReceipt: ({ name, paymentReference, bookingReference, bookingType, amountCents, currency, maskedCard, cardType, paidAt, testMode, url }) => {
         const amount = formatMoney(amountCents, currency);
