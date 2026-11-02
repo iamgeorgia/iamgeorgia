@@ -4,6 +4,7 @@ import { BadRequestError, ConflictError, NotFoundError } from '../../lib/errors.
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { dateOnlyToUtc } from '../../lib/time.js';
 import { findUsablePolicy } from '../hotel/policyCatalog.service.js';
+import { resolveAssignablePolicy } from '../payments/payment-policies.service.js';
 import { lowestAdultSellCents } from './pricing.service.js';
 
 /**
@@ -16,6 +17,7 @@ import { lowestAdultSellCents } from './pricing.service.js';
 
 export const optionInclude = {
     cancellationPolicy: { include: { rules: { orderBy: { hoursBeforeCheckIn: 'desc' } } } },
+    paymentPolicy: true,
     seasons: {
         orderBy: [{ validFrom: 'asc' }, { priority: 'desc' }],
         include: { tiers: { orderBy: { minPax: 'asc' } } }
@@ -103,6 +105,7 @@ export const createTourOption = async (tourId, input, actor, req) =>
         const tour = await assertTour(tx, tourId);
 
         await resolveCancellationPolicy(tx, input.cancellationPolicyId);
+        await resolveAssignablePolicy(tx, input.paymentPolicyId, { productKind: 'TOUR', tourId });
 
         const existing = await tx.tourOption.count({ where: { tourId } });
 
@@ -144,6 +147,10 @@ export const updateTourOption = async (tourId, optionId, input, actor, req) =>
 
         if (input.cancellationPolicyId) {
             await resolveCancellationPolicy(tx, input.cancellationPolicyId);
+        }
+
+        if (input.paymentPolicyId !== undefined) {
+            await resolveAssignablePolicy(tx, input.paymentPolicyId, { productKind: 'TOUR', tourId });
         }
 
         // A change of kind without an explicit unit follows the kind, so a

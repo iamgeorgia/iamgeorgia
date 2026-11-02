@@ -79,6 +79,46 @@ export const refundPaymentSchema = z
     })
     .strict();
 
+// --- payment policy templates (tours, transfers, packages) ----------------------
+
+const TEMPLATE_KINDS = ['TOUR', 'TRANSFER', 'PACKAGE'];
+const TIMINGS = ['PAY_NOW', 'PAY_LATER', 'DEPOSIT', 'PAY_AT_HOTEL', 'CREDIT_ACCOUNT'];
+
+const templateFields = {
+    name: textField(120),
+    timing: z.enum(TIMINGS),
+    depositBps: z.number().int().min(0).max(10_000).nullish(),
+    balanceDueDaysBeforeCheckIn: z.number().int().min(0).max(365).nullish(),
+    unpaidCancelHours: z.number().int().min(1).max(720).nullish(),
+    cardOptional: z.boolean().optional(),
+    description: textField(1000).nullish(),
+    isActive: z.boolean().optional()
+};
+
+const depositNeedsBps = (policy) => policy.timing === undefined || policy.timing !== 'DEPOSIT' || (policy.depositBps ?? 0) > 0;
+
+export const paymentPolicyTemplateSchema = z
+    .object({ ...templateFields, productKind: z.enum(TEMPLATE_KINDS) })
+    .strict()
+    .refine(depositNeedsBps, { message: 'A deposit policy needs a deposit percentage', path: ['depositBps'] });
+
+export const paymentPolicyTemplateUpdateSchema = z
+    .object(Object.fromEntries(Object.entries(templateFields).map(([key, schema]) => [key, schema.optional()])))
+    .strict()
+    .refine((value) => Object.keys(value).length > 0, { message: 'Provide at least one field to update' })
+    .refine(depositNeedsBps, { message: 'A deposit policy needs a deposit percentage', path: ['depositBps'] });
+
+export const paymentPolicyTemplatesQuerySchema = z
+    .object({
+        productKind: z.enum(TEMPLATE_KINDS).optional(),
+        includeInactive: booleanQuery.optional()
+    })
+    .strict();
+
+/** Attaching a template to a transfer provider; null returns it to the platform default. */
+export const assignPaymentPolicySchema = z.object({ paymentPolicyId: idField.nullable() }).strict();
+export const providerIdParamSchema = z.object({ providerId: idField }).strict();
+
 /** Finance resolving a MISMATCH by hand. */
 export const resolveMismatchSchema = z
     .object({

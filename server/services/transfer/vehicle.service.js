@@ -66,6 +66,7 @@ export const visibilityScope = (viewer) => {
 export const listProviders = () =>
     prisma.transferProvider.findMany({
         where: { status: { not: 'ARCHIVED' } },
+        include: { paymentPolicy: true },
         orderBy: { name: 'asc' }
     });
 

@@ -5,6 +5,7 @@ import { toImageAsset } from './media.js';
 import { PACKAGE_TRANSLATABLE_FIELDS } from '../services/package/package.service.js';
 import { toOffer, toPoint } from './transfer.js';
 import { toTourSearchResult } from './tour.js';
+import { toPaymentPolicy } from './ratePlan.js';
 
 /**
  * Package responses.
@@ -150,6 +151,8 @@ export const toPackageDetail = (pkg, locale, viewer) => {
         images: (pkg.images ?? []).map(toPackageImage),
         components: (pkg.components ?? []).map((component) => toPackageComponent(component, viewer)),
         kosherProfile: toKosherProfile(pkg.kosher),
+        /** How a guest pays for the package; null = the platform default. Items keep their own rules. */
+        payment: pkg.paymentPolicy === undefined ? undefined : toPaymentPolicy(pkg.paymentPolicy),
         createdAt: pkg.createdAt,
         updatedAt: pkg.updatedAt
     };

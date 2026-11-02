@@ -2,7 +2,7 @@ import { toDateOnly } from '../lib/time.js';
 import { canViewMargin, canViewNetRates, isStaff } from '../middleware/auth.js';
 import { localise } from './localise.js';
 import { toImageAsset } from './media.js';
-import { toCancellationPolicy } from './ratePlan.js';
+import { toCancellationPolicy, toPaymentPolicy } from './ratePlan.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 import { TOUR_TRANSLATABLE_FIELDS } from '../services/tour/tour.service.js';
 
@@ -150,6 +150,8 @@ export const toTourOption = (option, viewer, tour) => ({
     horizonDays: option.horizonDays,
     sortOrder: option.sortOrder,
     cancellation: toCancellationPolicy(option.cancellationPolicy),
+    /** How a guest pays; null = the platform default for tours. */
+    payment: toPaymentPolicy(option.paymentPolicy ?? null),
     ...(canViewNetRates(viewer, tour)
         ? { seasons: (option.seasons ?? []).map((season) => toTourSeason(season, viewer, tour)) }
         : {})

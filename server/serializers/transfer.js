@@ -4,6 +4,7 @@ import { toLegAssignmentFor } from './dispatch.js';
 import { freeCancellationUntil } from '../services/hotel/policy.service.js';
 import { approvalOf } from '../lib/booking/approval.js';
 import { paymentBlock } from './booking.js';
+import { toPaymentPolicy } from './ratePlan.js';
 import { toDesk } from '../lib/booking/desk.js';
 
 /**
@@ -54,7 +55,9 @@ export const toProvider = (provider) => ({
     rating: provider.rating,
     reviewCount: provider.reviewCount,
     verified: provider.verified,
-    yearsActive: provider.yearsActive
+    yearsActive: provider.yearsActive,
+    /** How a guest pays for this provider's transfers; absent when not loaded, null = platform default. */
+    ...(provider.paymentPolicy === undefined ? {} : { payment: toPaymentPolicy(provider.paymentPolicy) })
 });
 
 /**

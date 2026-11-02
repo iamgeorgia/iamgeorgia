@@ -85,6 +85,8 @@ const packageFields = {
     nights: z.number().int().min(0).max(60),
     currency: currencyField.optional(),
     timezone: timezoneField.optional(),
+    // How a guest pays for the package: a PACKAGE template; null = the platform default.
+    paymentPolicyId: z.string().min(1).max(64).nullish(),
     b2cEnabled: z.boolean().default(false),
     featured: z.boolean().default(false),
     sortOrder: z.number().int().min(0).max(9999).optional(),

@@ -2312,16 +2312,16 @@ model CancellationRule {
 }
 
 model PaymentPolicy {
-  id          String          @id @default(cuid())
-  hotelId     String?         @map("hotel_id")
-  hotel       Hotel?          @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  id          String                @id @default(cuid())
+  hotelId     String?               @map("hotel_id")
+  hotel       Hotel?                @relation(fields: [hotelId], references: [id], onDelete: Cascade)
   /// A tour may own policies the way a hotel does. At most one owner (CHECK);
   /// none = a platform template, usable by every item of `productKind`.
-  tourId      String?         @map("tour_id")
-  tour        Tour?           @relation("TourPaymentPolicies", fields: [tourId], references: [id], onDelete: Cascade)
+  tourId      String?               @map("tour_id")
+  tour        Tour?                 @relation("TourPaymentPolicies", fields: [tourId], references: [id], onDelete: Cascade)
   /// Which product a template is for. Null = hotels (rows from before tours,
   /// packages and transfers had payment rules).
-  productKind FinanceProduct? @map("product_kind")
+  productKind PaymentPolicyProduct? @map("product_kind")
 
   name   String
   timing PaymentTiming
@@ -5452,6 +5452,18 @@ enum PaymentProvider {
   FLITT
 
   @@map("payment_provider")
+}
+
+/// What a payment policy template is for. Its own list rather than
+/// FinanceProduct, because a package is sold under a rule of its own while
+/// the ledger never bills a "package" (it bills the order's lines).
+enum PaymentPolicyProduct {
+  HOTEL
+  TOUR
+  TRANSFER
+  PACKAGE
+
+  @@map("payment_policy_product")
 }
 
 /// Which merchant credentials made the row. Test rows never carry real money

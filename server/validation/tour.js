@@ -217,6 +217,8 @@ const optionFields = {
     scheduleKind: z.enum(TOUR_SCHEDULE_KINDS).default('ON_DEMAND'),
     confirmationMode: z.enum(CONFIRMATION_MODES).default('INSTANT'),
     visibility: z.enum(VISIBILITIES).default('PUBLIC'),
+    // How a guest pays: a TOUR template or a tour-owned policy; null = the platform default.
+    paymentPolicyId: z.string().min(1).max(64).nullish(),
     minPax: z.number().int().min(1).max(500).default(1),
     maxPax: z.number().int().min(1).max(500),
     startTime: clockTimeField.nullish(),

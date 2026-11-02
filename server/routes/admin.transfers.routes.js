@@ -1,5 +1,8 @@
 import { Router } from 'express';
 
+import { assignPaymentPolicySchema, providerIdParamSchema } from '../validation/payments.js';
+import { setTransferProviderPaymentPolicy } from '../services/payments/payment-policies.service.js';
+
 import { authenticate, requireCapabilityByMethod } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import { validate } from '../middleware/validate.js';
@@ -151,6 +154,17 @@ adminTransferRoutes.get('/providers', async (_req, res) => {
     const providers = await listProviders();
 
     res.json({ data: providers.map(toProvider) });
+});
+
+/**
+ * The one thing editable on a provider from here: how its guests pay
+ * (docs/plans/FLITT_INTEGRATION_PLAN.md §4.4). A TRANSFER template, or null
+ * for the platform default.
+ */
+adminTransferRoutes.patch('/providers/:providerId', validate({ params: providerIdParamSchema, body: assignPaymentPolicySchema }), async (req, res) => {
+    const provider = await setTransferProviderPaymentPolicy(req.valid.params.providerId, req.valid.body.paymentPolicyId, req.user, req);
+
+    res.json(toProvider(provider));
 });
 
 /* --- Vehicle classes ----------------------------------------------------- */

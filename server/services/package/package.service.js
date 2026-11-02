@@ -4,6 +4,7 @@ import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { dateOnlyToUtc, todayInTimezone } from '../../lib/time.js';
 import { createGallery } from '../hotel/gallery.service.js';
 import { validateKosherTemplate } from './kosherEligibility.service.js';
+import { resolveAssignablePolicy } from '../payments/payment-policies.service.js';
 
 /**
  * Packages: the template record.
@@ -41,7 +42,8 @@ export const summaryInclude = (locale) => ({
 export const detailInclude = (locale) => ({
     ...summaryInclude(locale),
     images: { orderBy: { sortOrder: 'asc' }, include: { fileAsset: { include: { variants: true } } } },
-    components: { orderBy: { slotIndex: 'asc' }, include: componentInclude }
+    components: { orderBy: { slotIndex: 'asc' }, include: componentInclude },
+    paymentPolicy: true
 });
 
 const buildWhere = ({ search, status, b2cOnly, destinationId, destinationSlug, destinationPath, kosher, minNights, maxNights, featured, access }) => ({
@@ -262,6 +264,7 @@ export const createPackage = async (input, actor, req) =>
         const draft = { ...fields, timezone: input.timezone ?? destination.timezone, currency: input.currency ?? 'GEL' };
 
         await validateComponents(tx, draft, rows);
+        await resolveAssignablePolicy(tx, draft.paymentPolicyId, { productKind: 'PACKAGE' });
 
         const pkg = await tx.package.create({
             data: { ...draft, components: { create: rows } },
@@ -306,6 +309,10 @@ export const updatePackage = async (id, input, actor, req) =>
         const rows = components === undefined ? null : components.map(componentRow);
 
         await validateComponents(tx, merged, rows ?? current.components);
+
+        if (fields.paymentPolicyId !== undefined) {
+            await resolveAssignablePolicy(tx, fields.paymentPolicyId, { productKind: 'PACKAGE' });
+        }
 
         // Slots are replaced whole: an ordered list only makes sense as one.
         if (rows) {

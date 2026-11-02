@@ -17,6 +17,7 @@ import { adminInvoiceRoutes } from './admin.invoices.routes.js';
 import { invoiceOceanWebhookRoutes } from './integrations.invoiceocean.routes.js';
 import { paymentRoutes } from './payments.routes.js';
 import { adminPaymentRoutes } from './admin.payments.routes.js';
+import { adminPaymentPolicyRoutes } from './admin.payment-policies.routes.js';
 import { partnerFinanceRoutes } from './partner.finance.routes.js';
 import { adminNotificationRoutes } from './admin.notifications.routes.js';
 import { partnerNotificationRoutes } from './partner.notifications.routes.js';
@@ -123,6 +124,8 @@ routes.use('/integrations/invoiceocean', invoiceOceanWebhookRoutes);
 // mounted in app.js ahead of the limiter and the origin check.
 routes.use('/payments', paymentRoutes);
 routes.use('/admin/payments', adminPaymentRoutes);
+// Payment rules for tours, transfers and packages (hotels keep theirs under /admin/hotels).
+routes.use('/admin/payment-policies', adminPaymentPolicyRoutes);
 routes.use('/admin/notifications', adminNotificationRoutes);
 routes.use('/admin/outbox', adminOutboxRoutes);
 // Settings → Email. Its OAuth callback is the one admin route with no session.
