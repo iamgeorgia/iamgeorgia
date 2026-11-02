@@ -353,6 +353,7 @@ export const createTracker = () => {
                 if (orders.length > 0) {
                     const orderIds = orders.map(({ id }) => id);
 
+                    await prisma.bookingDeadline.deleteMany({ where: { product: 'ORDER', bookingId: { in: orderIds } } });
                     await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
                     await prisma.auditLog.deleteMany({ where: { entityId: { in: orderIds } } });
                 }
@@ -373,6 +374,7 @@ export const createTracker = () => {
                 if (bookings.length > 0) {
                     const bookingIds = bookings.map(({ id }) => id);
 
+                    await prisma.bookingDeadline.deleteMany({ where: { product: 'SERVICE', bookingId: { in: bookingIds } } });
                     await prisma.serviceBooking.deleteMany({ where: { id: { in: bookingIds } } });
                     await prisma.auditLog.deleteMany({ where: { entityId: { in: bookingIds } } });
                 }
@@ -400,6 +402,8 @@ export const createTracker = () => {
                         where: { bookingId: { in: bookingIds } },
                         data: { bookingId: null }
                     });
+                    // Deadlines point at bookings by id without a foreign key: dropped here, or they pile up.
+                    await prisma.bookingDeadline.deleteMany({ where: { product: 'HOTEL', bookingId: { in: bookingIds } } });
                     await prisma.hotelBooking.deleteMany({ where: { id: { in: bookingIds } } });
                     await prisma.auditLog.deleteMany({ where: { entityId: { in: bookingIds } } });
                 }
@@ -433,6 +437,7 @@ export const createTracker = () => {
             }
 
             if (transferBookingIds.size > 0) {
+                await prisma.bookingDeadline.deleteMany({ where: { product: 'TRANSFER', bookingId: { in: [...transferBookingIds] } } });
                 await prisma.transferBooking.deleteMany({ where: { id: { in: [...transferBookingIds] } } });
             }
 
@@ -455,6 +460,7 @@ export const createTracker = () => {
                 if (bookings.length > 0) {
                     const bookingIds = bookings.map(({ id }) => id);
 
+                    await prisma.bookingDeadline.deleteMany({ where: { product: 'TRANSFER', bookingId: { in: bookingIds } } });
                     await prisma.transferBooking.deleteMany({ where: { id: { in: bookingIds } } });
                     await prisma.auditLog.deleteMany({ where: { entityId: { in: bookingIds } } });
                 }
@@ -496,6 +502,7 @@ export const createTracker = () => {
                         where: { bookingId: { in: bookingIds } },
                         data: { bookingId: null }
                     });
+                    await prisma.bookingDeadline.deleteMany({ where: { product: 'TOUR', bookingId: { in: bookingIds } } });
                     await prisma.tourBooking.deleteMany({ where: { id: { in: bookingIds } } });
                     await prisma.auditLog.deleteMany({ where: { entityId: { in: bookingIds } } });
                 }
