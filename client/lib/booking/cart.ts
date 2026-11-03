@@ -147,6 +147,17 @@ export const cartCurrencies = (items: readonly CartItem[]): string[] => [
   ...new Set(items.map((item) => item.display.currency)),
 ];
 
+/**
+ * Whether the quote turned an item away only because its price has expired.
+ *
+ * Search hands out offers that hold their price for 30 minutes, while a cart
+ * is kept for days, so most items left overnight come back from the quote
+ * with `OFFER_EXPIRED`. That is not "no longer available": the dates may be
+ * wide open, and the traveller needs today's price, not a dead end.
+ */
+export const isExpiredOffer = (gone: { reason: string } | null | undefined): boolean =>
+  gone?.reason === "OFFER_EXPIRED";
+
 /** What the traveller saw when adding, summed. Never the figure that is charged. */
 export const cartSnapshotTotal = (items: readonly CartItem[]): number =>
   items.reduce((sum, item) => sum + item.display.priceCents, 0);

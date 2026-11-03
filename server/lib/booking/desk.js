@@ -1,4 +1,5 @@
 import { recordAudit } from '../audit.js';
+import { UnprocessableEntityError } from '../errors.js';
 
 /**
  * The desk's fields on a booking: what a manual booking carries beyond what
@@ -33,6 +34,23 @@ export const deskFrom = (input) =>
               priceAdjustmentReason: input.priceAdjustment?.reason ?? null
           }
         : EMPTY;
+
+/**
+ * A desk adjustment may take the price down to nothing, never below it: a
+ * negative total cannot be owed (the receivable's CHECK refuses it at the
+ * yes, leaving the booking stuck in approval), so it is refused here, before
+ * anything is written. `catalogueCents` is what the buyer would pay without it.
+ */
+export const assertAdjustedTotal = (catalogueCents, adjustmentCents) => {
+    if (catalogueCents + adjustmentCents < 0) {
+        throw new UnprocessableEntityError('The price adjustment takes the total below zero', {
+            reason: 'NEGATIVE_TOTAL',
+            field: 'priceAdjustment',
+            catalogueCents,
+            adjustmentCents
+        });
+    }
+};
 
 /** The columns `confirmXInTx` writes from a prepared booking. */
 export const deskColumns = (prepared, { adjustment = true } = {}) => {

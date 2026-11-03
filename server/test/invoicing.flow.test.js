@@ -684,4 +684,67 @@ describe('invoicing flows', { skip: dbAvailable ? false : 'Postgres is not reach
         assert.equal(vatByHand.body.invoice.fromInvoice.id, manual.body.invoice.id, 'chained to the live proforma');
         assert.equal(vatByHand.body.invoice.paidCents, 0);
     });
+
+    it('answers 400, not 500, to a date that does not exist, in the invoice list, on a document and in the reports (BUG-09)', async () => {
+        for (const from of ['2026-13-45', '2026-02-30']) {
+            const list = await request(app).get(`/api/admin/invoices?from=${from}`).set('Cookie', cookies.ACCOUNTANT);
+            assert.equal(list.status, 400, `${from}: ${JSON.stringify(list.body)}`);
+
+            const report = await request(app).get(`/api/admin/finance/reports/summary?from=${from}`).set('Cookie', cookies.ACCOUNTANT);
+            assert.equal(report.status, 400, `${from}: ${JSON.stringify(report.body)}`);
+        }
+
+        const range = await request(app).get('/api/admin/invoices?from=2026-02-28&to=2026-03-01').set('Cookie', cookies.ACCOUNTANT);
+        assert.equal(range.status, 200, JSON.stringify(range.body));
+
+        const booking = await booked();
+        const before = (await invoicesOf(booking.receivable.id)).length;
+        const dated = await request(app).post(`/api/admin/finance/receivables/${booking.receivable.id}/invoices`).set('Cookie', cookies.ACCOUNTANT).send({ kind: 'ADVANCE', dueDate: '2026-02-30' });
+        assert.equal(dated.status, 400, JSON.stringify(dated.body));
+        assert.equal((await invoicesOf(booking.receivable.id)).length, before, 'nothing written');
+    });
+
+    it('refuses hand-written lines that bill more than the receivable, and writes nothing (BUG-10)', async () => {
+        const booking = await booked();
+        const owed = booking.receivable.amountCents;
+        const before = (await invoicesOf(booking.receivable.id)).length;
+        const issueByHand = (lines) =>
+            request(app).post(`/api/admin/finance/receivables/${booking.receivable.id}/invoices`).set('Cookie', cookies.ACCOUNTANT).send({ kind: 'ADVANCE', lines });
+
+        // One line a cent over, and two lines that only add up to too much.
+        for (const lines of [
+            [{ description: 'Transfer', quantity: 1, totalGrossCents: owed + 1 }],
+            [{ description: 'Transfer', quantity: 1, totalGrossCents: owed }, { description: 'Extra', quantity: 1, totalGrossCents: 1 }],
+            [{ description: 'Proforma by hand', quantity: 1, totalGrossCents: 99_999_900 }]
+        ]) {
+            const refused = await issueByHand(lines);
+            assert.equal(refused.status, 422, JSON.stringify(refused.body));
+            assert.equal(refused.body.error.details.reason, 'LINES_EXCEED_RECEIVABLE');
+            assert.equal(refused.body.error.details.amountCents, owed);
+        }
+
+        assert.equal((await invoicesOf(booking.receivable.id)).length, before, 'nothing written, nothing sent to the provider');
+    });
+
+    it('keeps a multi-night line at its own total in the provider stub (TI-01)', async () => {
+        const res = await fetch(`${stub.url}/invoices.json`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                api_token: stub.apiToken,
+                invoice: {
+                    kind: 'proforma',
+                    oid: `TI01-${unique('x')}`,
+                    currency: 'GEL',
+                    positions: [
+                        { name: 'Room, two nights', quantity: 2, tax: '18', total_price_gross: '132.00' },
+                        { name: 'Transfer', quantity: 1, tax: '18', total_price_gross: '50.00' }
+                    ]
+                }
+            })
+        });
+        assert.equal(res.status, 201);
+        // `total_price_gross` is the line's total: 132.00 + 50.00, not 2 × 132.00 + 50.00.
+        assert.equal((await res.json()).price_gross, '182.00');
+    });
 });

@@ -998,6 +998,11 @@ export const en = {
       wasNow: "Was {was}, now {now}",
       priceMoved: "Price moved",
       unavailable: "No longer available",
+      priceExpired: "Price expired",
+      expiredNotice:
+        "Prices are held for 30 minutes after you add an item, and some of these have expired. Update each one to see today\u2019s price \u2014 the dates are kept.",
+      expiredItem: "This price has expired. Nothing is wrong with the booking itself: open it to see today\u2019s price and add it again.",
+      updatePrice: "Update price",
       includes: "Includes",
       remove: "Remove",
       removeItem: "Remove {title}",

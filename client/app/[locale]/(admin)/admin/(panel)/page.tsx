@@ -184,7 +184,7 @@ export default async function AdminOverviewPage() {
       )}
 
       {tiles > 0 && (
-        <div className={`mt-8 grid gap-4 sm:grid-cols-2 ${tiles >= 5 ? "xl:grid-cols-5" : tiles === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
+        <div className={`mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2 ${tiles >= 5 ? "xl:grid-cols-5" : tiles === 4 ? "xl:grid-cols-4" : "xl:grid-cols-3"}`}>
           {bookingSummary && (
             <BookingFiguresWidget summary={bookingSummary} arrivals={arrivals?.length ?? 0} showValue />
           )}
@@ -204,7 +204,7 @@ export default async function AdminOverviewPage() {
           <h2 id="overview-decide" className="text-[0.6875rem] font-semibold tracking-[0.16em] text-subtle uppercase">
             Needs a decision
           </h2>
-          <div className="mt-3 grid gap-6 xl:grid-cols-2">{decide.map(renderQueue)}</div>
+          <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-2">{decide.map(renderQueue)}</div>
         </section>
       )}
 
@@ -224,9 +224,14 @@ export default async function AdminOverviewPage() {
           <h2 id="overview-watch" className="text-[0.6875rem] font-semibold tracking-[0.16em] text-subtle uppercase">
             {decide.length > 0 ? "Keeping an eye on" : "Today"}
           </h2>
-          <div className="mt-3 grid gap-6 xl:grid-cols-3">
+          {/* `grid-cols-1` and the column's `min-w-0`: below `xl` the grid
+              has one implicit track, sized by the widest min-content inside
+              it, and a deadline's unbreakable "reference · title" line made
+              that 595px on a phone — the bookings table beside it stretched
+              to match and the deadlines lost their right edge. */}
+          <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-3">
             {latest && <LatestBookingsWidget bookings={latest} path={path} />}
-            <div className="flex flex-col gap-6">
+            <div className="flex min-w-0 flex-col gap-6">
               {arrivals && shown.has("arrivals") && <ArrivalsWidget arrivals={arrivals} path={path} />}
               {deadlinesUpcoming && (
                 <DeadlinesWeekWidget upcoming={deadlinesUpcoming} overdue={deadlinesOverdue?.total ?? 0} today={today} path={path} />

@@ -39,7 +39,11 @@ export function TourBookingActions({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  // A request that is part of an order is answered on the order, whose
+  // roll-up and single bill the server will not let this page bypass.
+  const inOrder = booking.payment?.via === "ORDER";
   const pending = booking.status === "PENDING";
+  const answerable = pending && !inOrder;
   const awaitingApproval = booking.status === "PENDING_APPROVAL";
   const cancellable = awaitingApproval || booking.status === "PENDING" || booking.status === "CONFIRMED";
   // Answering a request changes the booking; cancelling is its own right.
@@ -82,11 +86,15 @@ export function TourBookingActions({
         </p>
       )}
 
-      {pending && !canAnswer && (
+      {pending && inOrder && (
+        <p className="mt-4 text-[0.8125rem] text-muted">This request is part of an order. Answer it on the order&apos;s page.</p>
+      )}
+
+      {answerable && !canAnswer && (
         <ReadOnlyNote needs="bookings.write" what="Answering this request" className="mt-4" />
       )}
 
-      {pending && canAnswer && (
+      {answerable && canAnswer && (
         <div className="mt-4 flex flex-col gap-2">
           <button
             type="button"

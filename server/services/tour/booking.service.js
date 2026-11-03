@@ -17,7 +17,7 @@ import { sourceFor } from '../../lib/booking/source.js';
 import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
 import { CANCELLABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
 import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
-import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, assertAdjustedTotal, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
 import { syncBookingIndexInTx } from '../booking/index.service.js';
 import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { buildCancellationSchedule, calculateRefund } from '../hotel/policy.service.js';
@@ -162,6 +162,9 @@ export const prepareTourBooking = async (input, actor, { strict = true } = {}) =
         });
     }
 
+    const desk = deskFrom(input);
+    assertAdjustedTotal(priced.quote.totals.sellCents, desk.priceAdjustmentCents);
+
     return {
         kind: 'TOUR',
         hold,
@@ -183,7 +186,7 @@ export const prepareTourBooking = async (input, actor, { strict = true } = {}) =
         pickupNote: input.pickupNote ?? null,
         source: sourceFor(actor, input.channel ?? null),
         approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
-        desk: deskFrom(input),
+        desk,
         priceChanged,
         quotedCents,
         currentCents,
@@ -390,6 +393,11 @@ export const confirmTourBooking = async (input, actor, req) => {
     const prepared = await prepareTourBooking(input, actor);
 
     try {
+        // The budgets an order's confirmation has. Confirmations of one
+        // departure queue on its inventory row, and under Prisma's defaults
+        // (2 s to get a connection, 5 s to finish) the last of a burst of
+        // buyers was turned away with a 500 rather than served or told the
+        // seats were gone.
         const booking = await prisma.$transaction(async (tx) => {
             await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.priced.quote.totals.sellCents + prepared.desk.priceAdjustmentCents, currency: prepared.priced.quote.currency }, actor, req);
 
@@ -410,7 +418,7 @@ export const confirmTourBooking = async (input, actor, req) => {
             await enqueueEvent(tx, { topic: TOPICS.BOOKING_CREATED, payload: { product: 'TOUR', bookingId: created.id }, entityType: AUDIT_ENTITY.tourBooking, entityId: created.id });
 
             return tx.tourBooking.findUnique({ where: { id: created.id }, include: tourBookingInclude });
-        });
+        }, { timeout: config.order.txTimeoutMs, maxWait: config.order.txMaxWaitMs });
 
         return { booking, replayed: false };
     } catch (err) {
@@ -567,14 +575,15 @@ const CANCELLABLE_STATUSES = CANCELLABLE_BOOKING_STATUSES;
  */
 
 /**
- * A booking that belongs to an order is cancelled through the order, whose
- * roll-up and clawback must not be bypassed. 409 with the order reference.
+ * A booking that belongs to an order is cancelled — and its request answered —
+ * through the order, whose roll-up and clawback must not be bypassed. 409
+ * with the order reference.
  */
-const assertNotInOrder = async (client, column, bookingId) => {
+const assertNotInOrder = async (client, column, bookingId, message = 'This booking is part of an order; cancel it from the order') => {
     const item = await client.orderItem.findUnique({ where: { [column]: bookingId }, include: { order: { select: { reference: true } } } });
 
     if (item) {
-        throw new ConflictError('This booking is part of an order; cancel it from the order', {
+        throw new ConflictError(message, {
             reason: 'PART_OF_ORDER',
             orderReference: item.order.reference,
             slotIndex: item.slotIndex
@@ -602,16 +611,21 @@ export const cancelTourBookingInTx = async (tx, booking, { reason, waiveCharges 
         });
     }
 
-    const cancelled = await tx.tourBooking.update({
-        where: { id: booking.id },
-        data: {
-            status: 'CANCELLED',
-            cancelledAt: new Date(),
-            cancellationChargeCents: quote.chargeCents,
-            cancellationReason: reason ?? null
-        },
-        include: tourBookingInclude
-    });
+    // The status the charge was computed against is part of the WHERE, so two
+    // cancellations racing past the check above cannot both write: the second
+    // finds no row and rolls back, the seats it released with it.
+    const cancelled = await tx.tourBooking
+        .update({
+            where: { id: booking.id, status: booking.status },
+            data: {
+                status: 'CANCELLED',
+                cancelledAt: new Date(),
+                cancellationChargeCents: quote.chargeCents,
+                cancellationReason: reason ?? null
+            },
+            include: tourBookingInclude
+        })
+        .catch(statusChanged);
 
     await recordAudit(tx, {
         action: 'TOUR_BOOKING_CANCELLED',
@@ -777,11 +791,15 @@ export const rejectPendingTourBookingInTx = async (tx, booking, { reason, expire
 export const confirmPendingTourBookingInTx = async (tx, booking, actor, req) => {
     assertPending(booking);
 
-    const confirmed = await tx.tourBooking.update({
-        where: { id: booking.id },
-        data: { status: 'CONFIRMED', confirmedAt: new Date() },
-        include: tourBookingInclude
-    });
+    // Only a request still open is confirmed: a cancellation that got there
+    // first has released the seats, and a yes written over it would sell them.
+    const confirmed = await tx.tourBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING' },
+            data: { status: 'CONFIRMED', confirmedAt: new Date() },
+            include: tourBookingInclude
+        })
+        .catch(statusChanged);
 
     await recordAudit(tx, {
         action: 'TOUR_BOOKING_CONFIRMED',
@@ -812,18 +830,22 @@ export const declinePendingTourBookingInTx = async (tx, booking, { reason }, act
         });
     }
 
-    const declined = await tx.tourBooking.update({
-        where: { id: booking.id },
-        data: {
-            status: 'CANCELLED',
-            cancelledAt: new Date(),
-            declinedAt: new Date(),
-            declineReason: reason,
-            cancellationChargeCents: 0,
-            cancellationReason: reason
-        },
-        include: tourBookingInclude
-    });
+    // Conditional, like a cancellation: a second no, or one racing a yes or a
+    // cancellation, finds no open request and rolls back its release.
+    const declined = await tx.tourBooking
+        .update({
+            where: { id: booking.id, status: 'PENDING' },
+            data: {
+                status: 'CANCELLED',
+                cancelledAt: new Date(),
+                declinedAt: new Date(),
+                declineReason: reason,
+                cancellationChargeCents: 0,
+                cancellationReason: reason
+            },
+            include: tourBookingInclude
+        })
+        .catch(statusChanged);
 
     await recordAudit(tx, {
         action: 'TOUR_BOOKING_DECLINED',
@@ -854,9 +876,15 @@ const loadForOps = async (tx, reference) => {
 // The standalone answers tell the traveller; an order's answers are told by
 // the order (`ORDER_CONFIRMED`, `ORDER_ITEM_DECLINED`), which is why the
 // `…InTx` functions above write nothing to the outbox themselves.
+const ANSWER_FROM_ORDER = 'This booking is part of an order; answer it from the order';
+
 export const confirmPendingTourBooking = (reference, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const confirmed = await confirmPendingTourBookingInTx(tx, await loadForOps(tx, reference), actor, req);
+        const booking = await loadForOps(tx, reference);
+
+        await assertNotInOrder(tx, 'tourBookingId', booking.id, ANSWER_FROM_ORDER);
+
+        const confirmed = await confirmPendingTourBookingInTx(tx, booking, actor, req);
 
         await enqueueTravellerEvent(tx, confirmed, TOPICS.TOUR_BOOKING_CONFIRMED);
 
@@ -865,7 +893,11 @@ export const confirmPendingTourBooking = (reference, actor, req) =>
 
 export const declinePendingTourBooking = (reference, { reason }, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const declined = await declinePendingTourBookingInTx(tx, await loadForOps(tx, reference), { reason }, actor, req);
+        const booking = await loadForOps(tx, reference);
+
+        await assertNotInOrder(tx, 'tourBookingId', booking.id, ANSWER_FROM_ORDER);
+
+        const declined = await declinePendingTourBookingInTx(tx, booking, { reason }, actor, req);
 
         await enqueueTravellerEvent(tx, declined, TOPICS.TOUR_BOOKING_DECLINED, { reason });
 

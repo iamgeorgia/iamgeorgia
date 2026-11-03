@@ -68,7 +68,7 @@ export const readOfferToken = (token) => {
     // Offers go stale because rates and availability move underneath them. An
     // expired token is 410 rather than 400: it was real, and it is now spent.
     if (Date.now() - decoded.iat > config.hotel.offerTokenTtlMs) {
-        throw new GoneError('That offer has expired. Search again for current prices.');
+        throw new GoneError('That offer has expired. Search again for current prices.', { reason: 'OFFER_EXPIRED' });
     }
 
     return {

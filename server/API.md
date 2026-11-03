@@ -10,6 +10,11 @@ comes back, and which fields depend on who is asking.
   array for a 400, or a structured object for a domain conflict.
 - **Money is integer minor units** and always travels with a `currency`.
 - **Dates are `YYYY-MM-DD` strings**, never instants. Check-out is exclusive.
+  A date that does not exist on the calendar (`2026-13-45`, `2026-02-30`) is a
+  400 wherever a date is accepted, filters included.
+- A **503** with `Retry-After` means the database was too busy to start or
+  finish the request's transaction (Prisma `P2028`): nothing was written, and
+  the same request may be sent again.
 - Lists are `{ data, total, page, pageSize, totalPages }`.
 - Fields marked **staff** are *absent*, not null, unless the viewer is an admin
   or the supplier that owns the hotel.
@@ -731,11 +736,11 @@ References are `TUR-000001`. The same rules as hotel bookings: no amount in any 
 | --- | --- | --- |
 | POST | `/tours/bookings/holds` | `{ token }` → hold on the seats (15 min). 409 `UNAVAILABLE` if gone. |
 | DELETE | `/tours/bookings/holds/:token` | Always 204. |
-| POST | `/tours/bookings` | `{ holdToken \| offerToken, leadTraveller, travellers?, specialRequests?, pickupNote?, source? }`. 201, or 200 on replay. 409 `PRICE_CHANGED` / `UNAVAILABLE`, 410 spent token or hold. |
+| POST | `/tours/bookings` | `{ holdToken \| offerToken, leadTraveller, travellers?, specialRequests?, pickupNote?, source? }`. 201, or 200 on replay. 409 `PRICE_CHANGED` / `UNAVAILABLE`, 410 spent token or hold (an expired offer token carries `details.reason: OFFER_EXPIRED`, as do expired hotel, transfer and package tokens). |
 | GET | `/tours/bookings/:reference` | Detail from the snapshot. |
 | GET | `/tours/bookings/:reference/cancellation-quote` | Read off the frozen schedule. |
 | PATCH | `/tours/bookings/:reference` | Paperwork only: `leadTraveller`, `specialRequests`, `pickupNote`. |
-| POST | `/tours/bookings/:reference/cancel` | `{ reason?, email? }` |
+| POST | `/tours/bookings/:reference/cancel` | `{ reason?, email? }`. 409 `STATUS_CHANGED` when the booking was answered or cancelled while this request was in flight (a double click cancels once). |
 | GET | `/partner/tours/bookings` | Own bookings. `?status&tourId&from&to&search&page&pageSize` |
 
 **On request.** An option with `confirmationMode: ON_REQUEST` is written as `PENDING` with its seats already claimed and a `requestDeadlineAt` (48 h). The operator answers through the admin register; declining releases the seats and charges nothing, and a traveller may cancel a pending request at no charge. Operations are alerted when a deadline passes.
@@ -758,7 +763,7 @@ All under `/admin/tours`, admin only.
 | PUT | `…/options/:optionId/inventory` | `{ from, to, weekdays?, totalUnits?, blockedUnits?, stopSell?, departureTime?, note? }` — anything omitted keeps its value. 409 `OVERSELL` with the dates in the way. |
 | GET | `…/options/:optionId/inventory/calendar?from&to` | One row per departure with derived `availableUnits`. |
 | GET | `/admin/tours/bookings` · `/:reference` | Every tour booking. |
-| POST | `/admin/tours/bookings/:reference/confirm` · `/decline` (`{ reason }`) · `/cancel` | The operator's answer to a request, and cancellation. |
+| POST | `/admin/tours/bookings/:reference/confirm` · `/decline` (`{ reason }`) · `/cancel` | The operator's answer to a request, and cancellation. 409 `PART_OF_ORDER` `{ orderReference, slotIndex }` for a booking inside an order — answer it on the order (`/admin/orders/:reference/items/:slotIndex/confirm` · `/decline`). 409 `STATUS_CHANGED` when the request was answered or cancelled meanwhile. |
 
 Seeding: `node scripts/seed-tours.js` reads the ten editorial tours in `db/seed/tours.js` (prose in four languages), gives each a shared and a private option, a year of price sheets and departures, and publishes them. Requires `seed-reference.js` and `seed-catalogue.js` first.
 
@@ -785,7 +790,7 @@ Basis: `PER_PERSON` (units = pax), `PER_GROUP` (1), `PER_DAY` (days), `PER_PERSO
 | POST | `…/publish` · `/unpublish` · `/archive` | Publish answers 422 with `details.missing` until the checklist is clear. |
 | GET / PUT | `…/translations`, `…/translations/:locale` | Prose only. |
 | GET | `/admin/services/bookings` · `/:reference` · `…/cancellation-quote` | Every service booking. |
-| POST | `/admin/services/bookings/:reference/confirm` · `/decline` (`{ reason }`) · `/cancel` | The operator's answer to a request, and cancellation. |
+| POST | `/admin/services/bookings/:reference/confirm` · `/decline` (`{ reason }`) · `/cancel` | The operator's answer to a request, and cancellation. 409 `PART_OF_ORDER` `{ orderReference, slotIndex }` for a booking inside an order — answer it on the order. |
 
 ## Packages
 
@@ -869,10 +874,10 @@ Owner decision OD2 (2026-10-20): hotels, transfers, tours, services and whole pa
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| POST | `/orders/custom/quote` | `{ items, leadGuest? }` → `{ available, currency, startDate, endDate, items: [{ index, slotIndex, type, componentType, label, groupKey, quotedCents, currentCents, adjustmentCents, lineTotalCents, priceChanged, dates }], priceChanged, drifted, totals: { componentsSellCents, adjustmentCents, sellTotalCents } }` (staff with `finance.margin.read` also get `componentsNetCents`), or `{ available: false, reason: UNAVAILABLE \| MIXED_CURRENCY, … }`. Nothing is written. |
+| POST | `/orders/custom/quote` | `{ items, leadGuest? }` → `{ available, currency, startDate, endDate, items: [{ index, slotIndex, type, componentType, label, groupKey, quotedCents, currentCents, adjustmentCents, lineTotalCents, priceChanged, dates }], priceChanged, drifted, totals: { componentsSellCents, adjustmentCents, sellTotalCents } }` (staff with `finance.margin.read` also get `componentsNetCents`), or `{ available: false, reason: UNAVAILABLE \| MIXED_CURRENCY, … }`. An item turned away only because its offer token expired (30 minutes) is listed under `UNAVAILABLE` with `reason: OFFER_EXPIRED`, so the cart can ask for today's price rather than call it gone. Nothing is written. |
 | POST | `/orders/custom/holds` | `{ items }` → `{ holds: { "<index>": token \| { "<slot>": token } }, expiresAt }` — a hotel hold and a tour hold per such item (a package's holds nested per slot, as `/orders/holds` gives them). |
 | DELETE | `/orders/custom/holds` | `{ holds }` as returned. Always 204. |
-| POST | `/orders/custom` | `{ items, leadGuest, name?, travellers?, requests?, specialRequests? }`. 201 with the order detail, or 200 on replay (`Idempotency-Key`; else a hash of the items and the lead). 409 `UNAVAILABLE` `{ items: [{ index, type, reason }] }` and 409 `PRICE_CHANGED` `{ items: [{ index, type, quotedCents, currentCents }] }` name every item in the way; 422 `MIXED_CURRENCY` `{ currencies }`; 422 `EMPTY`. |
+| POST | `/orders/custom` | `{ items, leadGuest, name?, travellers?, requests?, specialRequests? }`. 201 with the order detail, or 200 on replay (`Idempotency-Key`; else a hash of the items and the lead). A cart of services only has no signed token, so its derived key is scoped to the signed-in partner or member of staff; a guest's cart of services replays only on an `Idempotency-Key`. With a derived key, a cart whose order was cancelled books a new order rather than replaying the cancelled one; with an `Idempotency-Key`, the original order is returned whatever became of it. 409 `UNAVAILABLE` `{ items: [{ index, type, reason }] }` and 409 `PRICE_CHANGED` `{ items: [{ index, type, quotedCents, currentCents }] }` name every item in the way; 422 `MIXED_CURRENCY` `{ currencies }`; 422 `EMPTY`. |
 
 **`items`** (1–20), each `{ type, label? , … }`: `HOTEL_STAY { offerToken, holdToken?, travellers?, requests?, specialRequests? }` · `TOUR { offerToken, holdToken?, travellers?, specialRequests? }` · `TRANSFER { quoteToken, flightNumber?, flights?, pickupAddress?, dropoffAddress?, pickupPlace?, dropoffPlace?, preferredDriverId?, preferredFleetVehicleId? }` · `SERVICE { serviceId, date, time?, days?, quantity?, pax?, quotedSellCents? }` · `PACKAGE { packageToken, holdTokens?, travellers?, requests?, flightNumber?, pickupAddress?, pickupPlace?, preferredDriverId?, preferredFleetVehicleId? }`. Per-item travellers and requests fall back to the order's. As everywhere: no amount.
 
@@ -935,9 +940,10 @@ Every booking and order detail and summary now carries two blocks:
 
 One list across hotels, transfers, tours, services and orders, read from the
 booking index (`booking_index`): a projection the services keep in step in
-the same transaction as every status, money and desk change, and that a daily
-reconcile (and `node scripts/backfill-booking-index.js`) rebuilds from the
-product tables. Children of an order are listed under their order unless
+the same transaction as every status, money and desk change, and that a
+reconcile — 30 seconds after the server starts, then daily — (and `node
+scripts/backfill-booking-index.js`) rebuilds from the product tables, dropping
+the rows and deadlines of bookings that no longer exist. Children of an order are listed under their order unless
 `children=true`.
 
 `GET /admin/bookings/all` (`bookings.read`) and `GET /partner/bookings/all`
@@ -976,16 +982,16 @@ A booking made at the desk — by phone, by email, through another agency, or fa
 | Method | Path | Notes |
 | --- | --- | --- |
 | POST | `/admin/bookings/manual` · `/admin/transfers/bookings/manual` · `/admin/tours/bookings/manual` · `/admin/services/bookings/manual` · `/admin/orders/manual` | `{ buyer, channel, confirmNow?, priceAdjustment?, assignedManagerUserId?, internalNotes?, booking }` where `booking` is the product's ordinary confirmation body (hold or offer token, lead guest, …) and answers the product's detail. 201, or 200 on replay (`Idempotency-Key`). |
-| POST | `/admin/orders/custom/manual` | The cart at the desk: the same envelope with `booking` = the `POST /orders/custom` body (`items`, `leadGuest`, …). Several products for one buyer as one CUSTOM order; `priceAdjustment` is spread over the standalone items (`adjustmentSource: "MANUAL"`) and audited once on the order. Works whether or not `CART_ENABLED` is on. |
+| POST | `/admin/orders/custom/manual` | The cart at the desk: the same envelope with `booking` = the `POST /orders/custom` body (`items`, `leadGuest`, …). Several products for one buyer as one CUSTOM order; `priceAdjustment` is spread over the standalone items (`adjustmentSource: "MANUAL"`) and audited once on the order. A discount larger than the standalone items can carry spills onto the package lines, so no line goes below zero; only a total below zero is refused (422 `NEGATIVE_TOTAL`). Works whether or not `CART_ENABLED` is on. |
 | PATCH | `…/:reference/desk` on the same five registers | `{ assignedManagerUserId?, internalNotes? }` — audited `BOOKING_MANAGER_ASSIGNED` / `BOOKING_NOTES_CHANGED`. The manager must be an active member of staff (422 `NOT_STAFF`). |
-| GET/POST | `/admin/customers` | `?q&kind&page&pageSize`; `{ kind: INDIVIDUAL \| COMPANY, name, contactName?, email, phone?, billingAddress?, city?, country?, taxId?, notes? }`. Read with `bookings.read`, written with `bookings.write`. |
+| GET/POST | `/admin/customers` | `?q&kind&page&pageSize`; `{ kind: INDIVIDUAL \| COMPANY, name, contactName?, email, phone?, billingAddress?, city?, country?, taxId?, notes? }`. Read with `bookings.read`, written with `bookings.write`. POST answers 201 with the new customer, or 200 with the existing one when a customer with exactly these details (email compared without case) is already on file — a double click or a retry writes one row. |
 | GET/PATCH | `/admin/customers/:id` | The customer with its bookings across every product. |
 
-**`buyer`** is `{ kind: "PARTNER", partnerId }` (the partner must be APPROVED, else 422 `PARTNER_INACTIVE`) or `{ kind: "CUSTOMER", customerId }` / `{ kind: "CUSTOMER", customer: { … } }` (created first, outside the booking's transaction, so a refused booking still leaves the customer to try again with). **`channel`** is `PHONE | EMAIL | EXTERNAL_AGENCY | DIRECT` and becomes the booking's `source`.
+**`buyer`** is `{ kind: "PARTNER", partnerId }` (the partner must be APPROVED, else 422 `PARTNER_INACTIVE`) or `{ kind: "CUSTOMER", customerId }` / `{ kind: "CUSTOMER", customer: { … } }` (created first, outside the booking's transaction, so a refused booking still leaves the customer to try again with; the same description again — a retry, a replay on the `Idempotency-Key` — reuses that customer rather than writing another). **`channel`** is `PHONE | EMAIL | EXTERNAL_AGENCY | DIRECT` and becomes the booking's `source`.
 
 **Searching as the buyer.** An offer token is priced for the viewer it was issued to, so a booking for a partner is searched as that partner: the desk sends `X-Act-As-Partner: <partnerId>` on `/search/*`, `/transfers/quotes`, `/tours/*`, `/packages/*`, `/orders/custom/quote` and `/orders/custom/holds`, and is that partner for the request (`bookings.write` only; anyone else is 403 `ACT_AS_FORBIDDEN`). A customer with no account is searched as the member of staff: trade inventory at the default markup, which is the desk's prerogative and is audited with the booking.
 
-**Price (OD3).** `priceAdjustment: { cents, reason }` is a signed figure on top of the catalogue price, never a replacement of it: the row keeps `sellTotalCents`, rooms and nights still add up, the cancellation schedule still reads the catalogue sell, and the buyer's `totalCents`, the receivable and a cancellation refund are the catalogue price plus the adjustment (`lib/booking/desk.js`). Audited `BOOKING_PRICE_ADJUSTED` with both figures and the reason. 403 with `details.fields: ["priceAdjustment"]` without the capability.
+**Price (OD3).** `priceAdjustment: { cents, reason }` is a signed figure on top of the catalogue price, never a replacement of it: the row keeps `sellTotalCents`, rooms and nights still add up, the cancellation schedule still reads the catalogue sell, and the buyer's `totalCents`, the receivable and a cancellation refund are the catalogue price plus the adjustment (`lib/booking/desk.js`). Audited `BOOKING_PRICE_ADJUSTED` with both figures and the reason. 403 with `details.fields: ["priceAdjustment"]` without the capability. 422 `NEGATIVE_TOTAL` `{ field: "priceAdjustment", catalogueCents, adjustmentCents }` when the adjustment would take the total below zero (down to zero is allowed); nothing is written. On a package order (`/admin/orders/manual`) the adjustment is spread over the package's lines and lands on the order's total, its receivable and the credit check, as on the cart.
 
 **The desk block.** Staff who may see the buyer (`partners.read`) get `desk` on every booking and order: `{ source, customer, assignedManager, internalNotes, priceAdjustment }` — on an order without `priceAdjustment`, whose adjustment lives on its items (`adjustmentSource: "MANUAL"`). A partner or a guest never sees it. A customer who owes money is the receivable's `debtorCustomerId` (`debtor.customer` on the finance serializers) and gets its own client record at the invoicing provider, filed under `customer:<id>`.
 
@@ -1659,7 +1665,7 @@ except the hand-issue route, which lives on the receivable it is for:
 | POST | `/admin/invoices/:id/send` | `{ to?: email }` — the buyer's address on the document when omitted. 202 `{ invoice, queued: true }`; InvoiceOcean sends it. 409 `NOT_ISSUED` unless `ISSUED`, `SENT`, `PAID` or `PARTIAL` |
 | POST | `/admin/invoices/:id/cancel` | `{ reason? }`. 200 with the invoice, `CANCELLED` here at once and at the provider through the outbox. A proforma only (409 `NOT_A_PROFORMA`: a VAT invoice is corrected, never cancelled), from `DRAFT`, `ISSUED`, `SENT`, `PARTIAL` or `ERROR` (409 `NOT_CANCELLABLE` once paid or already cancelled) |
 | POST | `/admin/invoices/:id/retry` | 202 `{ invoice, queued: true }`. `ERROR` only (409 `NOT_FAILED`); 409 `LIVE_INVOICE_EXISTS` if a live document of that kind appeared meanwhile |
-| POST | `/admin/finance/receivables/:id/invoices` | `{ kind: PROFORMA \| VAT \| ADVANCE \| FINAL, lang?, dueDate?: YYYY-MM-DD \| null, taxRateBps?, lines?: [{ description, quantity?, taxRateBps?, totalGrossCents }] }` — for a booking confirmed before invoicing was on, or after a failed one was cancelled. Lines default to the booking's own (one per package part when they add up); hand-written lines must add up to a positive amount (D4: the rate may differ per line). 202 `{ invoice, queued: true }`. 422 `NOTHING_OWED` (amount 0, `VOID` or `WAIVED`); 409 `LIVE_INVOICE_EXISTS` with the existing `invoiceId` |
+| POST | `/admin/finance/receivables/:id/invoices` | `{ kind: PROFORMA \| VAT \| ADVANCE \| FINAL, lang?, dueDate?: YYYY-MM-DD \| null, taxRateBps?, lines?: [{ description, quantity?, taxRateBps?, totalGrossCents }] }` — for a booking confirmed before invoicing was on, or after a failed one was cancelled. Lines default to the booking's own (one per package part when they add up); hand-written lines must add up to a positive amount and to no more than the receivable's `amountCents` (D4: the rate may differ per line; 422 `LINES_EXCEED_RECEIVABLE` `{ field: "lines", linesCents, amountCents, currency }`). 202 `{ invoice, queued: true }`. 422 `NOTHING_OWED` (amount 0, `VOID` or `WAIVED`); 409 `LIVE_INVOICE_EXISTS` with the existing `invoiceId` |
 
 A staff invoice: `{ id, provider, kind, status, number, externalId,
 currency, lang, totalCents, paidCents, issueDate, sellDate, dueDate, buyer

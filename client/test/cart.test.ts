@@ -9,6 +9,7 @@ import {
   cartPayloads,
   cartSnapshotTotal,
   createCartStore,
+  isExpiredOffer,
   parseCart,
   type CartItem,
   type CartStorage,
@@ -251,5 +252,20 @@ describe("parseCart (versioning)", () => {
     const store = createCartStore(() => storage);
     assert.deepEqual(store.snapshot().items, []);
     assert.equal(storage.map.get(CART_STORAGE_KEY), newer);
+  });
+});
+
+describe("isExpiredOffer (BUG-06)", () => {
+  it("tells an expired price apart from an item that is gone", () => {
+    // What the quote says of an item whose 30-minute offer token ran out.
+    assert.equal(isExpiredOffer({ reason: "OFFER_EXPIRED" }), true);
+
+    // Everything else that turns an item away still reads as unavailable.
+    for (const reason of ["UNAVAILABLE", "SOLD_OUT", "PAST", "HOLD_EXPIRED", "NOT_FOUND", "PARTY_SIZE"]) {
+      assert.equal(isExpiredOffer({ reason }), false, reason);
+    }
+
+    assert.equal(isExpiredOffer(null), false);
+    assert.equal(isExpiredOffer(undefined), false);
   });
 });

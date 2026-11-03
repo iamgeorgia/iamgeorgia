@@ -22,7 +22,7 @@ import { sourceFor } from '../../lib/booking/source.js';
 import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
 import { AMENDABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
 import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
-import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, assertAdjustedTotal, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
 import { syncBookingIndexInTx } from '../booking/index.service.js';
 import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { revalidateOffer } from './search.service.js';
@@ -274,6 +274,9 @@ export const prepareHotelBooking = async (input, actor, { strict = true } = {}) 
     // unpick, and this is a read that has no business inside the transaction.
     await assertRequestsSupported(prisma, hotel.id, input.requests);
 
+    const desk = deskFrom(input);
+    assertAdjustedTotal(priced.quote.totals.sellCents + priced.quote.totals.taxIncludedCents, desk.priceAdjustmentCents);
+
     return {
         kind: 'HOTEL',
         hold,
@@ -295,7 +298,7 @@ export const prepareHotelBooking = async (input, actor, { strict = true } = {}) 
         // Whether this booking waits for the platform's yes (OD1), decided
         // once here so the write below and the facade's email agree.
         approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
-        desk: deskFrom(input),
+        desk,
         priceChanged,
         quotedCents,
         currentCents,

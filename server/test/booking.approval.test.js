@@ -8,7 +8,10 @@ import { prisma, disconnect } from '../db/index.js';
 import { clearOutbox, outbox } from '../lib/mailer/index.js';
 import { dateOnlyToUtc } from '../lib/time.js';
 import { processEvent } from '../services/notifications/outbox.service.js';
-import { sweepBookingApprovals } from '../services/booking/approval.service.js';
+import { rejectBooking, sweepBookingApprovals } from '../services/booking/approval.service.js';
+import { reconcileInventory } from '../services/hotel/availability.service.js';
+import { reconcileTourInventory } from '../services/tour/availability.service.js';
+import { ConflictError } from '../lib/errors.js';
 import {
     createTracker,
     databaseAvailable,
@@ -265,9 +268,9 @@ describe('booking approval', { skip: dbAvailable ? false : 'Postgres is not reac
     });
 
     describe('a transfer booking', () => {
-        const bookTransfer = async () => {
+        const bookTransfer = async (trip = {}) => {
             const leg = await makeTransferLeg(tracker, { destination });
-            const query = new URLSearchParams({ from: leg.from.slug, to: leg.to.slug, date: futureDate(10), time: '09:00', adults: '2', luggage: '2' });
+            const query = new URLSearchParams({ from: leg.from.slug, to: leg.to.slug, date: futureDate(10), time: '09:00', adults: '2', luggage: '2', ...trip });
             const quotes = await request(app).get(`/api/transfers/quotes?${query}`).set('Cookie', partnerCookie);
             const offer = quotes.body.offers.find((entry) => entry.vehicle.slug === leg.vehicle.slug);
             assert.ok(offer, 'the fixture vehicle should be quotable');
@@ -300,6 +303,29 @@ describe('booking approval', { skip: dbAvailable ? false : 'Postgres is not reac
 
             const boardAfter = await request(app).get(`/api/admin/transfers/dispatch/legs?search=${booking.reference}`).set('Cookie', adminCookie);
             assert.equal(boardAfter.body.data.length, 1, 'dispatch sees it now');
+        });
+
+        const queueRow = async (reference) => {
+            const queue = await request(app).get(`/api/admin/booking-approvals?product=TRANSFER&search=${reference}`).set('Cookie', adminCookie);
+            assert.equal(queue.status, 200, JSON.stringify(queue.body));
+
+            return queue.body.data.find((entry) => entry.reference === reference);
+        };
+
+        it('sits in the queue dated by its pick-up day, as a calendar date like every other row', async () => {
+            const { booking } = await bookTransfer();
+
+            const row = await queueRow(booking.reference);
+            assert.ok(row, 'the booking is in the queue');
+            assert.deepEqual(row.when, { from: futureDate(10), to: futureDate(10) });
+        });
+
+        it('runs to the return pick-up day when there is one', async () => {
+            const { booking } = await bookTransfer({ tripType: 'RETURN', returnDate: futureDate(12), returnTime: '18:00' });
+
+            const row = await queueRow(booking.reference);
+            assert.ok(row, 'the booking is in the queue');
+            assert.deepEqual(row.when, { from: futureDate(10), to: futureDate(12) });
         });
     });
 
@@ -426,6 +452,165 @@ describe('booking approval', { skip: dbAvailable ? false : 'Postgres is not reac
             await processAll(row.id);
             assert.equal(mailsTo(row.leadEmail, 'bookingRejected').length, 1);
             assert.equal(mailsTo(row.leadEmail, 'orderCancelled').length, 0, 'one note, not two');
+        });
+    });
+
+    describe('an order decided twice at once', () => {
+        /**
+         * A cart of one tour for two, on a departure where somebody else
+         * already holds two seats: with nobody else on it, a second release
+         * would trip the counter's own floor and hide the double count.
+         */
+        const tourOrder = async () => {
+            const { tour, option } = await makeTourDeparture(tracker, { destination, date: TOUR_DATE });
+            const offerToken = async () => {
+                const search = await request(app).get(`/api/search/tours/${tour.slug}?date=${TOUR_DATE}&adults=2`).set('Cookie', partnerCookie);
+                assert.equal(search.status, 200, JSON.stringify(search.body));
+
+                return search.body.options[0].dates[0].token;
+            };
+
+            const other = await request(app).post('/api/tours/bookings').set('Cookie', partnerCookie).send({ offerToken: await offerToken(), leadTraveller: lead() });
+            assert.equal(other.status, 201, JSON.stringify(other.body));
+
+            const cart = await request(app)
+                .post('/api/orders/custom')
+                .set('Cookie', partnerCookie)
+                .send({ items: [{ type: 'TOUR', offerToken: await offerToken() }], leadGuest: lead() });
+            assert.equal(cart.status, 201, JSON.stringify(cart.body));
+            assert.equal(cart.body.status, 'PENDING_APPROVAL');
+
+            const bookedUnits = async () =>
+                (await prisma.tourInventory.findUnique({ where: { tourOptionId_date: { tourOptionId: option.id, date: dateOnlyToUtc(TOUR_DATE) } } })).bookedUnits;
+            assert.equal(await bookedUnits(), 4, 'two seats for the other booking, two for the order');
+
+            const row = await prisma.order.findUnique({ where: { reference: cart.body.reference } });
+
+            return { order: cart.body, row, bookedUnits };
+        };
+
+        const statuses = (responses) => responses.map((response) => response.status).sort();
+        const cancel = (reference) => request(app).post(`/api/orders/${reference}/cancel`).set('Cookie', partnerCookie).send({ reason: 'Plans changed' });
+
+        it('gives the seats back once when two people say no at the same moment', async () => {
+            const { order, row, bookedUnits } = await tourOrder();
+
+            const answers = await Promise.all([reject('ORDER', order.reference, 'First no'), reject('ORDER', order.reference, 'Second no')]);
+            assert.deepEqual(statuses(answers), [200, 409], JSON.stringify(answers.map((answer) => answer.body)));
+            assert.equal(answers.find((answer) => answer.status === 409).body.error.details.reason, 'NOT_PENDING_APPROVAL');
+
+            assert.equal(await bookedUnits(), 2, "the other booking's seats stay taken");
+            assert.equal(await prisma.auditLog.count({ where: { entityId: row.id, action: 'BOOKING_REJECTED' } }), 1);
+            assert.equal((await eventsFor(row.id)).filter((event) => event.topic === 'booking.rejected').length, 1, 'the buyer is told once');
+        });
+
+        it('lets only one of a yes and a no through', async () => {
+            const { order, row, bookedUnits } = await tourOrder();
+
+            const answers = await Promise.all([approve('ORDER', order.reference), reject('ORDER', order.reference)]);
+            assert.deepEqual(statuses(answers), [200, 409], JSON.stringify(answers.map((answer) => answer.body)));
+
+            const decided = await prisma.order.findUnique({ where: { id: row.id }, include: { receivable: true, items: { include: { tourBooking: true } } } });
+            assert.ok(!(decided.approvedAt && decided.rejectedAt), 'never both approved and rejected');
+
+            if (decided.approvedAt) {
+                assert.equal(decided.status, 'CONFIRMED');
+                assert.equal(decided.receivable.status, 'OPEN');
+                assert.ok(decided.items.every((item) => item.status === 'CONFIRMED' && item.tourBooking.rejectedAt === null));
+                assert.equal(await bookedUnits(), 4);
+            } else {
+                assert.equal(decided.status, 'CANCELLED');
+                assert.equal(decided.receivable, null);
+                assert.ok(decided.items.every((item) => item.status === 'CANCELLED' && item.tourBooking.approvedAt === null));
+                assert.equal(await bookedUnits(), 2);
+            }
+        });
+
+        it('is expired once when two sweepers reach it at the same moment', async () => {
+            const { row, bookedUnits } = await tourOrder();
+
+            // What the sweeper calls for an order whose start has passed, twice at once.
+            const expire = () => rejectBooking('ORDER', row.id, { reason: 'The service date passed before the booking was approved', expired: true }, null, null);
+            const results = await Promise.allSettled([expire(), expire()]);
+
+            assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+            const refused = results.find((result) => result.status === 'rejected');
+            assert.ok(refused.reason instanceof ConflictError, String(refused.reason));
+            assert.equal(await bookedUnits(), 2);
+            assert.equal(await prisma.auditLog.count({ where: { entityId: row.id, action: 'BOOKING_APPROVAL_EXPIRED' } }), 1);
+        });
+
+        it('is cancelled once by a double click, waiting or confirmed', async () => {
+            const waiting = await tourOrder();
+
+            const withdrawn = await Promise.all([cancel(waiting.order.reference), cancel(waiting.order.reference)]);
+            assert.deepEqual(statuses(withdrawn), [200, 409], JSON.stringify(withdrawn.map((answer) => answer.body)));
+            assert.equal(withdrawn.find((answer) => answer.status === 409).body.error.details.reason, 'NOT_CANCELLABLE');
+            assert.equal(await waiting.bookedUnits(), 2);
+            assert.equal(await prisma.auditLog.count({ where: { entityId: waiting.row.id, action: 'ORDER_CANCELLED' } }), 1);
+
+            const confirmed = await tourOrder();
+            assert.equal((await approve('ORDER', confirmed.order.reference)).status, 200);
+
+            const cancelled = await Promise.all([cancel(confirmed.order.reference), cancel(confirmed.order.reference)]);
+            assert.deepEqual(statuses(cancelled), [200, 409], JSON.stringify(cancelled.map((answer) => answer.body)));
+            assert.equal(await confirmed.bookedUnits(), 2);
+            assert.equal(await prisma.auditLog.count({ where: { entityId: confirmed.row.id, action: 'ORDER_CANCELLED' } }), 1);
+            assert.equal((await eventsFor(confirmed.row.id)).filter((event) => event.topic === 'order.cancelled').length, 1, 'the buyer is told once');
+        });
+    });
+
+    describe('a tour booking withdrawn while it is refused', () => {
+        it('gives its seats back once, whichever lands first', async () => {
+            const { tour, option } = await makeTourDeparture(tracker, { destination, date: TOUR_DATE });
+            const book = async () => {
+                const search = await request(app).get(`/api/search/tours/${tour.slug}?date=${TOUR_DATE}&adults=2`).set('Cookie', partnerCookie);
+                const response = await request(app).post('/api/tours/bookings').set('Cookie', partnerCookie).send({ offerToken: search.body.options[0].dates[0].token, leadTraveller: lead() });
+                assert.equal(response.status, 201, JSON.stringify(response.body));
+                return response.body;
+            };
+            const bookedUnits = async () =>
+                (await prisma.tourInventory.findUnique({ where: { tourOptionId_date: { tourOptionId: option.id, date: dateOnlyToUtc(TOUR_DATE) } } })).bookedUnits;
+
+            await book();
+            const target = await book();
+            assert.equal(target.status, 'PENDING_APPROVAL');
+            assert.equal(await bookedUnits(), 4);
+
+            const answers = await Promise.all([
+                request(app).post(`/api/tours/bookings/${target.reference}/cancel`).set('Cookie', partnerCookie).send({ reason: 'Plans changed' }),
+                reject('TOUR', target.reference)
+            ]);
+
+            assert.deepEqual(answers.map((answer) => answer.status).sort(), [200, 409], JSON.stringify(answers.map((answer) => answer.body)));
+            assert.equal(await bookedUnits(), 2);
+            assert.equal((await prisma.tourBooking.findUnique({ where: { reference: target.reference } })).status, 'CANCELLED');
+        });
+    });
+
+    describe('the inventory reconcile (RA-05)', () => {
+        it('counts a booking waiting for approval as holding its seats and rooms, and repairs nothing', async () => {
+            const { tour, option } = await makeTourDeparture(tracker, { destination, date: TOUR_DATE });
+            const search = await request(app).get(`/api/search/tours/${tour.slug}?date=${TOUR_DATE}&adults=2`).set('Cookie', partnerCookie);
+            assert.equal(search.status, 200, JSON.stringify(search.body));
+            const booked = await request(app).post('/api/tours/bookings').set('Cookie', partnerCookie).send({ offerToken: search.body.options[0].dates[0].token, leadTraveller: lead() });
+            assert.equal(booked.status, 201, JSON.stringify(booked.body));
+            assert.equal(booked.body.status, 'PENDING_APPROVAL');
+
+            const seats = async () => (await prisma.tourInventory.findUnique({ where: { tourOptionId_date: { tourOptionId: option.id, date: dateOnlyToUtc(TOUR_DATE) } } })).bookedUnits;
+            assert.equal(await seats(), 2, 'the seats are claimed while the platform decides');
+
+            // Before the fix: drift "2 → 0", and `apply` put both seats back on sale.
+            assert.deepEqual((await reconcileTourInventory({ tourOptionIds: [option.id] })).drift, []);
+            assert.equal((await reconcileTourInventory({ tourOptionIds: [option.id], apply: true })).repaired, 0);
+            assert.equal(await seats(), 2, 'apply leaves the waiting booking its seats');
+
+            // The same for a hotel: the waiting booking's room is counted, not repaired away.
+            const { roomType } = await bookHotel();
+            assert.equal((await roomInventory(roomType.id)).bookedUnits, 1);
+            assert.deepEqual((await reconcileInventory({ roomTypeIds: [roomType.id] })).drift, []);
+            assert.equal((await reconcileInventory({ roomTypeIds: [roomType.id], apply: true })).repaired, 0);
+            assert.equal((await roomInventory(roomType.id)).bookedUnits, 1);
         });
     });
 

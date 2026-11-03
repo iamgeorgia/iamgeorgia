@@ -749,6 +749,23 @@ export const requestInvoice = async (receivableId, { kind, lang, dueDate, lines:
             ? customLines.map((line) => ({ kind: 'MANUAL', description: line.description, quantity: line.quantity, taxRateBps: line.taxRateBps === undefined ? settings().defaultTaxBps : line.taxRateBps, totalGrossCents: line.totalGrossCents, bookingReference: receivable.reference }))
             : buildLines(receivable, { taxRateBps: taxRateBps ?? settings().defaultTaxBps });
 
+        // Hand-written lines may describe and tax the debt differently (D4),
+        // never ask for more than it: a document is issued against this
+        // receivable, and what it bills cannot exceed what is owed under it.
+        if (customLines?.length) {
+            const linesCents = lines.reduce((sum, line) => sum + line.totalGrossCents, 0);
+
+            if (linesCents > receivable.amountCents) {
+                throw new UnprocessableEntityError('The lines add up to more than this receivable', {
+                    reason: 'LINES_EXCEED_RECEIVABLE',
+                    field: 'lines',
+                    linesCents,
+                    amountCents: receivable.amountCents,
+                    currency: receivable.currency
+                });
+            }
+        }
+
         const chained = CHAINED_KINDS.includes(kind);
         const from = chained ? receivable.invoices.find((invoice) => invoice.kind === 'PROFORMA') ?? null : null;
         const paid = chained && receivable.status === 'PAID' ? receivable.amountCents : chained ? Math.min(receivable.paidCents, receivable.amountCents) : 0;

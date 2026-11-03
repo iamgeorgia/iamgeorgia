@@ -147,6 +147,45 @@ describe('orders on request', { skip: dbAvailable ? false : 'Postgres is not rea
         assert.equal(event.payload.slotIndex, 3);
     });
 
+    it('answers a child of an order only through the order: the tour and service pages refuse it', async () => {
+        const { order, tour } = await makeOrder();
+        const trek = order.items.find((item) => item.componentType === 'TOUR');
+        const dinner = order.items.find((item) => item.componentType === 'SERVICE');
+        assert.equal(trek.status, 'REQUESTED');
+        assert.equal(dinner.status, 'REQUESTED');
+        const seats = (await inventoryOf(tour)).bookedUnits;
+
+        for (const [path, body] of [
+            [`/api/admin/tours/bookings/${trek.booking.reference}/confirm`, {}],
+            [`/api/admin/tours/bookings/${trek.booking.reference}/decline`, { reason: 'Asked directly' }],
+            [`/api/admin/services/bookings/${dinner.booking.reference}/confirm`, {}],
+            [`/api/admin/services/bookings/${dinner.booking.reference}/decline`, { reason: 'Asked directly' }]
+        ]) {
+            const refused = await request(app).post(path).set('Cookie', adminCookie).send(body);
+            assert.equal(refused.status, 409, `${path}: ${JSON.stringify(refused.body)}`);
+            assert.equal(refused.body.error.details.reason, 'PART_OF_ORDER');
+            assert.equal(refused.body.error.details.orderReference, order.reference);
+        }
+
+        // Nothing moved: the children still wait, and so do their items and the seats.
+        const row = await prisma.order.findUnique({ where: { reference: order.reference }, include: { items: { include: { tourBooking: true, serviceBooking: true } } } });
+        assert.equal(row.status, 'PENDING_CONFIRMATION');
+        assert.equal(row.items.find((item) => item.componentType === 'TOUR').tourBooking.status, 'PENDING');
+        assert.equal(row.items.find((item) => item.componentType === 'SERVICE').serviceBooking.status, 'PENDING');
+        assert.ok(row.items.filter((item) => ['TOUR', 'SERVICE'].includes(item.componentType)).every((item) => item.status === 'REQUESTED'));
+        assert.equal((await inventoryOf(tour)).bookedUnits, seats);
+
+        // The order's own answers still work, and the order settles.
+        const confirmed = await request(app).post(`/api/admin/orders/${order.reference}/items/${trek.slotIndex}/confirm`).set('Cookie', adminCookie).send({});
+        assert.equal(confirmed.status, 200, JSON.stringify(confirmed.body));
+        const declined = await request(app)
+            .post(`/api/admin/orders/${order.reference}/items/${dinner.slotIndex}/decline`)
+            .set('Cookie', adminCookie)
+            .send({ reason: 'No caterer that night' });
+        assert.equal(declined.status, 200, JSON.stringify(declined.body));
+        assert.equal(declined.body.status, 'CONFIRMED');
+    });
+
     it('cancels the whole order at no charge when a required item is declined', async () => {
         const { order, tour, hotel } = await makeOrder({ serviceOnRequest: false });
 

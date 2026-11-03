@@ -25,6 +25,7 @@ import {
   cartCurrencies,
   cartPayloads,
   cartSnapshotTotal,
+  isExpiredOffer,
   removeFromCart,
   type CartItem,
 } from "@/lib/booking/cart";
@@ -190,9 +191,13 @@ export function CartView() {
     fresh && !fresh.available && fresh.reason === "MIXED_CURRENCY"
       ? fresh.currencies.join(", ")
       : currencies.join(", ");
-  const anyGone = goneByIndex.size > 0;
+  // An expired price and a sold-out date both stop checkout, but they are
+  // told apart: one needs today's price, the other needs removing.
+  const goneItems = [...goneByIndex.values()];
+  const anyExpired = goneItems.some(isExpiredOffer);
+  const anyGone = goneItems.some((gone) => !isExpiredOffer(gone));
   const anyMoved = fresh?.available === true && fresh.priceChanged;
-  const canCheckout = !quoting && !mixed && !anyGone;
+  const canCheckout = !quoting && !mixed && goneByIndex.size === 0;
 
   const money = (cents: number, code = currency ?? "GEL") => formatMoney(cents, code, intlLocale);
 
@@ -210,6 +215,7 @@ export function CartView() {
             <Notice tone="error">{fill(t.orders.cart.currencyGuard, { currencies: mixedList })}</Notice>
           )}
           {anyGone && <Notice tone="error">{t.orders.cart.unavailableNotice}</Notice>}
+          {anyExpired && <Notice tone="warning">{t.orders.cart.expiredNotice}</Notice>}
           {anyMoved && <Notice tone="warning">{t.orders.cart.priceChangedNotice}</Notice>}
           {quoteFailed && <Notice tone="warning">{t.orders.cart.quoteFailed}</Notice>}
 
@@ -318,6 +324,10 @@ function CartItemCard({ item, lines, gone, money, onRemove }: CartItemCardProps)
 
   const now = lines ? lines.reduce((sum, line) => sum + line.lineTotalCents, 0) : null;
   const moved = lines?.some((line) => line.priceChanged) ?? false;
+  // Turned away only because the 30-minute price ran out: the item is still
+  // there to book, at today's price, from its own page.
+  const expired = isExpiredOffer(gone);
+  const unavailable = gone !== null && !expired;
   const reasonText =
     gone && gone.reason in t.packages.quote.slotReasons
       ? t.packages.quote.slotReasons[gone.reason as keyof typeof t.packages.quote.slotReasons]
@@ -339,7 +349,8 @@ function CartItemCard({ item, lines, gone, money, onRemove }: CartItemCardProps)
     <article
       className={cn(
         "border border-line bg-surface",
-        gone && "border-error/40 bg-surface-soft",
+        unavailable && "border-error/40 bg-surface-soft",
+        expired && "border-warning/40",
       )}
       aria-labelledby={`cart-item-${item.id}`}
     >
@@ -369,7 +380,8 @@ function CartItemCard({ item, lines, gone, money, onRemove }: CartItemCardProps)
                     ? t.nav.packages
                     : t.orders.componentTypes[payload.type]}
                 </Badge>
-                {gone && <Badge tone="outline">{t.orders.cart.unavailable}</Badge>}
+                {unavailable && <Badge tone="outline">{t.orders.cart.unavailable}</Badge>}
+                {expired && <Badge tone="outline">{t.orders.cart.priceExpired}</Badge>}
                 {moved && !gone && <Badge tone="outline">{t.orders.cart.priceMoved}</Badge>}
               </div>
               <h3 id={`cart-item-${item.id}`} className="type-h4 mt-2">
@@ -382,7 +394,12 @@ function CartItemCard({ item, lines, gone, money, onRemove }: CartItemCardProps)
             </div>
 
             <div className="text-end">
-              <p className={cn("type-h4 tabular-nums", gone ? "text-muted line-through" : "text-ink")}>
+              <p
+                className={cn(
+                  "type-h4 tabular-nums",
+                  unavailable ? "text-muted line-through" : expired ? "text-muted" : "text-ink",
+                )}
+              >
                 {money(now ?? display.priceCents, display.currency)}
               </p>
               {moved && now !== null && (
@@ -396,10 +413,17 @@ function CartItemCard({ item, lines, gone, money, onRemove }: CartItemCardProps)
             </div>
           </div>
 
-          {gone && (
+          {unavailable && (
             <p className="type-body-sm mt-3 flex items-start gap-2 text-error-text">
               <AlertCircle size={15} className="mt-0.5 shrink-0" aria-hidden />
               {reasonText}
+            </p>
+          )}
+
+          {expired && (
+            <p className="type-body-sm mt-3 flex items-start gap-2 text-warning-text">
+              <AlertCircle size={15} className="mt-0.5 shrink-0" aria-hidden />
+              {t.orders.cart.expiredItem}
             </p>
           )}
 
@@ -435,19 +459,33 @@ function CartItemCard({ item, lines, gone, money, onRemove }: CartItemCardProps)
           )}
 
           <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2">
-            <Link
-              href={path(display.href)}
-              className="type-caption text-brand-text underline-offset-4 hover:underline"
-            >
-              {t.orders.cart.open}
-            </Link>
+            {expired ? (
+              // The page the item came from, with its dates: priced today and
+              // added again from there. The expired line goes as it is left,
+              // so the cart does not end up holding the item twice.
+              <Link
+                href={path(display.href)}
+                onClick={onRemove}
+                className="type-caption inline-flex items-center gap-1.5 font-medium text-brand-text underline-offset-4 hover:underline"
+              >
+                <RefreshCw size={13} aria-hidden />
+                {t.orders.cart.updatePrice}
+              </Link>
+            ) : (
+              <Link
+                href={path(display.href)}
+                className="type-caption text-brand-text underline-offset-4 hover:underline"
+              >
+                {t.orders.cart.open}
+              </Link>
+            )}
             <button
               type="button"
               onClick={onRemove}
               aria-label={fill(t.orders.cart.removeItem, { title: display.title })}
               className={cn(
                 "type-caption inline-flex items-center gap-1.5 underline-offset-4 hover:underline",
-                gone ? "font-medium text-error-text" : "text-muted hover:text-ink",
+                unavailable ? "font-medium text-error-text" : "text-muted hover:text-ink",
               )}
             >
               <Trash2 size={13} aria-hidden />

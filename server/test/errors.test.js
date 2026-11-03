@@ -4,9 +4,13 @@ import assert from 'node:assert/strict';
 import { errorHandler } from '../middleware/errors.js';
 import { NotFoundError, UnprocessableEntityError, BadGatewayError } from '../lib/errors.js';
 
-// Minimal res double: the handler only uses status() and json().
+// Minimal res double: the handler only uses status(), json() and set().
 const mockRes = () => {
-    const res = { statusCode: null, body: null, log: null };
+    const res = { statusCode: null, body: null, log: null, headers: {} };
+    res.set = (name, value) => {
+        res.headers[name.toLowerCase()] = value;
+        return res;
+    };
     res.status = (code) => {
         res.statusCode = code;
         return res;
@@ -55,6 +59,18 @@ describe('error handler', () => {
         assert.equal(res.statusCode, 409);
         assert.match(res.body.error.message, /availability/);
         assert.doesNotMatch(res.body.error.message, /room_inventory_no_oversell/);
+    });
+
+    // An interactive transaction that could not get a connection in time (or
+    // ran out of it) wrote nothing and can be retried: busy, not broken (TI-02).
+    it('maps a Prisma transaction timeout to 503 with Retry-After rather than 500', () => {
+        const res = mockRes();
+        errorHandler({ code: 'P2028', message: 'Transaction API error: Unable to start a transaction in the given time.' }, mockReq(), res, () => {});
+
+        assert.equal(res.statusCode, 503);
+        assert.equal(res.headers['retry-after'], '2');
+        assert.match(res.body.error.message, /busy/);
+        assert.doesNotMatch(res.body.error.message, /Transaction API/);
     });
 
     it('maps a raw Postgres unique violation to 409', () => {

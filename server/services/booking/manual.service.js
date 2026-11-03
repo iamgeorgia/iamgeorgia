@@ -9,7 +9,7 @@ import { confirmTourBooking, tourBookingInclude } from '../tour/booking.service.
 import { confirmServiceBooking, serviceBookingInclude } from '../service/booking.service.js';
 import { confirmOrder, orderInclude } from '../order/order.service.js';
 import { confirmCustomOrder } from '../order/cart.service.js';
-import { createCustomerInTx, findCustomerOr404 } from './customer.service.js';
+import { createCustomerOnceInTx, findCustomerOr404 } from './customer.service.js';
 import { syncBookingIndexInTx } from './index.service.js';
 
 /**
@@ -70,11 +70,13 @@ export const createManualBooking = async (product, body, staff, req) => {
 
     // A new customer is written before the booking and outside its
     // transaction: a booking refused for price or availability still leaves
-    // the customer the desk just typed in, to try again with.
+    // the customer the desk just typed in, to try again with. The same
+    // description again — a retry, a replay on the Idempotency-Key — finds
+    // that customer rather than writing another.
     let customerId = null;
 
     if (buyer.kind === 'CUSTOMER') {
-        customerId = buyer.customerId ? (await findCustomerOr404(buyer.customerId)).id : (await prisma.$transaction((tx) => createCustomerInTx(tx, buyer.customer, staff, req))).id;
+        customerId = buyer.customerId ? (await findCustomerOr404(buyer.customerId)).id : (await prisma.$transaction((tx) => createCustomerOnceInTx(tx, buyer.customer, staff, req))).customer.id;
     }
 
     const actor = await actorOnBehalfOf(staff, buyer);

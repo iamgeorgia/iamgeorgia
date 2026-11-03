@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { PAYMENT_STATUSES } from '../finance/paymentStatus.js';
 import { BOOKING_SOURCES } from '../booking/source.js';
-import { dateOnlyToUtc } from '../time.js';
+import { dateOnlyToUtc, isValidDateOnly } from '../time.js';
 
 /**
  * The filters every booking register shares, and the Prisma `where` they
@@ -21,7 +21,8 @@ const PAYMENT_METHODS = ['BANK_TRANSFER', 'CASH', 'CARD', 'OTHER'];
 export const BOOKING_SORTS = Object.freeze(['created:desc', 'created:asc', 'date:asc', 'date:desc', 'due:asc', 'due:desc', 'total:desc', 'total:asc']);
 
 const oneOrMany = (values) => z.union([z.enum(values), z.array(z.enum(values)).max(values.length)]).optional();
-const dateOnlyField = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+// A calendar date, not merely its shape: 2026-02-30 used to roll into March.
+const dateOnlyField = z.string().refine(isValidDateOnly, { message: 'Use a calendar date, for example 2026-12-20' });
 const idField = z.string().min(1).max(64);
 
 /** Spread into a product's query schema beside its own fields. */

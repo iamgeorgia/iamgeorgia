@@ -4,6 +4,7 @@ import { ConflictError, NotFoundError } from '../../lib/errors.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
 import { decidedByFor } from '../../lib/booking/approval.js';
+import { buyerTotalOf } from '../../lib/booking/desk.js';
 import { dateOnlyToUtc, toDateOnly } from '../../lib/time.js';
 import { assertCreditInTx } from '../finance/credit.service.js';
 import { bookingInclude as hotelBookingInclude, approvePendingHotelBookingInTx, rejectPendingHotelBookingInTx } from '../hotel/booking.service.js';
@@ -15,7 +16,7 @@ import {
 } from '../transfer/booking.service.js';
 import { tourBookingInclude, approvePendingTourBookingInTx, rejectPendingTourBookingInTx } from '../tour/booking.service.js';
 import { serviceBookingInclude, approvePendingServiceBookingInTx, rejectPendingServiceBookingInTx } from '../service/booking.service.js';
-import { orderInclude, childOf, cancelOrderInTx, rollUpOrderStatus } from '../order/order.service.js';
+import { orderInclude, childOf, cancelOrderInTx, lockOrderInTx, rollUpOrderStatus } from '../order/order.service.js';
 
 /**
  * Platform approval of bookings (owner decision OD1, 2026-10-20).
@@ -41,7 +42,9 @@ const PRODUCTS = {
         childKey: 'hotelBookingId',
         approve: approvePendingHotelBookingInTx,
         reject: rejectPendingHotelBookingInTx,
-        buyerTotal: (b) => b.sellTotalCents + (b.taxTotalCents ?? 0),
+        // What the buyer pays, the desk's adjustment included: the same sum
+        // the ledger will open, so the credit check and the queue read it too.
+        buyerTotal: (b) => buyerTotalOf(b, { tax: true }),
         /** The day the service starts: past it, nobody can approve any more. */
         starts: (b) => b.checkIn,
         startsField: 'checkIn',
@@ -56,12 +59,14 @@ const PRODUCTS = {
         childKey: 'transferBookingId',
         approve: approvePendingTransferBookingInTx,
         reject: rejectPendingTransferBookingInTx,
-        buyerTotal: (b) => b.sellTotalCents,
+        buyerTotal: (b) => buyerTotalOf(b),
         starts: (b) => b.pickupAt,
         startsField: 'pickupAt',
         title: (b) => `${b.routeSnapshot?.fromName ?? 'Transfer'} → ${b.routeSnapshot?.toName ?? ''}`.trim(),
         lead: (b) => ({ name: b.leadPassengerName, email: b.leadPassengerEmail }),
-        when: (b) => ({ from: b.pickupAt, to: b.returnPickupAt ?? b.pickupAt })
+        // Pick-ups are instants, not `@db.Date` columns: reduced to the same
+        // `YYYY-MM-DD` every other product's row carries.
+        when: (b) => ({ from: toDateOnly(b.pickupAt), to: toDateOnly(b.returnPickupAt ?? b.pickupAt) })
     },
     TOUR: {
         model: 'tourBooking',
@@ -70,7 +75,7 @@ const PRODUCTS = {
         childKey: 'tourBookingId',
         approve: approvePendingTourBookingInTx,
         reject: rejectPendingTourBookingInTx,
-        buyerTotal: (b) => b.sellTotalCents,
+        buyerTotal: (b) => buyerTotalOf(b),
         starts: (b) => b.date,
         startsField: 'date',
         title: (b) => `${b.tourSnapshot?.title ?? 'Tour'}${b.tourSnapshot?.option?.name ? ` · ${b.tourSnapshot.option.name}` : ''}`,
@@ -84,7 +89,7 @@ const PRODUCTS = {
         childKey: 'serviceBookingId',
         approve: approvePendingServiceBookingInTx,
         reject: rejectPendingServiceBookingInTx,
-        buyerTotal: (b) => b.sellTotalCents,
+        buyerTotal: (b) => buyerTotalOf(b),
         starts: (b) => b.date,
         startsField: 'date',
         title: (b) => b.serviceSnapshot?.name ?? 'Service',
@@ -122,7 +127,11 @@ const CHILD_PRODUCT = { HOTEL_STAY: 'HOTEL', TRANSFER: 'TRANSFER', TOUR: 'TOUR',
 
 const loadForDecision = async (tx, product, reference) => {
     const spec = productOf(product);
-    const row = await tx[spec.model].findFirst({ where: { OR: [{ id: reference }, { reference }] }, include: spec.include });
+    const where = { OR: [{ id: reference }, { reference }] };
+    // An order is decided under its row lock: a yes racing a no, or two
+    // sweepers expiring it at once, take turns, and the second finds it
+    // decided. A single booking's own writes are conditional on its status.
+    const row = product === 'ORDER' ? await lockOrderInTx(tx, where) : await tx[spec.model].findFirst({ where, include: spec.include });
 
     if (!row) {
         throw new NotFoundError('Booking not found');

@@ -190,7 +190,10 @@ export const sweepExpiredTourHolds = async ({ limit = 200 } = {}) => {
 /**
  * Proves the counters agree with the rows they summarise, and repairs them
  * when asked. A PENDING booking holds its units: an on-request departure that
- * is still being answered must not be sold twice meanwhile.
+ * is still being answered must not be sold twice meanwhile. So does one
+ * PENDING_APPROVAL (OD1): its seats are claimed when it is made, so that a
+ * yes never finds them gone — leaving it out showed it as drift, and `apply`
+ * then handed its seats back to sale.
  */
 export const reconcileTourInventory = async ({ apply = false, tourOptionIds = null } = {}) => {
     const drift = await prisma.$queryRaw`
@@ -209,7 +212,7 @@ export const reconcileTourInventory = async ({ apply = false, tourOptionIds = nu
                    COALESCE((
                        SELECT sum(b.units)::int FROM tour_bookings b
                         WHERE b.tour_option_id = inv.tour_option_id
-                          AND b.status IN ('PENDING', 'CONFIRMED', 'COMPLETED')
+                          AND b.status IN ('PENDING_APPROVAL', 'PENDING', 'CONFIRMED', 'COMPLETED')
                           AND b.date = inv.date
                    ), 0) AS expected_booked
               FROM tour_inventory inv

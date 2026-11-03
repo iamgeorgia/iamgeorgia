@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import { prisma } from '../../db/index.js';
 import { config } from '../../config.js';
@@ -10,7 +10,7 @@ import { nextOrderReference } from '../../lib/reference.js';
 import { dateOnlyToUtc } from '../../lib/time.js';
 import { impliedOrderStatus } from '../../lib/order/machines.js';
 import { approvalModeFor, approvalStampsFor } from '../../lib/booking/approval.js';
-import { deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { assertAdjustedTotal, deskColumns, deskFrom } from '../../lib/booking/desk.js';
 import { sourceFor } from '../../lib/booking/source.js';
 import { readOfferToken } from '../../lib/hotel/offerToken.js';
 import { readTourOfferToken } from '../../lib/tour/offerToken.js';
@@ -22,7 +22,6 @@ import { createTourHoldIn } from '../tour/availability.service.js';
 import { revalidateTourOffer } from '../tour/search.service.js';
 import { driverConflictFor } from '../transfer/booking.service.js';
 import { canViewMargin } from '../../middleware/auth.js';
-import { allocate } from '../package/quote.service.js';
 import {
     CHILD_KEY,
     assertMayRead,
@@ -33,7 +32,8 @@ import {
     isGone,
     orderInclude,
     preparePackageGroup,
-    prepareSlot
+    prepareSlot,
+    spreadManualAdjustment
 } from './order.service.js';
 
 /**
@@ -96,17 +96,39 @@ const partyOf = (type, prepared) => {
 
 const netOf = (prepared) => prepared.priced?.quote?.totals?.netCents ?? prepared.quote?.totals?.netCents ?? 0;
 
-export const deriveCartIdempotencyKey = (input) =>
+const tokenOf = (item) => item.offerToken ?? item.holdToken ?? item.quoteToken ?? item.packageToken ?? null;
+
+/** A cart line in its derived key: its signed token, or everything that books a service. */
+const keyPartOf = (item) => tokenOf(item) ?? ['SERVICE', item.serviceId, item.date, item.time ?? '', item.days ?? 1, item.quantity ?? 1, item.pax ?? 1].join(':');
+
+/** Whose account a signed-in booking is made from: the company, or the member of staff (and the desk's customer). */
+const ownerOf = (input, actor) => (actor?.partnerId ? `partner:${actor.partnerId}` : actor?.id ? `user:${actor.id}:${input.customerId ?? ''}` : null);
+
+/**
+ * Without a client key, the key is a hash of the cart and its lead, so an
+ * identical retry replays. A signed token is a secret the caller was handed;
+ * a service line is not — its id, date and party are all a stranger needs to
+ * recompute the hash, and a replay hands over the order. A cart with no token
+ * in it is therefore scoped to the signed-in account that books it, which no
+ * stranger can book from; a guest has no account, so a guest's cart of
+ * services gets a random part instead and replays only on a key the client
+ * sends (the shipped client always sends one).
+ */
+export const deriveCartIdempotencyKey = (input, actor = null) =>
     input.idempotencyKey ??
     createHash('sha256')
         .update(
             [
-                ...input.items.map((item) => item.offerToken ?? item.holdToken ?? item.quoteToken ?? item.packageToken ?? `${item.serviceId}:${item.date}:${item.quantity ?? 1}`),
+                ...input.items.map(keyPartOf),
                 input.leadGuest.email.toLowerCase(),
-                input.leadGuest.lastName.toLowerCase()
+                input.leadGuest.lastName.toLowerCase(),
+                ...(input.items.some(tokenOf) ? [] : [ownerOf(input, actor) ?? randomUUID()])
             ].join('|')
         )
         .digest('base64url');
+
+/** The derived key of the next booking of a cart whose order under `key` was cancelled. */
+const nextCartKey = (key, cancelledOrderId) => createHash('sha256').update(`${key}|${cancelledOrderId}`).digest('base64url');
 
 /** A standalone item through its product's `prepare`, via the same slot adapter a package uses. */
 const prepareStandalone = async (item, index, input, actor) => {
@@ -258,19 +280,14 @@ export const prepareCustomOrder = async (input, actor, { now = new Date(), stric
 
     // The desk's adjustment (OD3) is spread over the items that carry no
     // package share — or over every item when the cart is all packages — so
-    // the order's lines still add up to what the buyer pays.
+    // the order's lines still add up to what the buyer pays. A discount
+    // larger than those items spills onto the package lines rather than
+    // taking a line below zero (`spreadManualAdjustment`).
     const manualCents = input.manual ? (input.priceAdjustment?.cents ?? 0) : 0;
 
     if (manualCents) {
-        const own = entries.filter((entry) => !entry.group);
-        const targets = own.length > 0 ? own : entries;
-        const shares = allocate(manualCents, targets.map((entry) => Math.max(entry.prepared.currentCents, 1)));
-
-        targets.forEach((entry, index) => {
-            entry.adjustmentCents += shares[index];
-            entry.adjustmentSource = 'MANUAL';
-            entry.lineTotalCents = entry.prepared.currentCents + entry.adjustmentCents;
-        });
+        assertAdjustedTotal(entries.reduce((sum, entry) => sum + entry.lineTotalCents, 0), manualCents);
+        spreadManualAdjustment(entries, manualCents);
     }
 
     const componentsNet = entries.reduce((sum, entry) => sum + entry.netCents, 0);
@@ -283,7 +300,7 @@ export const prepareCustomOrder = async (input, actor, { now = new Date(), stric
     }));
 
     return {
-        idempotencyKey: deriveCartIdempotencyKey({ ...input, leadGuest }),
+        idempotencyKey: deriveCartIdempotencyKey({ ...input, leadGuest }, actor),
         currency: currencies[0],
         lead: leadGuest,
         party,
@@ -394,8 +411,18 @@ export const holdCustomOffers = async (items, actor) => {
  * receivable, one approval. Replays on the idempotency key like a package.
  */
 export const confirmCustomOrder = async (input, actor, req) => {
-    const idempotencyKey = deriveCartIdempotencyKey(input);
-    const existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: orderInclude });
+    let idempotencyKey = deriveCartIdempotencyKey(input, actor);
+    let existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: orderInclude });
+
+    // A derived key names the cart, not one attempt at booking it. Once its
+    // order is cancelled, the same cart booked again is a new order, never a
+    // replay of the cancelled one: it takes the next key in a chain built from
+    // the cancelled order, so a retry of the new booking still finds it. A key
+    // the client sent names one request, and replays whatever became of it.
+    while (!input.idempotencyKey && existing?.status === 'CANCELLED') {
+        idempotencyKey = nextCartKey(idempotencyKey, existing.id);
+        existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: orderInclude });
+    }
 
     const replayOf = (order) => {
         assertReplayOwner(() => assertMayRead(order, actor, { email: input.leadGuest?.email }));

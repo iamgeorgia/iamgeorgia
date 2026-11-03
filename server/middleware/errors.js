@@ -17,6 +17,10 @@ const constraintStatus = {
     P2002: { status: 409, message: 'A record with these unique values already exists' },
     P2003: { status: 409, message: 'Related record constraint failed' },
     P2025: { status: 404, message: 'Record not found' },
+    // An interactive transaction that could not get a connection in time, or
+    // ran out of it: the database is busy, nothing was written, and the same
+    // request can simply be tried again — a 503 that says so, not a 500.
+    P2028: { status: 503, message: 'The server is busy. Please try again in a moment.', retryAfterSeconds: 2 },
     23505: { status: 409, message: 'A record with these unique values already exists' },
     23503: { status: 409, message: 'Related record constraint failed' },
     23514: { status: 409, message: 'The request conflicts with current availability' },
@@ -91,6 +95,10 @@ export const errorHandler = (err, req, res, next) => {
         err instanceof HttpError
             ? err.status
             : mapped?.status ?? (Number.isInteger(httpErrorStatus) ? httpErrorStatus : 500);
+
+    if (mapped?.retryAfterSeconds && !(err instanceof HttpError)) {
+        res.set('Retry-After', String(mapped.retryAfterSeconds));
+    }
 
     if (status >= 500) {
         (req.log ?? console).error({ err }, 'Unhandled error');

@@ -16,7 +16,7 @@ import { sourceFor } from '../../lib/booking/source.js';
 import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
 import { CANCELLABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
 import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
-import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, assertAdjustedTotal, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
 import { syncBookingIndexInTx } from '../booking/index.service.js';
 import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { enqueueEvent, TOPICS } from '../../lib/outbox.js';
@@ -237,6 +237,9 @@ export const prepareTransferBooking = async (input, actor, { strict = true } = {
         bookedAt: new Date()
     });
 
+    const desk = deskFrom(input);
+    assertAdjustedTotal(quote.totals.sellCents, desk.priceAdjustmentCents);
+
     return {
         kind: 'TRANSFER',
         vehicle,
@@ -256,7 +259,7 @@ export const prepareTransferBooking = async (input, actor, { strict = true } = {
         specialRequests: input.specialRequests ?? null,
         source: sourceFor(actor, input.channel ?? null),
         approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
-        desk: deskFrom(input),
+        desk,
         preferredDriverId: input.preferredDriverId ?? null,
         preferredFleetVehicleId: input.preferredFleetVehicleId ?? null,
         priceChanged: quote.totals.sellCents !== decoded.quotedSellCents,

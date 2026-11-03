@@ -267,4 +267,64 @@ describe('tour bookings', { skip: dbAvailable ? false : 'Postgres is not reachab
         assert.equal(declined.body.declineReason, 'Guide unavailable');
         assert.equal((await inventoryFor(option.id)).bookedUnits, 0);
     });
+
+    /** A partner's booking for two on the one departure. */
+    const bookFor = async (tour) => {
+        const offer = await offerFor(tour, { cookie: partnerCookie });
+        const response = await request(app)
+            .post('/api/tours/bookings')
+            .set('Cookie', partnerCookie)
+            .send({ offerToken: offer.token, leadTraveller: lead(`traveller.${unique('t')}@example.test`) });
+
+        assert.equal(response.status, 201, JSON.stringify(response.body));
+        return response.body;
+    };
+
+    const sorted = (responses) => responses.map((response) => response.status).sort();
+
+    it('cancels a booking once when it is cancelled twice at once', async () => {
+        const { tour, option } = await makeSellable();
+        // Somebody else on the departure, so a second release cannot hide behind the counter's floor.
+        await bookFor(tour);
+        const target = await bookFor(tour);
+        assert.equal((await inventoryFor(option.id)).bookedUnits, 4);
+
+        const cancels = await Promise.all(
+            [1, 2].map(() => request(app).post(`/api/tours/bookings/${target.reference}/cancel`).set('Cookie', partnerCookie).send({ reason: 'Plans changed' }))
+        );
+
+        assert.deepEqual(sorted(cancels), [200, 409], JSON.stringify(cancels.map((response) => response.body)));
+        assert.ok(['STATUS_CHANGED', 'NOT_CANCELLABLE'].includes(cancels.find((response) => response.status === 409).body.error.details.reason));
+        assert.equal((await inventoryFor(option.id)).bookedUnits, 2, "the other booking's seats stay taken");
+
+        const row = await prisma.tourBooking.findUnique({ where: { reference: target.reference } });
+        assert.equal(row.status, 'CANCELLED');
+        assert.equal(await prisma.auditLog.count({ where: { entityId: row.id, action: 'TOUR_BOOKING_CANCELLED' } }), 1);
+    });
+
+    it('answers a request once: two noes, or a yes racing a cancellation, never give the seats back twice', async () => {
+        const { tour, option } = await makeSellable({ confirmationMode: 'ON_REQUEST' });
+        await bookFor(tour);
+        const first = await bookFor(tour);
+        const second = await bookFor(tour);
+        assert.equal(first.status, 'PENDING');
+        assert.equal((await inventoryFor(option.id)).bookedUnits, 6);
+
+        const declines = await Promise.all(
+            [1, 2].map(() => request(app).post(`/api/admin/tours/bookings/${first.reference}/decline`).set('Cookie', adminCookie).send({ reason: 'Guide unavailable' }))
+        );
+        assert.deepEqual(sorted(declines), [200, 409], JSON.stringify(declines.map((response) => response.body)));
+        assert.equal((await inventoryFor(option.id)).bookedUnits, 4);
+
+        const [confirmed, cancelled] = await Promise.all([
+            request(app).post(`/api/admin/tours/bookings/${second.reference}/confirm`).set('Cookie', adminCookie).send({}),
+            request(app).post(`/api/tours/bookings/${second.reference}/cancel`).set('Cookie', partnerCookie).send({ reason: 'Plans changed' })
+        ]);
+        assert.deepEqual(sorted([confirmed, cancelled]), [200, 409], JSON.stringify([confirmed.body, cancelled.body]));
+
+        // Whichever won, the row and the counter agree: a yes keeps the seats, a cancellation frees them.
+        const row = await prisma.tourBooking.findUnique({ where: { reference: second.reference } });
+        assert.equal(row.status, confirmed.status === 200 ? 'CONFIRMED' : 'CANCELLED');
+        assert.equal((await inventoryFor(option.id)).bookedUnits, confirmed.status === 200 ? 4 : 2);
+    });
 });

@@ -1,6 +1,7 @@
 import { prisma } from '../../db/index.js';
 import { AUDIT_ENTITY, recordAudit } from '../../lib/audit.js';
 import { NotFoundError } from '../../lib/errors.js';
+import { lockKey } from '../../lib/locks.js';
 
 /**
  * Desk customers: buyers with no partner account, reused across bookings.
@@ -41,6 +42,39 @@ export const listCustomers = async ({ q, kind, page = 1, pageSize = 25 } = {}) =
     return { customers, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
 };
 
+/** Every field a customer is described by: the ones a twin must share. */
+const DESCRIBED_BY = ['kind', 'name', 'contactName', 'email', 'phone', 'billingAddress', 'city', 'country', 'taxId', 'notes'];
+
+/**
+ * A new customer, or the one already written with exactly these details.
+ *
+ * The desk writes the customer before the booking (see manual.service.js),
+ * so a manual booking retried with its Idempotency-Key replayed the booking
+ * and left one more customer behind each time; and a double-clicked "Add
+ * customer" made two. An identical description is the same customer, so it
+ * is answered with the row already there (`created: false`). Creates for one
+ * address take turns on an advisory lock, so two at once cannot both miss.
+ *
+ * Only an exact twin is reused: the same name at another address, or the same
+ * address with a different name or phone, is a different record, as before.
+ */
+export const createCustomerOnceInTx = async (tx, input, actor, req) => {
+    const described = Object.fromEntries(DESCRIBED_BY.map((field) => [field, input[field] ?? null]));
+
+    await lockKey(tx, `customer:${String(described.email).toLowerCase()}`);
+
+    const twin = await tx.customer.findFirst({
+        where: { ...described, email: { equals: described.email, mode: 'insensitive' } },
+        orderBy: { createdAt: 'asc' }
+    });
+
+    if (twin) {
+        return { customer: twin, created: false };
+    }
+
+    return { customer: await createCustomerInTx(tx, input, actor, req), created: true };
+};
+
 export const createCustomerInTx = async (tx, input, actor, req) => {
     const customer = await tx.customer.create({ data: { ...input, createdByUserId: actor?.id ?? null } });
 
@@ -57,7 +91,8 @@ export const createCustomerInTx = async (tx, input, actor, req) => {
     return customer;
 };
 
-export const createCustomer = (input, actor, req) => prisma.$transaction((tx) => createCustomerInTx(tx, input, actor, req));
+/** `{ customer, created }`: `created` is false when an identical customer already existed. */
+export const createCustomer = (input, actor, req) => prisma.$transaction((tx) => createCustomerOnceInTx(tx, input, actor, req));
 
 export const updateCustomer = (id, input, actor, req) =>
     prisma.$transaction(async (tx) => {

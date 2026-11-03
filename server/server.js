@@ -221,17 +221,24 @@ const start = async () => {
     /**
      * The booking index is kept in step by the services; this catches what
      * they missed — a crash between a write and its sync — by rebuilding
-     * every row whose booking moved in the last day and a half.
+     * every row whose booking moved in the last day and a half, and drops
+     * the rows (and deadlines) of bookings that no longer exist.
+     *
+     * Also once soon after boot: on a 24-hour interval alone, a server
+     * deployed more often than daily never reconciled at all, and the
+     * register and the dashboard kept listing bookings that were gone.
      */
-    const indexReconciler = setInterval(() => {
+    const reconcileIndex = () =>
         reconcileBookingIndex()
             .then((counts) => {
                 const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
                 if (total > 0) logger.info({ counts }, 'Booking index reconciled');
             })
             .catch((err) => logger.error({ err }, 'Booking index reconcile failed'));
-    }, 24 * 60 * 60 * 1000);
+    const indexReconcileKickoff = setTimeout(reconcileIndex, 30_000);
+    const indexReconciler = setInterval(reconcileIndex, 24 * 60 * 60 * 1000);
 
+    indexReconcileKickoff.unref();
     indexReconciler.unref();
 
     const orderCompletionSweeper = setInterval(() => {
@@ -278,6 +285,8 @@ const start = async () => {
         clearInterval(tourRequestSweeper);
         clearInterval(orderRequestSweeper);
         clearInterval(orderCompletionSweeper);
+        clearTimeout(indexReconcileKickoff);
+        clearInterval(indexReconciler);
         clearTimeout(packagePriceKickoff);
         clearInterval(packagePriceSweeper);
 

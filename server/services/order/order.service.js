@@ -4,6 +4,7 @@ import { prisma } from '../../db/index.js';
 import { config } from '../../config.js';
 import { ConflictError, GoneError, HttpError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
+import { lockRows } from '../../lib/locks.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { syncOrderReceivableInTx } from '../finance/ledger.service.js';
 import { assertCreditInTx } from '../finance/credit.service.js';
@@ -16,7 +17,7 @@ import { readTourOfferToken } from '../../lib/tour/offerToken.js';
 import { sourceFor } from '../../lib/booking/source.js';
 import { approvalModeFor, approvalStampsFor } from '../../lib/booking/approval.js';
 import { RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
-import { DESK_INCLUDE, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { DESK_INCLUDE, assertAdjustedTotal, deskColumns, deskFrom } from '../../lib/booking/desk.js';
 import { syncBookingIndexInTx } from '../booking/index.service.js';
 import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { impliedOrderStatus, LIVE_ITEM_STATUSES, orderMachine } from '../../lib/order/machines.js';
@@ -429,6 +430,54 @@ export const preparePackageGroup = async (input, actor, { now = new Date() } = {
 
 export const prepareOrder = preparePackageGroup;
 
+/**
+ * Spreads the desk's adjustment (OD3) over an order's lines, in place.
+ *
+ * Over the lines that carry no package share — the cart's own items — or
+ * over every line when there are none (a package order, an all-package
+ * cart), weighted by catalogue price. A discount those lines cannot carry
+ * without one of them going below zero, which `order_items` refuses by CHECK
+ * and which used to surface as a 409 "conflicts with current availability",
+ * is spread instead by what each line still costs, and what they cannot carry
+ * falls on the package lines. `assertAdjustedTotal` has already refused a
+ * discount larger than the order, so every line ends at zero or more and the
+ * lines still add up to what the buyer pays.
+ */
+export const spreadManualAdjustment = (entries, cents) => {
+    if (!cents || entries.length === 0) return;
+
+    const own = entries.filter((entry) => !entry.group);
+    const first = own.length > 0 ? own : entries;
+    const rest = own.length > 0 ? entries.filter((entry) => entry.group) : [];
+    const give = (entry, share) => {
+        entry.adjustmentCents = (entry.adjustmentCents ?? 0) + share;
+        entry.adjustmentSource = 'MANUAL';
+        entry.lineTotalCents = entry.prepared.currentCents + entry.adjustmentCents;
+    };
+
+    const plain = allocate(cents, first.map((entry) => Math.max(entry.prepared.currentCents, 1)));
+
+    if (cents > 0 || first.every((entry, index) => entry.lineTotalCents + plain[index] >= 0)) {
+        first.forEach((entry, index) => give(entry, plain[index]));
+
+        return;
+    }
+
+    let left = -cents;
+
+    for (const tier of [first, rest]) {
+        const room = tier.map((entry) => Math.max(entry.lineTotalCents, 0));
+        const take = Math.min(left, room.reduce((sum, value) => sum + value, 0));
+
+        if (take === 0) continue;
+
+        allocate(-take, room).forEach((share, index) => {
+            if (share !== 0) give(tier[index], share);
+        });
+        left -= take;
+    }
+};
+
 // --- confirm -----------------------------------------------------------------
 
 export const confirmChildInTx = (tx, entry, childKey, actor, req) => {
@@ -519,6 +568,23 @@ export const confirmOrder = async (input, actor, req) => {
 
     const prepared = await prepareOrder(input, actor);
 
+    // The desk's adjustment (OD3): checked against the package's price and
+    // spread over its lines, as the cart does, so the order, its lines, the
+    // credit check and the receivable all carry what the buyer pays. It was
+    // accepted and permission-checked here, then silently dropped.
+    const manualCents = input.manual ? (input.priceAdjustment?.cents ?? 0) : 0;
+    const catalogueCents = prepared.totals.sellTotalCents;
+
+    if (manualCents) {
+        assertAdjustedTotal(catalogueCents, manualCents);
+        spreadManualAdjustment(prepared.slots, manualCents);
+        prepared.totals = {
+            ...prepared.totals,
+            adjustmentCents: prepared.totals.adjustmentCents + manualCents,
+            sellTotalCents: prepared.totals.sellTotalCents + manualCents
+        };
+    }
+
     try {
         const order = await prisma.$transaction(
             async (tx) => {
@@ -600,6 +666,18 @@ export const confirmOrder = async (input, actor, req) => {
                     },
                     req
                 });
+
+                if (manualCents) {
+                    await recordAudit(tx, {
+                        action: 'BOOKING_PRICE_ADJUSTED',
+                        actor,
+                        entityType: AUDIT_ENTITY.order,
+                        entityId: created.id,
+                        summary: `${reference} sold at ${manualCents > 0 ? '+' : ''}${(manualCents / 100).toFixed(2)} ${prepared.pkg.currency} on the catalogue price`,
+                        metadata: { reference, catalogueCents, adjustmentCents: manualCents, reason: input.priceAdjustment?.reason ?? null },
+                        req
+                    });
+                }
 
                 // The status the items imply, and the mail that follows it.
                 const rolled = await tx.order.findUnique({ where: { id: created.id }, include: orderInclude });
@@ -745,27 +823,66 @@ export const findOrderOr404 = async (reference, viewer, options = {}) => {
 };
 
 /**
- * The order a viewer may *change*. Narrower than reading: management and
- * finance read every order, but a cancellation fixes money, so of the
- * platform side only holders of the capability pass; staff who read but may
- * not change get the stranger's 404, the same as any other booking module.
+ * The order row, locked for the rest of the transaction and read under the
+ * lock. Every change to an existing order — cancelling it or one of its
+ * items, approving or rejecting it, answering one of its requests — starts
+ * here, so two changes to one order take turns and the second reads what the
+ * first wrote: a double cancel, or a no racing a yes, is a 409, never the
+ * seats handed back twice. Null when there is no such order.
+ *
+ * `authorize` throws for a caller who may not change the order. It runs on a
+ * plain read before the lock, so a stranger is turned away at once instead
+ * of queueing behind (and holding a connection for) everyone else's lock,
+ * and again on the row read under the lock, which may have changed meanwhile.
  */
-const findOrderForChange = async (reference, viewer, { capability, ...options }) => {
-    const order = await prisma.order.findUnique({ where: { reference }, include: orderInclude });
+export const lockOrderInTx = async (tx, where, authorize = () => {}) => {
+    const found = await tx.order.findFirst({ where, select: { id: true, partnerId: true, leadEmail: true } });
+
+    if (!found) return null;
+
+    authorize(found);
+
+    await lockRows(tx, 'orders', [found.id]);
+
+    const order = await tx.order.findUnique({ where: { id: found.id }, include: orderInclude });
+
+    authorize(order);
+
+    return order;
+};
+
+/** `findOrderOr404` for a change: inside the transaction, under the order's lock. */
+const findOrderForUpdate = async (tx, reference, viewer, options = {}) => {
+    const order = await lockOrderInTx(tx, { reference }, (row) => assertMayRead(row, viewer, options));
 
     if (!order) {
         throw new NotFoundError('Order not found');
     }
 
-    if (can(viewer, capability)) {
-        return order;
-    }
+    return order;
+};
 
-    if (readsAllBookings(viewer)) {
+/**
+ * The order a viewer may *change*. Narrower than reading: management and
+ * finance read every order, but a cancellation fixes money, so of the
+ * platform side only holders of the capability pass; staff who read but may
+ * not change get the stranger's 404, the same as any other booking module.
+ * Read under the order's lock, inside the caller's transaction.
+ */
+const findOrderForChange = async (tx, reference, viewer, { capability, ...options }) => {
+    const order = await lockOrderInTx(tx, { reference }, (row) => {
+        if (can(viewer, capability)) return;
+
+        if (readsAllBookings(viewer)) {
+            throw new NotFoundError('Order not found');
+        }
+
+        assertMayRead(row, viewer, options);
+    });
+
+    if (!order) {
         throw new NotFoundError('Order not found');
     }
-
-    assertMayRead(order, viewer, options);
 
     return order;
 };
@@ -908,7 +1025,7 @@ const assertLive = (item) => {
 
 export const cancelOrderItem = async (reference, slotIndex, { reason, email } = {}, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
+        const order = await findOrderForChange(tx, reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
         const item = order.items.find((candidate) => candidate.slotIndex === slotIndex);
 
         if (!item) {
@@ -934,6 +1051,18 @@ export const cancelOrderItem = async (reference, slotIndex, { reason, email } = 
     }, { timeout: config.order.txTimeoutMs });
 
 export const cancelOrderInTx = async (tx, order, { reason, waiveCharges = false }, actor, req) => {
+    // Callers read the order under its lock (`lockOrderInTx`). It is taken
+    // again here — nothing for a transaction that already holds it — and the
+    // status checked against the row as it stands, so even a caller holding
+    // a stale read cannot cancel twice: the second waits for the first, then
+    // finds the order moved on, rather than releasing every item again.
+    await lockRows(tx, 'orders', [order.id]);
+    const current = await tx.order.findUnique({ where: { id: order.id }, select: { status: true } });
+
+    if (current?.status !== order.status) {
+        throw new ConflictError('That order has changed since it was read', { reason: 'STATUS_CHANGED', status: current?.status ?? null });
+    }
+
     if (orderMachine.isTerminal(order.status)) {
         throw new ConflictError('That order cannot be cancelled', { reason: 'NOT_CANCELLABLE', status: order.status });
     }
@@ -982,7 +1111,7 @@ export const cancelOrder = (reference, { reason, email } = {}, actor, req) =>
         async (tx) =>
             cancelOrderInTx(
                 tx,
-                await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email }),
+                await findOrderForChange(tx, reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email }),
                 { reason },
                 actor,
                 req
@@ -1009,7 +1138,7 @@ const requestedItem = (order, slotIndex) => {
 
 export const confirmOrderItem = (reference, slotIndex, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderOr404(reference, actor);
+        const order = await findOrderForUpdate(tx, reference, actor);
         const item = requestedItem(order, slotIndex);
         const child = childOf(item);
 
@@ -1040,7 +1169,7 @@ export const confirmOrderItem = (reference, slotIndex, actor, req) =>
         }
 
         return rolled.order;
-    });
+    }, { timeout: config.order.txTimeoutMs });
 
 /**
  * Declining an item. Optional: it drops out at no charge and the order's
@@ -1049,7 +1178,7 @@ export const confirmOrderItem = (reference, slotIndex, actor, req) =>
  */
 export const declineOrderItem = (reference, slotIndex, { reason }, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderOr404(reference, actor);
+        const order = await findOrderForUpdate(tx, reference, actor);
         const item = requestedItem(order, slotIndex);
         const child = childOf(item);
 
@@ -1104,13 +1233,13 @@ export const declineOrderItem = (reference, slotIndex, { reason }, actor, req) =
         }
 
         return rolled.order;
-    });
+    }, { timeout: config.order.txTimeoutMs });
 
 // --- paperwork ---------------------------------------------------------------
 
 export const amendOrder = (reference, input, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_WRITE, email: input.email });
+        const order = await findOrderForChange(tx, reference, actor, { capability: CAPABILITIES.BOOKINGS_WRITE, email: input.email });
 
         if (orderMachine.isTerminal(order.status)) {
             throw new ConflictError('That order can no longer be amended', { status: order.status });

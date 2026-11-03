@@ -20,8 +20,11 @@ adminCustomerRoutes.get('/', validate({ query: customerQuerySchema }), async (re
     res.json({ data: customers.map(toCustomer), ...page });
 });
 
+/** 201 with the new customer, or 200 with the existing one when an identical customer is already on file. */
 adminCustomerRoutes.post('/', validate({ body: customerSchema }), async (req, res) => {
-    res.status(201).json(toCustomer(await createCustomer(req.valid.body, req.user, req)));
+    const { customer, created } = await createCustomer(req.valid.body, req.user, req);
+
+    res.status(created ? 201 : 200).json(toCustomer(customer));
 });
 
 adminCustomerRoutes.get('/:id', validate({ params: customerParamSchema }), async (req, res) => {

@@ -18,7 +18,7 @@ import {
     signIn,
     unique
 } from './support/factories.js';
-import { makeSellableHotel, makeTransferLeg } from './support/packages.js';
+import { makeSellableHotel, makeService, makeTourDeparture, makeTransferLeg } from './support/packages.js';
 
 const app = createApp();
 const dbAvailable = await databaseAvailable();
@@ -55,9 +55,24 @@ describe('manual bookings', { skip: dbAvailable ? false : 'Postgres is not reach
         destination = await makeDestination(tracker);
     });
 
+    /** Customers the BUG-07 test wrote, removed once nothing refers to them. */
+    const createdCustomerIds = new Set();
+
     after(async () => {
         Object.assign(config.booking, saved);
         await tracker.cleanup();
+        await prisma.customer.deleteMany({
+            where: {
+                id: { in: [...createdCustomerIds] },
+                hotelBookings: { none: {} },
+                transferBookings: { none: {} },
+                tourBookings: { none: {} },
+                serviceBookings: { none: {} },
+                orders: { none: {} },
+                receivables: { none: {} },
+                invoicingCustomers: { none: {} }
+            }
+        });
         await disconnect();
     });
 
@@ -176,6 +191,54 @@ describe('manual bookings', { skip: dbAvailable ? false : 'Postgres is not reach
         assert.equal(again.body.status, 'PENDING_APPROVAL', 'without confirmNow the desk waits like everyone else');
     });
 
+    it('writes one customer for one description: a double click, and a manual booking replayed on its key (BUG-07)', async () => {
+        const twin = { ...customer(), name: `Desk Twin ${unique('t')}` };
+        const create = (body = twin) => request(app).post('/api/admin/customers').set('Cookie', adminCookie).send(body);
+
+        // Two identical creates at once: one row, the second answer is that row.
+        const clicks = await Promise.all([create(), create()]);
+        assert.deepEqual(clicks.map((r) => r.status).sort(), [200, 201], JSON.stringify(clicks.map((r) => r.body)));
+        assert.equal(clicks[0].body.id, clicks[1].body.id);
+        createdCustomerIds.add(clicks[0].body.id);
+        assert.equal(await prisma.customer.count({ where: { email: twin.email } }), 1);
+        assert.equal(await prisma.auditLog.count({ where: { entityId: clicks[0].body.id, action: 'CUSTOMER_CREATED' } }), 1);
+
+        // Sent again later, in another case: still the same customer.
+        const later = await create({ ...twin, email: twin.email.toUpperCase() });
+        assert.equal(later.status, 200, JSON.stringify(later.body));
+        assert.equal(later.body.id, clicks[0].body.id);
+
+        // Only an exact twin is reused: another phone at the same address is another record.
+        const other = await create({ ...twin, phone: '+995 599 000 222' });
+        assert.equal(other.status, 201, JSON.stringify(other.body));
+        assert.notEqual(other.body.id, clicks[0].body.id);
+        createdCustomerIds.add(other.body.id);
+
+        // A manual booking for a new customer, retried twice with its key: one
+        // booking (the retries are replays) and one customer, not three.
+        const { offer } = await hotelOffer();
+        const buyer = { ...customer(), name: `Desk Replay ${unique('r')}` };
+        const leadGuest = lead();
+        const key = `desk-${unique('k')}`;
+        const send = () =>
+            request(app)
+                .post('/api/admin/bookings/manual')
+                .set('Cookie', adminCookie)
+                .set('Idempotency-Key', key)
+                .send({ buyer: { kind: 'CUSTOMER', customer: buyer }, channel: 'PHONE', booking: { offerToken: offer.token, leadGuest } });
+
+        const first = await send();
+        assert.equal(first.status, 201, JSON.stringify(first.body));
+        const retries = [await send(), await send()];
+        assert.deepEqual(retries.map((r) => r.status), [200, 200], JSON.stringify(retries.map((r) => r.body)));
+        assert.ok(retries.every((r) => r.body.reference === first.body.reference));
+
+        const stored = await prisma.customer.findMany({ where: { email: buyer.email } });
+        stored.forEach((row) => createdCustomerIds.add(row.id));
+        assert.equal(stored.length, 1, 'the retries found the customer the first attempt wrote');
+        assert.equal(first.body.desk.customer.id, stored[0].id);
+    });
+
     it('sells at an audited adjustment on the catalogue price, for those who may', async () => {
         // Searched as the partner it will be booked for: the desk's header.
         const { offer } = await hotelOffer(adminCookie, { asPartner: partner.id });
@@ -211,6 +274,112 @@ describe('manual bookings', { skip: dbAvailable ? false : 'Postgres is not reach
         // Cancelling refunds what was paid for, never the catalogue price.
         const quote = await request(app).get(`/api/admin/bookings/${row.reference}`).set('Cookie', adminCookie);
         assert.equal(quote.body.totalCents, catalogueCents - 1500);
+    });
+
+    it('counts the adjusted total, not the catalogue price, in the approval queue and against the credit limit', async () => {
+        const agency = await makePartner(tracker);
+        const { offer } = await hotelOffer(adminCookie, { asPartner: agency.id });
+        const surchargeCents = 50_000;
+
+        const response = await manual({
+            buyer: { kind: 'PARTNER', partnerId: agency.id },
+            channel: 'PHONE',
+            priceAdjustment: { cents: surchargeCents, reason: 'Private guide on request' },
+            booking: { offerToken: offer.token, leadGuest: lead() }
+        });
+        assert.equal(response.status, 201, JSON.stringify(response.body));
+        assert.equal(response.body.status, 'PENDING_APPROVAL');
+
+        const row = await prisma.hotelBooking.findUnique({ where: { reference: response.body.reference } });
+        const catalogueCents = row.sellTotalCents + row.taxTotalCents;
+        const owedCents = catalogueCents + surchargeCents;
+        assert.equal(response.body.totalCents, owedCents);
+
+        const queue = await request(app).get(`/api/admin/booking-approvals?search=${row.reference}`).set('Cookie', adminCookie);
+        assert.equal(queue.status, 200, JSON.stringify(queue.body));
+        assert.equal(queue.body.data.find((entry) => entry.reference === row.reference)?.totalCents, owedCents, 'the queue shows what the buyer pays');
+
+        // A blocking limit between the catalogue price and what the agency will actually owe.
+        await prisma.partner.update({ where: { id: agency.id }, data: { creditLimitCents: catalogueCents + 100, creditLimitCurrency: row.currency, creditLimitMode: 'BLOCK' } });
+
+        const approve = () => request(app).post(`/api/admin/booking-approvals/HOTEL/${row.reference}/approve`).set('Cookie', adminCookie).send({});
+        const refused = await approve();
+        assert.equal(refused.status, 422, JSON.stringify(refused.body));
+        assert.equal(refused.body.error.details.reason, 'CREDIT_LIMIT_EXCEEDED');
+        assert.equal(refused.body.error.details.requestedCents, owedCents);
+        assert.equal((await prisma.hotelBooking.findUnique({ where: { id: row.id } })).status, 'PENDING_APPROVAL', 'still waiting');
+
+        // Room for all of it: the yes goes through, and the ledger opens the sum the check counted.
+        await prisma.partner.update({ where: { id: agency.id }, data: { creditLimitCents: owedCents } });
+        const approved = await approve();
+        assert.equal(approved.status, 200, JSON.stringify(approved.body));
+        assert.equal((await prisma.receivable.findUnique({ where: { hotelBookingId: row.id } })).amountCents, owedCents);
+    });
+
+    it('refuses an adjustment that takes the total below zero, for every product and for the cart', async () => {
+        const agency = await makePartner(tracker);
+        const envelope = (priceAdjustment, extra = {}) => ({ buyer: { kind: 'PARTNER', partnerId: agency.id }, channel: 'PHONE', priceAdjustment, ...extra });
+        const below = { cents: -10_000_000, reason: 'More than the whole price' };
+        const refused = (response) => {
+            assert.equal(response.status, 422, JSON.stringify(response.body));
+            assert.equal(response.body.error.details.reason, 'NEGATIVE_TOTAL');
+            assert.equal(response.body.error.details.field, 'priceAdjustment');
+
+            return response.body.error.details;
+        };
+
+        // A hotel, waiting for approval or confirmed at once: refused at creation, no room taken.
+        const { offer, roomType } = await hotelOffer(adminCookie, { asPartner: agency.id });
+        refused(await manual({ ...envelope(below), booking: { offerToken: offer.token, leadGuest: lead() } }));
+        refused(await manual({ ...envelope(below, { confirmNow: true }), booking: { offerToken: offer.token, leadGuest: lead() } }));
+        const rooms = await prisma.roomInventory.findMany({ where: { roomTypeId: roomType.id } });
+        assert.ok(rooms.every((night) => night.bookedUnits === 0), 'nothing was claimed');
+
+        const leg = await makeTransferLeg(tracker, { destination });
+        const query = new URLSearchParams({ from: leg.from.slug, to: leg.to.slug, date: futureDate(12), time: '10:00', adults: '2', luggage: '2' });
+        const transfer = (await request(app).get(`/api/transfers/quotes?${query}`).set('Cookie', adminCookie).set('X-Act-As-Partner', agency.id)).body.offers.find((entry) => entry.vehicle.slug === leg.vehicle.slug);
+        refused(
+            await request(app)
+                .post('/api/admin/transfers/bookings/manual')
+                .set('Cookie', adminCookie)
+                .send({ ...envelope(below), booking: { quoteToken: transfer.token, leadPassenger: lead() } })
+        );
+
+        // Inside the fixture option's season (2027).
+        const tourDate = '2027-05-11';
+        const { tour } = await makeTourDeparture(tracker, { destination, date: tourDate });
+        const tourOffer = (await request(app).get(`/api/search/tours/${tour.slug}?date=${tourDate}&adults=2`).set('Cookie', adminCookie).set('X-Act-As-Partner', agency.id)).body.options[0].dates[0];
+        refused(await request(app).post('/api/admin/tours/bookings/manual').set('Cookie', adminCookie).send({ ...envelope(below), booking: { offerToken: tourOffer.token, leadTraveller: lead() } }));
+
+        const service = await makeService(tracker, { destination });
+        const serviceBooking = { serviceId: service.id, date: futureDate(20), pax: 2, lead: lead() };
+        const serviceManual = (priceAdjustment) =>
+            request(app).post('/api/admin/services/bookings/manual').set('Cookie', adminCookie).send({ ...envelope(priceAdjustment), booking: serviceBooking });
+        const { catalogueCents } = refused(await serviceManual(below));
+
+        // The cart at the desk: the adjustment against everything in it.
+        refused(
+            await request(app)
+                .post('/api/admin/orders/custom/manual')
+                .set('Cookie', adminCookie)
+                .send({ ...envelope(below), booking: { items: [{ type: 'SERVICE', serviceId: service.id, date: serviceBooking.date, pax: 2 }], leadGuest: lead() } })
+        );
+
+        const partnerId = agency.id;
+        const written = await Promise.all([
+            prisma.hotelBooking.count({ where: { partnerId } }),
+            prisma.transferBooking.count({ where: { partnerId } }),
+            prisma.tourBooking.count({ where: { partnerId } }),
+            prisma.serviceBooking.count({ where: { partnerId } }),
+            prisma.order.count({ where: { partnerId } })
+        ]);
+        assert.deepEqual(written, [0, 0, 0, 0, 0], 'nothing was written for any of them');
+
+        // Down to nothing is a price; one cent below it is not.
+        refused(await serviceManual({ cents: -(catalogueCents + 1), reason: 'One cent too far' }));
+        const free = await serviceManual({ cents: -catalogueCents, reason: 'On the house' });
+        assert.equal(free.status, 201, JSON.stringify(free.body));
+        assert.equal(free.body.totalCents, 0);
     });
 
     it('confirms at once only for someone who may approve, and books a transfer with its voucher', async () => {

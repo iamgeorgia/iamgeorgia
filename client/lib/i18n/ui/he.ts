@@ -931,6 +931,11 @@ export const he: UiDictionary = {
       wasNow: "היה {was}, עכשיו {now}",
       priceMoved: "המחיר השתנה",
       unavailable: "כבר לא זמין",
+      priceExpired: "המחיר פג תוקף",
+      expiredNotice:
+        "המחיר נשמר 30 דקות מרגע ההוספה לסל, ולחלק מהפריטים הוא פג. עדכנו כל אחד מהם כדי לראות את המחיר של היום \u2014 התאריכים נשמרים.",
+      expiredItem: "המחיר הזה פג תוקף. ההזמנה עצמה בסדר: פתחו אותה כדי לראות את המחיר של היום והוסיפו אותה שוב.",
+      updatePrice: "עדכון מחיר",
       includes: "כולל",
       remove: "הסרה",
       removeItem: "הסרת {title}",

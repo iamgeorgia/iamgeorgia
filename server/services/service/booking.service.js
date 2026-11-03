@@ -20,7 +20,7 @@ import { sourceFor } from '../../lib/booking/source.js';
 import { approvalModeFor, approvalStampsFor, decidedByFor } from '../../lib/booking/approval.js';
 import { CANCELLABLE_BOOKING_STATUSES } from '../../lib/booking/machines.js';
 import { ORDER_LINK_SELECT, RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
-import { DESK_INCLUDE, applyAdjustmentToQuote, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { DESK_INCLUDE, applyAdjustmentToQuote, assertAdjustedTotal, auditPriceAdjustment, deskColumns, deskFrom } from '../../lib/booking/desk.js';
 import { syncBookingIndexInTx } from '../booking/index.service.js';
 import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { serviceInclude } from './service.service.js';
@@ -163,6 +163,9 @@ export const prepareServiceBooking = async (input, actor, { strict = true, now =
         bookedAt: now
     });
 
+    const desk = deskFrom(input);
+    assertAdjustedTotal(quote.totals.sellCents, desk.priceAdjustmentCents);
+
     return {
         kind: 'SERVICE',
         service,
@@ -178,7 +181,7 @@ export const prepareServiceBooking = async (input, actor, { strict = true, now =
         notes: input.notes ?? null,
         source: sourceFor(actor, input.channel ?? null),
         approval: approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) }),
-        desk: deskFrom(input),
+        desk,
         priceChanged,
         quotedCents,
         currentCents,
@@ -449,14 +452,15 @@ export const quoteServiceCancellation = (booking, at = new Date()) => {
 
 
 /**
- * A booking that belongs to an order is cancelled through the order, whose
- * roll-up and clawback must not be bypassed. 409 with the order reference.
+ * A booking that belongs to an order is cancelled — and its request answered —
+ * through the order, whose roll-up and clawback must not be bypassed. 409
+ * with the order reference.
  */
-const assertNotInOrder = async (client, column, bookingId) => {
+const assertNotInOrder = async (client, column, bookingId, message = 'This booking is part of an order; cancel it from the order') => {
     const item = await client.orderItem.findUnique({ where: { [column]: bookingId }, include: { order: { select: { reference: true } } } });
 
     if (item) {
-        throw new ConflictError('This booking is part of an order; cancel it from the order', {
+        throw new ConflictError(message, {
             reason: 'PART_OF_ORDER',
             orderReference: item.order.reference,
             slotIndex: item.slotIndex
@@ -683,9 +687,15 @@ export const declinePendingServiceBookingInTx = async (tx, booking, { reason }, 
 
 // The standalone answers tell the buyer; an order's answers are told by the
 // order, which is why the `…InTx` functions above write nothing to the outbox.
+const ANSWER_FROM_ORDER = 'This booking is part of an order; answer it from the order';
+
 export const confirmPendingServiceBooking = (reference, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const confirmed = await confirmPendingServiceBookingInTx(tx, await findServiceBookingOr404(reference, actor), actor, req);
+        const booking = await findServiceBookingOr404(reference, actor);
+
+        await assertNotInOrder(tx, 'serviceBookingId', booking.id, ANSWER_FROM_ORDER);
+
+        const confirmed = await confirmPendingServiceBookingInTx(tx, booking, actor, req);
 
         await enqueueBuyerEvent(tx, confirmed, TOPICS.SERVICE_BOOKING_CONFIRMED);
 
@@ -694,13 +704,11 @@ export const confirmPendingServiceBooking = (reference, actor, req) =>
 
 export const declinePendingServiceBooking = (reference, { reason }, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const declined = await declinePendingServiceBookingInTx(
-            tx,
-            await findServiceBookingOr404(reference, actor),
-            { reason },
-            actor,
-            req
-        );
+        const booking = await findServiceBookingOr404(reference, actor);
+
+        await assertNotInOrder(tx, 'serviceBookingId', booking.id, ANSWER_FROM_ORDER);
+
+        const declined = await declinePendingServiceBookingInTx(tx, booking, { reason }, actor, req);
 
         await enqueueBuyerEvent(tx, declined, TOPICS.SERVICE_BOOKING_DECLINED, { reason });
 
