@@ -170,7 +170,8 @@ export default async function AdminCardPaymentPage({
                 { label: "Payment id", value: mono(payment.providerPaymentId) },
                 { label: "Transaction id", value: mono(payment.providerTransactionId) },
                 { label: "Order status", value: payment.providerOrderStatus ?? dash },
-                { label: "Order time", value: payment.providerOrderTime ? formatFinanceDateTime(payment.providerOrderTime) : dash },
+                // The gateway's own clock, as it wrote it (DD.MM.YYYY hh:mm:ss, zone undocumented): shown verbatim, never re-parsed.
+                { label: "Order time (gateway clock)", value: payment.providerOrderTime ?? dash },
                 {
                   label: "Response",
                   value:
