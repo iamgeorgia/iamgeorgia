@@ -113,9 +113,12 @@ export const TOPICS = Object.freeze({
 });
 
 /** Writes one event on the given client — a transaction handle, in practice. */
-export const enqueueEvent = (client, { topic, payload = {}, entityType = null, entityId = null }) =>
+export const enqueueEvent = (client, { topic, payload = {}, entityType = null, entityId = null, nextAttemptAt = null }) =>
     client.outboxEvent.create({
-        data: { topic, payload, entityType, entityId }
+        // `nextAttemptAt` holds an event back: a note that should not go out
+        // if something else happens first (a "pay now" reminder a card
+        // checkout settles within the minute) is given that minute.
+        data: { topic, payload, entityType, entityId, ...(nextAttemptAt ? { nextAttemptAt } : {}) }
     });
 
 /**

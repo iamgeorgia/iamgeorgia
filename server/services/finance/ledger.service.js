@@ -510,7 +510,15 @@ const createReceivable = async (tx, subject, { reference, partner, customer = nu
     // note, with the deadline when there is one. The drain skips it if the
     // guest has paid by the time it runs (a card checkout pays at once).
     if (rule && !partner && amountCents > 0 && config.payments.flitt.enabled && cardAllowedFor(rule.timing, rule)) {
-        await enqueueEvent(tx, { topic: TOPICS.PSP_PAYMENT_DUE, payload: { receivableId: receivable.id }, entityType: AUDIT_ENTITY.receivable, entityId: receivable.id });
+        // Held back two minutes: a guest who chose the card at checkout is on
+        // the payment page by then, and the note is skipped once they have paid.
+        await enqueueEvent(tx, {
+            topic: TOPICS.PSP_PAYMENT_DUE,
+            payload: { receivableId: receivable.id },
+            entityType: AUDIT_ENTITY.receivable,
+            entityId: receivable.id,
+            nextAttemptAt: new Date(now.getTime() + 2 * 60_000)
+        });
     }
 
     return receivable;
