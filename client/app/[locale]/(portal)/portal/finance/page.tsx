@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
 import { CommissionTable, CreditCard } from "@/components/partners/FinanceCreditCommission";
-import { FinanceStatement, type StatementFilter } from "@/components/partners/FinanceStatement";
+import {
+  BalancePanel,
+  PayablesPanel,
+  StatementPanel,
+  type StatementFilter,
+} from "@/components/partners/FinanceStatement";
 import { PortalInvoices } from "@/components/partners/PortalInvoices";
-import { Container } from "@/components/ui/Container";
+import { PortalContainer, PortalPageHeader } from "@/components/partners/PortalPage";
 import { getPartnerStatement, getSupplierStatement } from "@/lib/api/finance";
 import { getOwnCommission, getOwnCredit } from "@/lib/api/finance-controls";
 import { listOwnInvoices } from "@/lib/api/invoices";
@@ -126,36 +131,31 @@ export default async function PortalFinancePage({ searchParams }: PageProps<"/[l
     return path(query ? `/portal/finance?${query}` : "/portal/finance");
   };
 
+  // Read in the order a finance user works: where the account stands (the
+  // balance, beside the credit it is measured against), then what is billed
+  // and when it is due, what we owe a supplier, the documents, and last the
+  // period's commission — a report, not a to-do.
   return (
-    <Container className="py-12 sm:py-16">
-      <div className="mx-auto max-w-4xl">
-        <h1 className="font-display text-[2rem] leading-tight text-ink sm:text-[2.5rem]">Finance</h1>
-        <p className="mt-4 max-w-2xl text-[1rem] leading-relaxed text-muted">
-          What your company owes for its bookings and when each is due, with the payments we have
-          received against them. Amounts are kept in the currency each booking was made in.
-        </p>
+    <PortalContainer>
+      <PortalPageHeader
+        title="Finance"
+        description="What your company owes for its bookings and when each is due, with the payments we have received against them. Amounts are kept in the currency each booking was made in."
+      />
 
-        {(credit || commission) && (
-          <div className="mt-10 space-y-6">
-            {credit && <CreditCard credit={credit} />}
-            {commission && <CommissionTable report={commission} />}
-          </div>
-        )}
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+          <BalancePanel statement={statement} className={credit ? "xl:col-span-2" : "xl:col-span-3"} />
+          {credit && <CreditCard credit={credit} className="self-start" />}
+        </div>
 
-        <FinanceStatement
-          statement={statement}
-          payables={payables}
-          filter={filter}
-          path={path}
-          hrefFor={hrefFor}
-        />
+        <StatementPanel statement={statement} filter={filter} path={path} hrefFor={hrefFor} />
 
-        {invoices && (
-          <div className="mt-6">
-            <PortalInvoices invoices={invoices} hrefFor={hrefFor} />
-          </div>
-        )}
+        {payables && payables.data.length > 0 && <PayablesPanel payables={payables} hrefFor={hrefFor} />}
+
+        {invoices && <PortalInvoices invoices={invoices} hrefFor={hrefFor} />}
+
+        {commission && <CommissionTable report={commission} />}
       </div>
-    </Container>
+    </PortalContainer>
   );
 }

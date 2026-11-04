@@ -37,16 +37,16 @@ export function PortalStatusPanel({
   partner: Partner;
 }) {
   return (
-    <section className="rounded-sm border border-line bg-surface p-6 sm:p-8">
+    <section className="rounded-md border border-line bg-surface p-6 sm:p-8">
       <span className={cn("inline-flex size-12 items-center justify-center rounded-full", tones[tone])}>
         <Icon size={24} aria-hidden />
       </span>
 
-      <h1 className="mt-6 font-display text-[1.75rem] leading-tight text-ink">{title}</h1>
-      <p className="mt-4 text-[1rem] leading-relaxed text-muted">{body}</p>
+      <h1 className="mt-5 font-display text-[1.5rem] leading-[1.25] font-normal text-ink sm:text-[1.75rem]">{title}</h1>
+      <p className="mt-3 text-[0.9375rem] leading-relaxed text-muted">{body}</p>
 
       {note && (
-        <div className="mt-5 rounded-sm bg-surface-soft p-4">
+        <div className="mt-5 rounded-sm border border-line bg-background p-4">
           <p className="text-[0.75rem] font-medium tracking-wide text-muted uppercase">
             What we were told
           </p>
@@ -69,7 +69,7 @@ export function PortalStatusPanel({
             className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1 py-3"
           >
             <dt className="text-[0.8125rem] text-muted">{item.label}</dt>
-            <dd className="text-end text-[0.875rem] font-medium text-ink">{item.value}</dd>
+            <dd className="min-w-0 text-end text-[0.875rem] font-medium text-ink wrap-anywhere">{item.value}</dd>
           </div>
         ))}
       </dl>

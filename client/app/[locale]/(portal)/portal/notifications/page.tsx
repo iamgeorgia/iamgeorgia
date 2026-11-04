@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 
 import { MarkAllReadButton } from "@/components/notifications/MarkAllReadButton";
 import { NotificationsBrowser } from "@/components/notifications/NotificationsBrowser";
-import { Container } from "@/components/ui/Container";
+import { PortalContainer, PortalPageHeader } from "@/components/partners/PortalPage";
 import { ApiError } from "@/lib/api/client";
 import {
   NOTIFICATION_CATEGORIES,
@@ -68,27 +68,19 @@ export default async function PortalNotificationsPage({
   const unreadInView = state.category ? (result.unreadByCategory?.[state.category] ?? 0) : result.unreadCount;
 
   return (
-    <Container className="py-10 sm:py-12">
-      <div className="max-w-4xl">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="font-display text-[1.75rem] leading-tight text-ink">Notifications</h1>
-            <p className="mt-2 text-[0.9375rem] text-muted">
-              {result.unreadCount > 0 ? `${result.unreadCount} unread.` : "Nothing unread."} Bookings, drivers and your account with us.
-            </p>
-          </div>
-          <MarkAllReadButton scope="partner" category={state.category} unreadCount={unreadInView} className="shrink-0" />
-        </div>
-        <div className="mt-6">
-          <NotificationsBrowser
-            scope="partner"
-            page={result}
-            state={state}
-            now={new Date().toISOString()}
-            categories={categories}
-          />
-        </div>
-      </div>
-    </Container>
+    <PortalContainer narrow>
+      <PortalPageHeader
+        title="Notifications"
+        description={`${result.unreadCount > 0 ? `${result.unreadCount} unread.` : "Nothing unread."} Bookings, drivers and your account with us.`}
+        actions={<MarkAllReadButton scope="partner" category={state.category} unreadCount={unreadInView} />}
+      />
+      <NotificationsBrowser
+        scope="partner"
+        page={result}
+        state={state}
+        now={new Date().toISOString()}
+        categories={categories}
+      />
+    </PortalContainer>
   );
 }

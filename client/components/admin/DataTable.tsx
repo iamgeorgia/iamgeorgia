@@ -117,7 +117,9 @@ export function Cell({
         className,
       )}
     >
-      {children}
+      {/* A plain-text cell is isolated: "4 Nov 2026, 17:30" opens with a
+          number, which an RTL row would otherwise carry to the far end. */}
+      {typeof children === "string" ? <bdi>{children}</bdi> : children}
     </td>
   );
 }

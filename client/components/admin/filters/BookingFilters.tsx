@@ -295,6 +295,7 @@ export function BookingFilters({
           {products && (
             <ChipGroup
               label="Product"
+              className="chip-rail"
               options={products}
               value={state.product ?? []}
               onChange={(next) => apply({ product: next })}
@@ -304,6 +305,7 @@ export function BookingFilters({
           {statuses.length > 0 && (
             <ChipGroup
               label="Status"
+              className="chip-rail"
               options={statuses}
               value={state.status ?? []}
               onChange={(next) => apply({ status: next })}

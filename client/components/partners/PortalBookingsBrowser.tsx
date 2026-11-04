@@ -70,9 +70,7 @@ export function PortalBookingsBrowser({
       />
 
       <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
-        {total === 0
-          ? "No bookings match these filters."
-          : `${total} booking${total === 1 ? "" : "s"}`}
+        <bdi>{total === 0 ? "No bookings match these filters." : `${total} booking${total === 1 ? "" : "s"}`}</bdi>
       </p>
 
       <div className={cn("mt-4 transition-opacity", url.pending && "opacity-60")}>
@@ -131,9 +129,11 @@ export function PortalBookingsBrowser({
               <p className="mt-2 text-[0.875rem] text-body">{booking.leadGuestName}</p>
               <p className="text-[0.8125rem] text-muted">{booking.hotel.name}</p>
               <p className="mt-1 text-[0.8125rem] text-muted">
-                {formatStayDate(booking.checkIn)} · {booking.nights}{" "}
-                {booking.nights === 1 ? "night" : "nights"} · {booking.rooms}{" "}
-                {booking.rooms === 1 ? "room" : "rooms"}
+                <bdi>
+                  {formatStayDate(booking.checkIn)} · {booking.nights}{" "}
+                  {booking.nights === 1 ? "night" : "nights"} · {booking.rooms}{" "}
+                  {booking.rooms === 1 ? "room" : "rooms"}
+                </bdi>
               </p>
               <p className="mt-2 font-medium text-ink tabular-nums">
                 {formatMoney(booking.totalCents, booking.currency)}

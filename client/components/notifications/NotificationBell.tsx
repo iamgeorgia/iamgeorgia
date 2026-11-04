@@ -142,12 +142,12 @@ export function NotificationBell({
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="relative flex size-10 items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-soft hover:text-ink"
+        className="relative flex size-11 items-center justify-center rounded-sm text-muted transition-colors hover:bg-surface-soft hover:text-ink"
       >
         <Bell size={18} aria-hidden />
         {unreadCount > 0 && (
           <span
-            className="absolute top-1 end-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.625rem] font-semibold text-on-dark ring-2 ring-background"
+            className="absolute top-1.5 end-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand px-1 text-[0.625rem] font-semibold text-on-dark ring-2 ring-background"
             aria-hidden
           >
             {unreadCount > 99 ? "99+" : unreadCount}
@@ -159,7 +159,10 @@ export function NotificationBell({
         <div
           role="dialog"
           aria-label="Latest notifications"
-          className="absolute top-full end-0 z-70 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-sm border border-line bg-surface shadow-lift"
+          // Below `sm` the panel is pinned to the viewport, not the bell: the
+          // bell sits a button or two in from the edge, so a 22rem panel
+          // hung from its end ran off the start of a 320px screen.
+          className="fixed inset-x-3 top-[4.25rem] z-70 rounded-sm border border-line bg-surface shadow-lift sm:absolute sm:inset-x-auto sm:top-full sm:end-0 sm:mt-2 sm:w-[22rem]"
         >
           <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-2.5">
             <p className="text-[0.8125rem] font-medium text-ink">Notifications</p>
@@ -184,7 +187,7 @@ export function NotificationBell({
             <p className="px-4 py-6 text-center text-[0.8125rem] text-muted">Nothing yet.</p>
           ) : (
             items && (
-              <ul className="max-h-[60vh] divide-y divide-line overflow-y-auto">
+              <ul className="max-h-[min(60vh,28rem)] divide-y divide-line overflow-y-auto overscroll-contain">
                 {items.map((item) => {
                   const target = hrefFor(scope, item);
                   const unread = !item.readAt;

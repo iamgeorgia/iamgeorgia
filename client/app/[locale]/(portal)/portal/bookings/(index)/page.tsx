@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-
-import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 
 import { AllBookingsBrowser } from "@/components/admin/AllBookingsBrowser";
 import { TourBookingsBrowser } from "@/components/admin/TourBookingsBrowser";
@@ -9,7 +8,9 @@ import { TransferBookingsBrowser } from "@/components/admin/TransferBookingsBrow
 import { PortalBookingsBrowser } from "@/components/partners/PortalBookingsBrowser";
 import { PortalDeadlinesPanel } from "@/components/partners/PortalDeadlinesPanel";
 import { PortalOrdersBrowser } from "@/components/partners/PortalOrdersBrowser";
-import { Container } from "@/components/ui/Container";
+import { PortalContainer, PortalPageHeader } from "@/components/partners/PortalPage";
+import { PortalTabs } from "@/components/partners/PortalTabs";
+import { Button } from "@/components/ui/Button";
 import { BOOKING_APPROVAL_PRODUCTS } from "@/lib/admin/bookingApprovals";
 import { bookingFiltersFromParams } from "@/lib/admin/bookingFilters";
 import { bookingQueryFromParams } from "@/lib/admin/bookings";
@@ -23,7 +24,6 @@ import { listPartnerTourBookings } from "@/lib/api/tours";
 import { listPartnerTransferBookings } from "@/lib/api/transfers";
 import { orderQueryFromParams } from "@/lib/packages/orders";
 import { getI18n } from "@/lib/i18n/server";
-import { cn } from "@/lib/utils";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
@@ -120,32 +120,30 @@ export default async function PortalBookingsPage({
       : null;
 
   return (
-    <Container className="py-12 sm:py-16">
-      <h1 className="font-display text-[2rem] leading-tight text-ink sm:text-[2.5rem]">Bookings</h1>
-      <p className="mt-4 max-w-2xl text-[1rem] leading-relaxed text-muted">{intro[product]}</p>
+    <PortalContainer>
+      <PortalPageHeader
+        title="Bookings"
+        description={intro[product]}
+        actions={
+          <Button href={path("/")} variant="outline">
+            Book on the site
+            <ArrowUpRight size={15} className="rtl:-scale-x-100" aria-hidden />
+          </Button>
+        }
+      />
 
       {/* The next two weeks' deadlines, above the registers; absent when there are none. */}
-      <div className="mt-8">
+      <div className="mb-6 empty:hidden">
         <PortalDeadlinesPanel />
       </div>
 
-      <nav aria-label="Product" className="mt-8 flex gap-1 overflow-x-auto border-b border-line">
-        {tabs.map((tab) => (
-          <Link
-            key={tab.key}
-            href={path(tab.href)}
-            aria-current={product === tab.key ? "page" : undefined}
-            className={cn(
-              "-mb-px border-b-2 px-4 py-2.5 text-[0.8125rem] font-medium whitespace-nowrap transition-colors",
-              product === tab.key ? "border-brand text-ink" : "border-transparent text-muted hover:text-ink",
-            )}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <PortalTabs
+        label="Product"
+        active={product}
+        tabs={tabs.map((tab) => ({ ...tab, href: path(tab.href) }))}
+      />
 
-      <div className="mt-8">
+      <div className="mt-6">
         {hotels && <PortalBookingsBrowser {...hotels} today={today} />}
         {transfers && (
           <TransferBookingsBrowser
@@ -181,6 +179,6 @@ export default async function PortalBookingsPage({
           />
         )}
       </div>
-    </Container>
+    </PortalContainer>
   );
 }

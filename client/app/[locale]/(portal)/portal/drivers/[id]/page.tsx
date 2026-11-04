@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { MediaImg } from "@/components/ui/MediaImg";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Languages, ShieldCheck, Star, UserRound } from "lucide-react";
+import { Languages, ShieldCheck, Star, UserRound } from "lucide-react";
 
-import { Container } from "@/components/ui/Container";
+import { PortalBackLink, PortalContainer } from "@/components/partners/PortalPage";
 import { ApiError } from "@/lib/api/client";
 import { getPartnerDriverProfile } from "@/lib/api/ratings";
 import { getSession } from "@/lib/auth/session";
@@ -43,20 +42,19 @@ export default async function PortalDriverPage(props: PageProps<"/[locale]/porta
   const photo = driver.photo?.variants.find((variant) => variant.variant === "gallery")?.url ?? driver.photo?.url;
 
   return (
-    <Container className="py-12 sm:py-16">
-      <Link href={path("/portal/bookings")} className="inline-flex items-center gap-2 text-[0.8125rem] text-muted transition-colors hover:text-ink">
-        <ArrowLeft size={15} className="rtl:-scale-x-100" aria-hidden />
-        All bookings
-      </Link>
+    <PortalContainer>
+      <PortalBackLink href={path("/portal/bookings?product=transfers")}>Transfer bookings</PortalBackLink>
 
-      <div className="mt-8 grid grid-cols-1 gap-10 lg:grid-cols-12">
-        <div className="min-w-0 lg:col-span-4">
+      <div className="mt-3 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:gap-10">
+        {/* Capped on a phone: a full-width square portrait pushed the name
+            and the ratings a whole screen down. */}
+        <div className="min-w-0 max-w-[16rem] lg:col-span-4 lg:max-w-none">
           <MediaImg
             src={photo}
             alt=""
-            className="aspect-square w-full rounded-sm object-cover"
+            className="aspect-square w-full rounded-md object-cover"
             fallback={
-              <span className="flex aspect-square w-full items-center justify-center rounded-sm bg-surface-soft text-subtle">
+              <span className="flex aspect-square w-full items-center justify-center rounded-md bg-surface-soft text-subtle">
                 <UserRound size={64} aria-hidden />
               </span>
             }
@@ -64,15 +62,15 @@ export default async function PortalDriverPage(props: PageProps<"/[locale]/porta
         </div>
 
         <div className="min-w-0 lg:col-span-8">
-          <h1 className="flex items-center gap-3 font-display text-[2rem] leading-tight text-ink">
+          <h1 className="font-display text-[1.625rem] leading-[1.2] font-normal tracking-[-0.015em] text-ink wrap-anywhere sm:text-[1.75rem] lg:text-[2rem]">
             {driver.firstName} {driver.lastName}
-            {driver.verified && (
-              <span className="inline-flex items-center gap-1 text-[0.8125rem] font-medium text-success">
-                <ShieldCheck size={16} aria-hidden />
-                Verified
-              </span>
-            )}
           </h1>
+          {driver.verified && (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-success/12 px-2.5 py-1 text-[0.75rem] font-medium text-success">
+              <ShieldCheck size={14} aria-hidden />
+              Verified driver
+            </p>
+          )}
 
           <p className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[0.9375rem] text-muted">
             {driver.ratingCount > 0 ? (
@@ -98,12 +96,12 @@ export default async function PortalDriverPage(props: PageProps<"/[locale]/porta
 
           {driver.vehicles.length > 0 && (
             <section className="mt-8">
-              <h2 className="text-[0.75rem] font-semibold tracking-wide text-muted uppercase">Cars</h2>
+              <h2 className="text-[0.9375rem] font-semibold text-ink">Cars</h2>
               <ul className="mt-3 grid gap-4 sm:grid-cols-2">
                 {driver.vehicles.map((car) => {
                   const image = car.mainImage?.variants.find((variant) => variant.variant === "card")?.url ?? car.mainImage?.url;
                   return (
-                    <li key={car.id} className="overflow-hidden rounded-sm border border-line bg-surface">
+                    <li key={car.id} className="overflow-hidden rounded-md border border-line bg-surface">
                       <MediaImg
                         src={image}
                         alt=""
@@ -127,7 +125,7 @@ export default async function PortalDriverPage(props: PageProps<"/[locale]/porta
           )}
 
           <section className="mt-8">
-            <h2 className="text-[0.75rem] font-semibold tracking-wide text-muted uppercase">Reviews</h2>
+            <h2 className="text-[0.9375rem] font-semibold text-ink">Reviews</h2>
             {driver.reviews.length === 0 ? (
               <p className="mt-3 text-[0.9375rem] text-muted">No published reviews yet.</p>
             ) : (
@@ -148,6 +146,6 @@ export default async function PortalDriverPage(props: PageProps<"/[locale]/porta
           </section>
         </div>
       </div>
-    </Container>
+    </PortalContainer>
   );
 }

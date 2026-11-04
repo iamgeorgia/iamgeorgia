@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarClock } from "lucide-react";
 
+import { PortalPanel } from "@/components/partners/PortalPage";
 import { addDaysISO, todayISO } from "@/lib/admin/dates";
 import { dayKeyIn } from "@/lib/admin/deadlines";
 import { listPartnerDeadlines } from "@/lib/api/deadlines";
@@ -67,48 +68,64 @@ export async function PortalDeadlinesPanel() {
   };
 
   return (
-    <section aria-labelledby="portal-deadlines" className="rounded-sm border border-line bg-surface">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-line px-5 py-4">
-        <div className="min-w-0">
-          <h2 id="portal-deadlines" className="flex items-center gap-2 text-[0.9375rem] font-semibold text-ink">
-            <CalendarClock size={16} className="text-brand-text" aria-hidden />
-            {strings.title}
-          </h2>
-          <p className="mt-1 text-[0.8125rem] text-muted">{strings.intro}</p>
-        </div>
-        {overdue.length > 0 && (
+    <PortalPanel
+      id="portal-deadlines"
+      icon={CalendarClock}
+      title={strings.title}
+      description={strings.intro}
+      action={
+        overdue.length > 0 && (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-error/12 px-2.5 py-1 text-[0.75rem] font-medium text-error-text">
             <AlertTriangle size={13} aria-hidden />
             {fill(strings.overdueCount, { count: overdue.length })}
           </span>
-        )}
-      </div>
+        )
+      }
+      bodyClassName=""
+    >
       <ul className="divide-y divide-line">
         {rows.map((row) => (
           <li key={row.id}>
+            {/* Two lines on a phone — what and which booking, against when —
+                and one row from `sm`. The reference never truncates: it is
+                the one thing on the row a partner acts on; the title gives
+                way instead. */}
             <Link
               href={path(row.href)}
               prefetch={false}
-              className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3 transition-colors hover:bg-surface-soft/60"
+              className="flex items-start justify-between gap-4 px-4 py-3 transition-colors hover:bg-surface-soft/60 sm:items-center sm:px-5"
             >
-              <span className={cn("w-40 shrink-0 text-[0.8125rem] font-medium", row.overdue ? "text-error-text" : "text-ink")}>{kindLabel[row.kind]}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[0.875rem] text-ink">
-                  {row.reference}
-                  {row.title ? <span className="text-muted"> · {row.title}</span> : null}
+              <span className="min-w-0 flex-1 sm:flex sm:items-center sm:gap-4">
+                <span
+                  className={cn(
+                    "block text-[0.8125rem] leading-snug font-medium sm:w-44 sm:shrink-0",
+                    row.overdue ? "text-error-text" : "text-ink",
+                  )}
+                >
+                  {kindLabel[row.kind]}
                 </span>
-                {row.kind === "CONFIRMATION" && row.meta.awaiting ? (
-                  <span className="block text-[0.75rem] text-muted">{row.meta.awaiting === "PLATFORM" ? strings.awaitingPlatform : strings.awaitingSupplier}</span>
-                ) : null}
+                <span className="mt-0.5 block min-w-0 sm:mt-0 sm:flex-1">
+                  <span className="flex min-w-0 items-baseline gap-1.5 text-[0.8125rem]">
+                    <span className="shrink-0 font-mono text-[0.75rem] text-ink">{row.reference}</span>
+                    {row.title ? <span className="min-w-0 truncate text-muted">· {row.title}</span> : null}
+                  </span>
+                  {row.kind === "CONFIRMATION" && row.meta.awaiting ? (
+                    <span className="block text-[0.75rem] text-muted">
+                      {row.meta.awaiting === "PLATFORM" ? strings.awaitingPlatform : strings.awaitingSupplier}
+                    </span>
+                  ) : null}
+                </span>
               </span>
-              <span className="text-end">
-                <span className="block text-[0.8125rem] text-ink tabular-nums">{format(row)}</span>
-                <span className={cn("block text-[0.75rem]", row.overdue ? "font-medium text-error-text" : "text-muted")}>{when(row)}</span>
+              <span className="shrink-0 text-end">
+                <span className="block text-[0.8125rem] whitespace-nowrap text-ink tabular-nums">{format(row)}</span>
+                <span className={cn("block text-[0.75rem]", row.overdue ? "font-medium text-error-text" : "text-muted")}>
+                  {when(row)}
+                </span>
               </span>
             </Link>
           </li>
         ))}
       </ul>
-    </section>
+    </PortalPanel>
   );
 }
