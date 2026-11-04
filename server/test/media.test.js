@@ -99,6 +99,9 @@ describe('media', { skip: dbAvailable ? false : 'Postgres is not reachable' }, (
             for (const variant of response.body.variants) {
                 const fetched = await request(app).get(new URL(variant.url).pathname);
                 assert.equal(fetched.status, 200, `${variant.variant}/${variant.format} should be served`);
+                // Embedded by the front end on another origin, as the CDN's
+                // copy would be; helmet's same-origin default blocked it.
+                assert.equal(fetched.headers['cross-origin-resource-policy'], 'cross-origin');
             }
         });
 
@@ -326,6 +329,8 @@ describe('media', { skip: dbAvailable ? false : 'Postgres is not reachable' }, (
             assert.equal(fetched.status, 200);
             assert.equal(fetched.headers['content-disposition'], 'attachment');
             assert.equal(fetched.headers['x-content-type-options'], 'nosniff');
+            // Only public objects are opened up to other origins.
+            assert.equal(fetched.headers['cross-origin-resource-policy'], 'same-origin');
 
             const audit = await prisma.auditLog.findFirst({
                 where: { entityId: uploaded.body.id, action: 'PRIVATE_FILE_ACCESSED' }

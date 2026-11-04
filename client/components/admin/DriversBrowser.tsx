@@ -1,6 +1,7 @@
 "use client";
 
 import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
+import { MediaImg } from "@/components/ui/MediaImg";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, UserRound } from "lucide-react";
@@ -127,14 +128,16 @@ export function DriversBrowser({
               <Row key={driver.id}>
                 <Cell>
                   <div className="flex items-center gap-3">
-                    {thumb(driver) ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- API-served
-                      <img src={thumb(driver)} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-                    ) : (
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
-                        <UserRound size={18} aria-hidden />
-                      </span>
-                    )}
+                    <MediaImg
+                      src={thumb(driver)}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-full object-cover"
+                      fallback={
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
+                          <UserRound size={18} aria-hidden />
+                        </span>
+                      }
+                    />
                     <div className="min-w-0">
                       <Link
                         href={path(`/admin/transfers/drivers/${driver.id}`)}

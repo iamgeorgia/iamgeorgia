@@ -124,7 +124,7 @@ export function OrdersBrowser({
                     <Cell>
                       <Link
                         href={localePath(`${basePath}/${order.reference}`)}
-                        className="font-medium text-ink underline-offset-4 hover:underline"
+                        className="font-medium whitespace-nowrap text-ink underline-offset-4 hover:underline"
                       >
                         {order.reference}
                       </Link>

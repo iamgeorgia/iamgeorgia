@@ -112,7 +112,7 @@ export function PortalOrdersBrowser({
       />
 
       <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
-        {total === 0 ? "No orders match these filters." : `${total} order${total === 1 ? "" : "s"}`}
+        <bdi>{total === 0 ? "No orders match these filters." : `${total} order${total === 1 ? "" : "s"}`}</bdi>
       </p>
 
       <div className={cn("mt-4 transition-opacity", url.pending && "opacity-60")}>

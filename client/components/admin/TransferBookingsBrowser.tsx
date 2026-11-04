@@ -95,7 +95,7 @@ export function TransferBookingsBrowser({
       />
 
       <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
-        {total === 0 ? "No bookings match these filters." : `${total} booking${total === 1 ? "" : "s"}`}
+        <bdi>{total === 0 ? "No bookings match these filters." : `${total} booking${total === 1 ? "" : "s"}`}</bdi>
       </p>
 
       <div className={cn("mt-4 transition-opacity", url.pending && "opacity-60")}>
@@ -109,7 +109,7 @@ export function TransferBookingsBrowser({
                   <Cell>
                     <Link
                       href={localePath(`${basePath}/${booking.reference}`)}
-                      className="font-medium text-ink tabular-nums underline-offset-4 hover:underline"
+                      className="font-medium whitespace-nowrap text-ink tabular-nums underline-offset-4 hover:underline"
                     >
                       {booking.reference}
                     </Link>
@@ -165,7 +165,9 @@ export function TransferBookingsBrowser({
               <p className="text-[0.8125rem] text-muted">
                 {booking.from} → {booking.to}
               </p>
-              <p className="mt-1 text-[0.8125rem] text-muted">{formatPickupAt(booking.pickupAt)}</p>
+              <p className="mt-1 text-[0.8125rem] text-muted">
+                <bdi>{formatPickupAt(booking.pickupAt)}</bdi>
+              </p>
               <p className="mt-2 font-medium text-ink tabular-nums">
                 {formatMoney(booking.totalCents, booking.currency)}
               </p>

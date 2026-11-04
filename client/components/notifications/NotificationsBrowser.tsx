@@ -160,7 +160,15 @@ export function NotificationsBrowser({
   return (
     <div>
       {categories.length > 0 && (
-        <div role="tablist" aria-label="Notification tabs" className="flex gap-1 overflow-x-auto border-b border-line">
+        // `relative` makes the strip the containing block of the count pills'
+        // `sr-only` text (position: absolute), so the strip clips it. Without
+        // it those 1px spans sat past the last tab, outside the scroller, and
+        // stretched the page to ~590px on a phone.
+        <div
+          role="tablist"
+          aria-label="Notification tabs"
+          className="relative flex gap-1 overflow-x-auto border-b border-line"
+        >
           <button
             type="button"
             role="tab"
@@ -211,10 +219,12 @@ export function NotificationsBrowser({
         </div>
       </FilterDisclosure>
 
-      <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
-        {page.total === 0
-          ? emptyMessage(state)
-          : `${page.total} ${page.total === 1 ? "notification" : "notifications"}`}
+      {/* Still announced when nothing matches, but not shown: the empty
+          box below says the same thing, and saying it twice reads as a glitch. */}
+      <p className={page.total === 0 ? "sr-only" : "mt-3 text-[0.8125rem] text-muted"} aria-live="polite">
+        <bdi>
+          {page.total === 0 ? emptyMessage(state) : `${page.total} ${page.total === 1 ? "notification" : "notifications"}`}
+        </bdi>
       </p>
 
       {error && (
@@ -263,7 +273,7 @@ export function NotificationsBrowser({
                     </p>
                     <p className="mt-0.5 text-[0.8125rem] text-muted">{row.body}</p>
                     <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[0.75rem] text-subtle">
-                      <time dateTime={row.createdAt} title={new Date(row.createdAt).toLocaleString("en-GB")}>
+                      <time dateTime={row.createdAt} title={new Date(row.createdAt).toLocaleString("en-GB")} dir="auto">
                         {timeAgo(row.createdAt, at)}
                       </time>
                       {target && (

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MediaImg } from "@/components/ui/MediaImg";
 import {
   AlertTriangle,
   Briefcase,
@@ -246,19 +247,21 @@ function AssignForm({ leg, onClose, onDone }: { leg: DispatchLeg; onClose: () =>
                           onChange={() => pickDriver(candidate)}
                           className="sr-only"
                         />
-                        {photo ? (
-                          // eslint-disable-next-line @next/next/no-img-element -- API-served
-                          <img src={photo} alt="" className="size-9 shrink-0 rounded-full object-cover" />
-                        ) : (
-                          <span
-                            className={cn(
-                              "flex size-9 shrink-0 items-center justify-center rounded-full",
-                              active ? "bg-brand text-white" : "bg-surface-soft text-subtle",
-                            )}
-                          >
-                            <UserRound size={16} aria-hidden />
-                          </span>
-                        )}
+                        <MediaImg
+                          src={photo}
+                          alt=""
+                          className="size-9 shrink-0 rounded-full object-cover"
+                          fallback={
+                            <span
+                              className={cn(
+                                "flex size-9 shrink-0 items-center justify-center rounded-full",
+                                active ? "bg-brand text-white" : "bg-surface-soft text-subtle",
+                              )}
+                            >
+                              <UserRound size={16} aria-hidden />
+                            </span>
+                          }
+                        />
                         <span className="min-w-0 flex-1">
                           <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                             <span className="text-[0.875rem] font-medium text-ink">{name}</span>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { BadgeCheck, ImageOff, Search, ShieldAlert, Star } from "lucide-react";
@@ -83,14 +84,19 @@ export function HotelsBrowser({
   const thumb = (hotel: HotelSummary) => {
     const url = cardImage(hotel.coverImage);
 
-    return url ? (
-      // eslint-disable-next-line @next/next/no-img-element -- API-served image;
-      // next/image would need the CDN host allow-listed per environment.
-      <img src={url} alt="" className="size-10 shrink-0 rounded-sm object-cover" />
-    ) : (
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-surface-soft text-subtle">
-        <ImageOff size={15} aria-hidden />
-      </span>
+    // A plain <img> (via MediaImg): next/image would need the CDN host
+    // allow-listed per environment, and this is already the `thumb` rendition.
+    return (
+      <MediaImg
+        src={url}
+        alt=""
+        className="size-10 shrink-0 rounded-sm object-cover"
+        fallback={
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-surface-soft text-subtle">
+            <ImageOff size={15} aria-hidden />
+          </span>
+        }
+      />
     );
   };
 

@@ -41,9 +41,15 @@ export function DateRangeFields({
   };
 
   return (
-    <div className={cn("flex flex-col gap-1.5", className)}>
+    // Full width on a phone: the filter bar is a wrapping flex row, where this
+    // would otherwise shrink to its content and stop short of the search box
+    // above it on any phone wider than the dates themselves.
+    <div className={cn("flex flex-col gap-1.5 max-sm:w-full", className)}>
       <span className={filterLabelClass}>{label}</span>
-      <div className="flex flex-wrap items-center gap-2">
+      {/* On a phone the two dates share one row as a grid, so each takes half
+          and neither wraps away from its dash; the shortcuts take the next
+          row. From `sm` the row flows as before. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 sm:flex sm:flex-wrap">
         <input
           id={`${id}-from`}
           type="date"
@@ -51,7 +57,7 @@ export function DateRangeFields({
           max={to || undefined}
           onChange={(event) => onChange({ from: event.target.value || null, to: to || null })}
           aria-label={`${label} on or after`}
-          className={filterControlClass}
+          className={cn(filterControlClass, "w-full min-w-0 max-sm:px-2 sm:w-auto")}
         />
         <span aria-hidden className="text-muted">
           –
@@ -63,9 +69,9 @@ export function DateRangeFields({
           min={from || undefined}
           onChange={(event) => onChange({ from: from || null, to: event.target.value || null })}
           aria-label={`${label} on or before`}
-          className={filterControlClass}
+          className={cn(filterControlClass, "w-full min-w-0 max-sm:px-2 sm:w-auto")}
         />
-        <div role="group" aria-label={`${label} shortcuts`} className="flex items-center gap-1">
+        <div role="group" aria-label={`${label} shortcuts`} className="col-span-3 flex items-center gap-1">
           {DATE_RANGE_PRESETS.map((preset) => (
             <button
               key={preset.id}
@@ -73,13 +79,13 @@ export function DateRangeFields({
               aria-pressed={active(preset.id)}
               onClick={() => onChange(active(preset.id) ? { from: null, to: null } : dateRangeFor(preset.id, today, direction))}
               className={cn(
-                "h-8 rounded-sm border px-2 text-[0.75rem] font-medium transition-colors",
+                "h-9 rounded-sm border px-2.5 text-[0.75rem] font-medium transition-colors",
                 active(preset.id)
                   ? "border-brand bg-brand-soft text-brand-text"
                   : "border-line text-muted hover:border-ink hover:text-ink",
               )}
             >
-              {preset.label}
+              <bdi>{preset.label}</bdi>
             </button>
           ))}
         </div>

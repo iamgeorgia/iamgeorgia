@@ -80,7 +80,7 @@ export default async function AdminTransferBookingPage({
         actions={<TransferBookingStatusBadge status={booking.status} />}
       />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 space-y-8 lg:col-span-7">
           <AdminPanel title="Dispatch" description="Who is driving each leg, and where it stands.">
             {legs.length === 0 ? (
@@ -116,13 +116,16 @@ export default async function AdminTransferBookingPage({
           </AdminPanel>
 
           <AdminPanel title="Legs" description="Each journey as it was priced.">
+            {/* This sits in the 7/12 column, ~365px at 1024. Pick-up is already
+                in the Dispatch panel above, so it waits for a wide screen; Net
+                joins from `xl`. Sell, the figure the buyer pays, always shows. */}
             <DataTable
               caption="Booking legs"
               columns={[
                 { label: "Direction" },
                 { label: "Journey" },
-                { label: "Pick-up", hideBelow: "md" },
-                { label: "Net", align: "end", hideBelow: "lg" },
+                { label: "Pick-up", hideBelow: "2xl" },
+                { label: "Net", align: "end", hideBelow: "xl" },
                 { label: "Sell", align: "end" },
               ]}
             >
@@ -136,10 +139,10 @@ export default async function AdminTransferBookingPage({
                       {leg.flightNumber ? ` · flight ${leg.flightNumber}` : ""}
                     </span>
                   </Cell>
-                  <Cell hideBelow="md" className="tabular-nums">
+                  <Cell hideBelow="2xl" className="tabular-nums">
                     {instant(leg.pickupAt)}
                   </Cell>
-                  <Cell align="end" hideBelow="lg" className="tabular-nums">
+                  <Cell align="end" hideBelow="xl" className="tabular-nums">
                     {leg.netCents === undefined
                       ? "—"
                       : formatMoney(leg.netCents, booking.currency)}

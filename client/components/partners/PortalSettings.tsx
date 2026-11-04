@@ -32,7 +32,9 @@ import { can, type SessionUser } from "@/types/auth";
  */
 
 const FIELD =
-  "h-11 w-full rounded-sm border bg-background px-3 text-[0.875rem] text-ink transition-colors focus:outline-none";
+  "h-11 w-full rounded-sm border bg-surface px-3 text-[0.875rem] text-ink transition-colors placeholder:text-subtle focus:outline-none";
+
+const LABEL = "mb-1.5 block text-[0.8125rem] font-medium text-ink";
 
 type Status = { kind: "idle" } | { kind: "saving" } | { kind: "saved" } | { kind: "error"; message: string };
 
@@ -46,7 +48,7 @@ export function PortalSettings({
   financial: PartnerFinancial | null;
 }) {
   return (
-    <div className="mt-10 space-y-6">
+    <div className="space-y-6">
       {/* Absent for a role that may not edit the company (an agent, a
           finance user): a form that answers 403 on save is worse than none. */}
       {can(user, "partner.profile.write") && <CompanySection partner={partner} />}
@@ -113,6 +115,7 @@ function CompanySection({ partner }: { partner: Partner }) {
 
   return (
     <Section
+      id="company"
       title="Company"
       description="How we list and contact your business."
       status={status}
@@ -150,11 +153,11 @@ function CompanySection({ partner }: { partner: Partner }) {
       />
 
       <div className="sm:col-span-2">
-        <p className="mb-2 text-[0.8125rem] font-medium text-ink">Social pages</p>
+        <p className={LABEL}>Social pages</p>
 
         <div className="space-y-2">
           {links.map((link, index) => (
-            <div key={index} className="flex flex-wrap gap-2">
+            <div key={index} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[10rem_minmax(0,1fr)_auto]">
               <input
                 aria-label={`Social page ${index + 1} label`}
                 placeholder="Instagram"
@@ -162,7 +165,7 @@ function CompanySection({ partner }: { partner: Partner }) {
                 onChange={(event) =>
                   setLinks(links.map((l, i) => (i === index ? { ...l, label: event.target.value } : l)))
                 }
-                className={cn(FIELD, "border-line focus:border-ink sm:w-40")}
+                className={cn(FIELD, "col-span-2 border-line focus:border-ink sm:col-span-1")}
               />
               <input
                 aria-label={`Social page ${index + 1} address`}
@@ -171,7 +174,7 @@ function CompanySection({ partner }: { partner: Partner }) {
                 onChange={(event) =>
                   setLinks(links.map((l, i) => (i === index ? { ...l, url: event.target.value } : l)))
                 }
-                className={cn(FIELD, "border-line focus:border-ink min-w-0 flex-1")}
+                className={cn(FIELD, "min-w-0 border-line focus:border-ink")}
               />
               <button
                 type="button"
@@ -189,9 +192,9 @@ function CompanySection({ partner }: { partner: Partner }) {
           <button
             type="button"
             onClick={() => setLinks([...links, { label: "", url: "" }])}
-            className="mt-2 inline-flex items-center gap-1.5 text-[0.8125rem] text-brand-text underline-offset-4 hover:underline"
+            className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-sm text-[0.8125rem] font-medium text-brand-text underline-offset-4 hover:underline"
           >
-            <Plus size={13} aria-hidden />
+            <Plus size={14} aria-hidden />
             Add a page
           </button>
         )}
@@ -201,22 +204,25 @@ function CompanySection({ partner }: { partner: Partner }) {
         Shown so a partner can read back what we hold, and locked because these
         are the facts the approval was granted against.
       */}
-      <div className="mt-2 rounded-sm bg-surface-soft p-4 sm:col-span-2">
-        <p className="flex items-center gap-1.5 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-          <Lock size={11} aria-hidden />
+      <div className="mt-1 rounded-sm border border-line bg-background p-4 sm:col-span-2">
+        <p className="flex items-center gap-1.5 text-[0.75rem] font-semibold tracking-wide text-muted uppercase">
+          <Lock size={12} aria-hidden />
           Verified at approval
         </p>
-        <dl className="mt-3 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        {/* Label over value in every cell: a legal name or a registration
+            number is long enough to break a side-by-side pair, and one pair
+            breaking while its neighbours do not reads as a misalignment. */}
+        <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 md:grid-cols-3">
           {[
             { label: "Partner ID", value: partner.reference, mono: true },
             { label: "Registered legal entity", value: partner.legalName ?? "—" },
-            { label: "Registration number", value: partner.registrationNumber ?? "—" },
+            { label: "Registration number", value: partner.registrationNumber ?? "—", mono: true },
             { label: "Partner type", value: partnerKindLabels[partner.kind] },
             { label: "Country", value: partner.country ?? "—" },
           ].map((item) => (
-            <div key={item.label} className="flex items-baseline justify-between gap-4">
-              <dt className="text-[0.8125rem] text-muted">{item.label}</dt>
-              <dd className={cn("text-end text-[0.8125rem] text-ink", item.mono && "font-mono")}>
+            <div key={item.label} className="min-w-0">
+              <dt className="text-[0.75rem] text-muted">{item.label}</dt>
+              <dd className={cn("mt-0.5 text-[0.8125rem] font-medium text-ink wrap-anywhere", item.mono && "font-mono")}>
                 {item.value}
               </dd>
             </div>
@@ -271,6 +277,7 @@ function AccountSection({ user }: { user: SessionUser }) {
 
   return (
     <Section
+      id="account"
       title="Your details"
       description="The name and number we use when we get in touch with you."
       status={status}
@@ -287,7 +294,7 @@ function AccountSection({ user }: { user: SessionUser }) {
         text field.
       */}
       <div className="sm:col-span-2">
-        <label htmlFor="userEmail" className="mb-1.5 block text-[0.8125rem] font-medium text-ink">
+        <label htmlFor="userEmail" className={LABEL}>
           Email address
         </label>
         <input
@@ -296,7 +303,7 @@ function AccountSection({ user }: { user: SessionUser }) {
           value={user.email}
           readOnly
           aria-describedby="userEmail-hint"
-          className={cn(FIELD, "cursor-not-allowed border-line bg-surface-soft text-muted")}
+          className={cn(FIELD, "cursor-not-allowed border-line bg-background text-muted")}
         />
         <p id="userEmail-hint" className="mt-1.5 flex items-center gap-1.5 text-[0.75rem] text-muted">
           <Lock size={11} aria-hidden />
@@ -347,6 +354,7 @@ function FinancialSection({ financial }: { financial: PartnerFinancial | null })
 
   return (
     <Section
+      id="financial"
       title="Bank details"
       description="Where we send your payments. Only you and our finance team can read these."
       status={status}
@@ -409,6 +417,7 @@ function PasswordSection() {
 
   return (
     <Section
+      id="password"
       title="Password"
       description="Changing it signs you out everywhere else, but keeps you signed in here."
       status={status}
@@ -476,6 +485,7 @@ function handleFailure(
 }
 
 function Section({
+  id,
   title,
   description,
   children,
@@ -484,6 +494,7 @@ function Section({
   submitLabel = "Save changes",
   savedMessage = "Saved.",
 }: {
+  id: string;
   title: string;
   description: string;
   children: React.ReactNode;
@@ -493,17 +504,29 @@ function Section({
   savedMessage?: string;
 }) {
   return (
-    <form onSubmit={onSubmit} noValidate className="rounded-sm border border-line bg-surface p-5 sm:p-6">
-      <h2 className="font-display text-[1.25rem] text-ink">{title}</h2>
-      <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">{description}</p>
+    <form
+      id={id}
+      onSubmit={onSubmit}
+      noValidate
+      aria-labelledby={`${id}-title`}
+      className="scroll-mt-24 rounded-md border border-line bg-surface"
+    >
+      <div className="border-b border-line px-4 py-4 sm:px-5">
+        <h2 id={`${id}-title`} className="text-[0.9375rem] font-semibold text-ink">
+          {title}
+        </h2>
+        <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">{description}</p>
+      </div>
 
-      <div className="mt-5 grid gap-4 sm:grid-cols-2">{children}</div>
+      <div className="grid gap-x-4 gap-y-5 px-4 py-5 sm:grid-cols-2 sm:px-5">{children}</div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-4 border-t border-line pt-4">
+      {/* The outcome sits beside the button that caused it, and is announced:
+          a "Saved" that appears at the top of a long page is one nobody sees. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line px-4 py-3.5 sm:px-5">
         <button
           type="submit"
           disabled={status.kind === "saving"}
-          className="inline-flex h-11 items-center gap-2 rounded-sm bg-brand px-5 text-[0.875rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-60"
+          className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-5 text-[0.875rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-60"
         >
           {status.kind === "saving" && <Loader2 size={15} className="animate-spin" aria-hidden />}
           {submitLabel}
@@ -511,10 +534,7 @@ function Section({
 
         <p
           aria-live="polite"
-          className={cn(
-            "text-[0.8125rem]",
-            status.kind === "error" ? "text-error-text" : "text-success",
-          )}
+          className={cn("min-w-0 text-[0.8125rem]", status.kind === "error" ? "text-error-text" : "text-success")}
         >
           {status.kind === "saved" && (
             <span className="inline-flex items-center gap-1.5">
@@ -556,7 +576,7 @@ function Field({
 
   return (
     <div className={cn(wide && "sm:col-span-2")}>
-      <label htmlFor={id} className="mb-1.5 block text-[0.8125rem] font-medium text-ink">
+      <label htmlFor={id} className={LABEL}>
         {label}
       </label>
       <input

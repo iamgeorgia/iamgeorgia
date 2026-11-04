@@ -110,7 +110,10 @@ const formatWhen = (entry: IndexEntry): string =>
     : formatStayDate(entry.startDate);
 
 const columns: Column[] = [
-  { label: "Type" },
+  // Below 2xl the type rides in the reference cell: a column of its own cost
+  // 108px, and at laptop widths the row ran off the right of the panel with
+  // Payment and Total out of sight.
+  { label: "Type", hideBelow: "2xl" },
   { label: "Reference" },
   { label: "Booking" },
   { label: "Buyer", hideBelow: "lg" },
@@ -169,17 +172,19 @@ export function AllBookingsBrowser({
 
   // The names come with the row, looked up once per page on the server; the
   // ids are what the links need. The manager is a two-letter chip with the
-  // full name on hover, so the column stays one line wide.
+  // full name on hover, so the column stays one line wide. The email and the
+  // account names wrap instead of truncating: an unbreakable line made the
+  // longest address in the page the column's minimum width.
   const buyer = (entry: IndexEntry) => (
     <span className="flex items-start justify-between gap-2">
       <span className="min-w-0">
         {entry.leadName}
-        <span className="block truncate text-[0.75rem] text-muted">{entry.leadEmail}</span>
+        <span className="block text-[0.75rem] wrap-anywhere text-muted">{entry.leadEmail}</span>
         {showPartner && entry.partner && (
           <Link
             href={localePath(`/admin/partners/${entry.partner.id}`)}
             prefetch={false}
-            className="block truncate text-[0.75rem] text-brand-text underline-offset-4 hover:underline"
+            className="block text-[0.75rem] text-brand-text underline-offset-4 hover:underline"
           >
             {entry.partner.name}
           </Link>
@@ -188,7 +193,7 @@ export function AllBookingsBrowser({
           <Link
             href={localePath(`/admin/customers/${entry.customer.id}`)}
             prefetch={false}
-            className="block truncate text-[0.75rem] text-brand-text underline-offset-4 hover:underline"
+            className="block text-[0.75rem] text-brand-text underline-offset-4 hover:underline"
           >
             {entry.customer.name}
             {entry.customer.kind === "COMPANY" ? <span className="text-muted"> · company</span> : null}
@@ -264,18 +269,21 @@ export function AllBookingsBrowser({
             ) : (
               data.map((entry) => (
                 <Row key={`${entry.product}-${entry.id}`}>
-                  <Cell>
+                  <Cell hideBelow="2xl">
                     <ProductPill product={entry.product} />
                   </Cell>
                   <Cell>
-                    {reference(entry, "font-medium text-ink")}
+                    <span className="mb-1 block 2xl:hidden">
+                      <ProductPill product={entry.product} />
+                    </span>
+                    {reference(entry, "font-medium whitespace-nowrap text-ink")}
                     {entry.order && (
                       <span className="block text-[0.75rem] text-muted">in {entry.order.reference}</span>
                     )}
                     {approval(entry)}
                   </Cell>
                   <Cell>
-                    <span className="block max-w-[18rem] truncate">{entry.title}</span>
+                    <span className="line-clamp-2 max-w-[18rem] min-w-[8rem]">{entry.title}</span>
                     <span className="block text-[0.75rem] text-muted">{formatWhen(entry)}</span>
                   </Cell>
                   <Cell hideBelow="lg">{buyer(entry)}</Cell>

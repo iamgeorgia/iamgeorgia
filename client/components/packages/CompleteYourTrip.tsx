@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowRight, CarFront, Layers } from "lucide-react";
 
 import { Container } from "@/components/ui/Container";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { ApiError } from "@/lib/api/client";
 import { getRecommendations } from "@/lib/api/packages";
 import { formatStayDate } from "@/lib/booking/stay";
@@ -75,9 +76,13 @@ export async function CompleteYourTrip(props: CompleteYourTripProps) {
             <h3 className="type-caption font-semibold tracking-wide text-muted uppercase">
               {t.nav.transfers}
             </h3>
-            <ul className="mt-3 grid gap-3 sm:grid-cols-2">
+            {/* `grid-cols-1` is `minmax(0, 1fr)`. Without it the phone layout
+                ran on one implicit `auto` track, which grows to the min-content
+                of its widest item — and a `truncate` line's min-content is the
+                whole untruncated route name, so the page scrolled sideways. */}
+            <ul className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {legs.map((leg) => (
-                <li key={`${leg.from.id}-${leg.to.id}-${leg.date}`}>
+                <li key={`${leg.from.id}-${leg.to.id}-${leg.date}`} className="min-w-0">
                   <Link
                     href={path(
                       `/transfers?from=${leg.from.slug}&to=${leg.to.slug}&date=${leg.date}&adults=${props.adults}`,
@@ -115,7 +120,7 @@ export async function CompleteYourTrip(props: CompleteYourTripProps) {
             <h3 className="type-caption font-semibold tracking-wide text-muted uppercase">
               {t.nav.tours}
             </h3>
-            <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {tours.slice(0, 3).map((tour) => {
                 const image = tourImageUrl(tour);
                 const offer = tour.cheapestOffer;
@@ -128,13 +133,18 @@ export async function CompleteYourTrip(props: CompleteYourTripProps) {
                       )}
                       className="group block"
                     >
-                      <span className="block aspect-4/3 overflow-hidden rounded-sm bg-line">
+                      {/* Through the optimiser like every other tour card, so a
+                          phone gets a resized WebP rather than the original
+                          photograph; lazy by default, as the rail is far below
+                          the fold. */}
+                      <span className="relative block aspect-4/3 overflow-hidden rounded-sm bg-line">
                         {image && (
-                          // eslint-disable-next-line @next/next/no-img-element -- editorial or API-served
-                          <img
+                          <SafeImage
                             src={image}
                             alt=""
-                            className="size-full object-cover transition-transform duration-700 ease-(--ease-out-soft) group-hover:scale-[1.04]"
+                            fill
+                            sizes="(max-width: 640px) 90vw, (max-width: 1024px) 45vw, 30vw"
+                            className="object-cover transition-transform duration-700 ease-(--ease-out-soft) group-hover:scale-[1.04]"
                           />
                         )}
                       </span>
@@ -165,12 +175,12 @@ export async function CompleteYourTrip(props: CompleteYourTripProps) {
             <h3 className="type-caption font-semibold tracking-wide text-muted uppercase">
               {t.nav.packages}
             </h3>
-            <ul className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <ul className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {packages.slice(0, 3).map((pkg) => {
                 const image = packageImageUrl(pkg);
 
                 return (
-                  <li key={pkg.id}>
+                  <li key={pkg.id} className="min-w-0">
                     <Link
                       href={path(
                         `/packages/${pkg.slug}?startDate=${pkg.quote.startDate}&adults=${props.adults}`,

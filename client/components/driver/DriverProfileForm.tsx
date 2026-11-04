@@ -3,10 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { CheckboxField, FormError, SubmitButton, TextArea, TextInput } from "@/components/admin/FormControls";
+import { FormError, SubmitButton, TextArea, TextInput } from "@/components/admin/FormControls";
 import { ApiError, describeError } from "@/lib/api/client";
 import { updateDriverProfile } from "@/lib/api/driverPanel";
 import { languageOptions } from "@/lib/admin/fleet";
+import { cn } from "@/lib/utils";
 import type { DriverLanguage, DriverSelf } from "@/types/driver";
 
 /** The three things a driver may change about themselves. */
@@ -48,24 +49,42 @@ export function DriverProfileForm({ driver }: { driver: DriverSelf }) {
           setSaved(false);
         }}
         error={fieldErrors.phone}
-        hint="Dispatch and, close to a pick-up, the passenger call this number."
+        // A phone number reads left to right on every page.
+        dir="ltr"
+        hint={<bdi>Dispatch and, close to a pick-up, the passenger call this number.</bdi>}
       />
-      <div>
-        <span className="block text-[0.75rem] font-semibold text-muted">Languages you speak</span>
-        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2">
-          {languageOptions.map((option) => (
-            <CheckboxField
-              key={option.value}
-              label={option.label}
-              checked={languages.includes(option.value)}
-              onChange={(next) => {
-                setLanguages((current) => (next ? [...current, option.value] : current.filter((value) => value !== option.value)));
-                setSaved(false);
-              }}
-            />
-          ))}
+      {/* A fieldset, so the group is announced by its question; each choice
+          a 44px chip rather than a 16px box, for a thumb. */}
+      <fieldset>
+        <legend className="text-[0.75rem] font-semibold text-muted">Languages you speak</legend>
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          {languageOptions.map((option) => {
+            const checked = languages.includes(option.value);
+            return (
+              <label
+                key={option.value}
+                className={cn(
+                  "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-sm border px-3 text-[0.9375rem] transition-colors",
+                  "has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-brand",
+                  checked ? "border-brand/60 bg-brand-soft text-ink" : "border-line bg-surface text-body hover:border-ink/30",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={(event) => {
+                    const next = event.target.checked;
+                    setLanguages((current) => (next ? [...current, option.value] : current.filter((value) => value !== option.value)));
+                    setSaved(false);
+                  }}
+                  className="size-4 shrink-0 accent-brand"
+                />
+                <span className="min-w-0 wrap-break-word">{option.label}</span>
+              </label>
+            );
+          })}
         </div>
-      </div>
+      </fieldset>
       <TextArea
         label="About you"
         rows={3}
@@ -75,12 +94,18 @@ export function DriverProfileForm({ driver }: { driver: DriverSelf }) {
           setSaved(false);
         }}
         error={fieldErrors.bio}
-        hint="Passengers see this. A line or two."
+        // Written in whatever language the driver writes in.
+        dir="auto"
+        hint={<bdi>Passengers see this. A line or two.</bdi>}
       />
       <FormError message={error} />
-      <SubmitButton busy={busy} saved={saved} onClick={save} className="w-full sm:w-auto">
+      {/* `min-h` rather than a second height: the button sets its own. */}
+      <SubmitButton busy={busy} saved={saved} onClick={save} className="min-h-12 w-full justify-center sm:w-auto sm:px-6">
         {busy ? "Saving…" : saved ? "Saved" : "Save"}
       </SubmitButton>
+      <p aria-live="polite" className="sr-only">
+        {saved ? "Your details are saved." : ""}
+      </p>
     </div>
   );
 }

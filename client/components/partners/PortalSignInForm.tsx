@@ -55,10 +55,10 @@ export function PortalSignInForm({ redirectTo = "/portal" }: { redirectTo?: stri
   };
 
   const field =
-    "h-11 w-full rounded-sm border bg-background px-3 text-[0.875rem] text-ink transition-colors focus:outline-none";
+    "h-11 w-full rounded-sm border bg-surface px-3 text-[0.875rem] text-ink transition-colors focus:outline-none";
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-4">
+    <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
       <div>
         <label htmlFor="portal-email" className="mb-1.5 block text-[0.8125rem] font-medium text-ink">
           Email
@@ -92,10 +92,10 @@ export function PortalSignInForm({ redirectTo = "/portal" }: { redirectTo?: stri
           aria-describedby={error ? "portal-signin-error" : undefined}
           className={cn(field, error ? "border-error" : "border-line focus:border-ink")}
         />
-        <p className="mt-1.5 text-end text-[0.8125rem]">
+        <p className="mt-1 text-end text-[0.8125rem]">
           <Link
             href={path("/forgot-password")}
-            className="text-muted underline-offset-4 transition-colors hover:text-ink hover:underline"
+            className="inline-flex min-h-9 items-center text-muted underline-offset-4 transition-colors hover:text-ink hover:underline"
           >
             Forgot your password?
           </Link>

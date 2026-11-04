@@ -17,7 +17,7 @@ export async function Footer() {
   return (
     <footer className="mt-auto bg-ink text-on-dark">
       <Container className="py-20 lg:py-24">
-        <div className="grid gap-14 lg:grid-cols-12 lg:gap-10">
+        <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-10">
           <div className="lg:col-span-4">
             <p className="flex items-center gap-3 font-display text-2xl tracking-[0.06em]">
               <Logo className="size-10" />

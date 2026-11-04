@@ -167,7 +167,7 @@ export default async function AdminApprovalPage({ params }: PageProps<"/[locale]
         </p>
       )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
           <AdminPanel title="What is being asked" description={approvalKindLabels[approval.kind]}>
             <AdminDefinitionList items={requestedChange(approval)} />

@@ -28,7 +28,7 @@ export function QuickPresets({
 
   return (
     <div className={className}>
-      <div role="group" aria-label="Quick views" className="flex flex-wrap items-center gap-1.5">
+      <div role="group" aria-label="Quick views" className="chip-rail flex flex-wrap items-center gap-1.5">
         {presets.map((preset) => (
           <button
             key={preset.id}
@@ -36,11 +36,11 @@ export function QuickPresets({
             aria-pressed={active === preset.id}
             onClick={() => onSelect(preset.id)}
             className={cn(
-              "h-8 rounded-sm px-2.5 text-[0.8125rem] font-medium transition-colors",
+              "h-9 rounded-sm px-2.5 text-[0.8125rem] font-medium whitespace-nowrap transition-colors",
               active === preset.id ? "bg-ink text-white" : "text-muted hover:bg-surface-soft hover:text-ink",
             )}
           >
-            {preset.label}
+            <bdi>{preset.label}</bdi>
           </button>
         ))}
       </div>

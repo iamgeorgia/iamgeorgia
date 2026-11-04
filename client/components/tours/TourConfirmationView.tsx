@@ -58,7 +58,7 @@ export async function TourConfirmationView({ booking }: { booking: TourBooking }
       </p>
       <p className="type-caption mt-1.5 text-subtle">{t.tours.confirmation.referenceHint}</p>
 
-      <div className="mt-10 grid gap-10 lg:grid-cols-12 lg:gap-12">
+      <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-12">
         <div className="min-w-0 lg:col-span-8">
           <TourBookingDetail booking={booking} />
         </div>

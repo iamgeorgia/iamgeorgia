@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { DriverCard } from "@/components/booking/DriverCard";
 import { RateDriverForm } from "@/components/partners/RateDriverForm";
+import { RouteName } from "@/components/ui/RouteName";
 import { formatMoney } from "@/lib/money";
 import type { AssignmentForPartner } from "@/types/driver";
 import type { TransferBooking } from "@/types/transfer";
@@ -19,11 +20,13 @@ export function PortalTransferBooking({ booking, driverPath }: { booking: Transf
 
   return (
     <div className="space-y-6">
-      <div className="rounded-sm border border-line bg-surface p-5">
+      <div className="rounded-md border border-line bg-surface p-4 sm:p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <TransferBookingStatusBadge status={booking.status} />
           <span className="text-[0.8125rem] text-muted">
-            {booking.passengers} passengers · {booking.luggage} bags · {booking.vehicle.name}
+            <bdi>
+              {booking.passengers} passengers · {booking.luggage} bags · {booking.vehicle.name}
+            </bdi>
           </span>
         </div>
         <dl className="mt-4 grid gap-x-6 gap-y-2 text-[0.875rem] sm:grid-cols-2">
@@ -47,16 +50,18 @@ export function PortalTransferBooking({ booking, driverPath }: { booking: Transf
       </div>
 
       {booking.legs.map((leg) => (
-        <article key={leg.id} className="rounded-sm border border-line bg-surface p-5">
+        <article key={leg.id} className="rounded-md border border-line bg-surface p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-[0.75rem] font-semibold tracking-wide text-muted uppercase">
                 {leg.direction === "RETURN" ? "Return" : "Outbound"}
               </p>
               <p className="mt-1 text-[1.0625rem] font-medium text-ink">
-                {leg.from} → {leg.to}
+                <RouteName from={leg.from} to={leg.to} />
               </p>
-              <p className="text-[0.8125rem] text-muted tabular-nums">{instant(leg.pickupAt)}</p>
+              <p className="text-[0.8125rem] text-muted tabular-nums">
+                <bdi>{instant(leg.pickupAt)}</bdi>
+              </p>
             </div>
             <TransferLegStatusBadge status={leg.status} />
           </div>

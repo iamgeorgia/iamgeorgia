@@ -67,5 +67,13 @@ mediaRoutes.get(/^\/(.+)$/, async (req, res) => {
     const buffer = await getObject({ key, visibility: 'PUBLIC' });
 
     res.set('Cache-Control', `public, max-age=${config.isProduction ? 31536000 : 60}, immutable`);
+    // helmet() sends `Cross-Origin-Resource-Policy: same-origin` on every
+    // response, which is right for the API and wrong for this route: these
+    // bytes are what the public CDN serves, and the front end on another
+    // origin (:3000) embeds them directly in `<img>`. Under same-origin the
+    // browser refused them (ERR_BLOCKED_BY_RESPONSE.NotSameOrigin) and every
+    // admin, driver and fleet photo rendered broken. Private objects above
+    // keep the default: they are signed downloads, never embedded.
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
     send(res, buffer, contentTypeFor(key));
 });

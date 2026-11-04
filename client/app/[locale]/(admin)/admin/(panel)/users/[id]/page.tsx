@@ -89,7 +89,7 @@ export default async function AdminUserPage({ params }: PageProps<"/[locale]/adm
         actions={<UserStatusBadge status={user.status} className="text-[0.8125rem]" />}
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
           <AdminPanel title="Profile">
             <AdminDefinitionList

@@ -413,7 +413,7 @@ export function LatestBookingsWidget({ bookings, path }: { bookings: BookingSumm
               <Cell>
                 <Link
                   href={path(`/admin/bookings/${booking.reference}`)}
-                  className="font-medium text-ink underline-offset-4 hover:underline"
+                  className="font-medium whitespace-nowrap text-ink underline-offset-4 hover:underline"
                 >
                   {booking.reference}
                 </Link>
@@ -475,14 +475,20 @@ export function DeadlinesWeekWidget({
       }
       bodyClassName="p-0"
     >
-      <dl className="grid grid-cols-3 divide-x divide-line border-b border-line">
-        {DEADLINE_KINDS.map((kind) => (
-          <div key={kind} className="px-4 py-3">
-            <dt className="text-[0.6875rem] font-semibold tracking-[0.08em] text-muted uppercase">{deadlineKindShortLabels[kind]}</dt>
-            <dd className="mt-1 font-display text-[1.5rem] leading-none text-ink tabular-nums">{counts[kind]}</dd>
-          </div>
-        ))}
-      </dl>
+      {/* Sized by the panel, not the viewport: the widget sits in a third of
+          the row on a wide screen and full width on a narrow one. Three
+          columns need ~28rem before "CANCELLATION" fits one line; narrower,
+          the counts stack as label/value rows instead of breaking mid-word. */}
+      <div className="@container border-b border-line">
+        <dl className="grid grid-cols-1 divide-y divide-line @md:grid-cols-3 @md:divide-x @md:divide-y-0">
+          {DEADLINE_KINDS.map((kind) => (
+            <div key={kind} className="flex items-baseline justify-between gap-3 px-5 py-2.5 @md:block @md:px-4 @md:py-3">
+              <dt className="text-[0.6875rem] font-semibold tracking-[0.08em] text-muted uppercase">{deadlineKindShortLabels[kind]}</dt>
+              <dd className="font-display text-[1.25rem] leading-none text-ink tabular-nums @md:mt-1 @md:text-[1.5rem]">{counts[kind]}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
       {upcoming.data.length === 0 ? (
         <p className="px-5 py-8 text-center text-[0.875rem] text-muted">Nothing falls due in the next seven days.</p>
       ) : (

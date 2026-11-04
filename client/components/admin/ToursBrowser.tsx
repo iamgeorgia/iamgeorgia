@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { ImageOff, Search, Star } from "lucide-react";
@@ -84,13 +85,17 @@ export function ToursBrowser({
   const thumb = (tour: TourSummary) => {
     const url = tourCardImage(tour);
 
-    return url ? (
-      // eslint-disable-next-line @next/next/no-img-element -- editorial or API-served
-      <img src={url} alt="" className="size-10 shrink-0 rounded-sm object-cover" />
-    ) : (
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-surface-soft text-subtle">
-        <ImageOff size={15} aria-hidden />
-      </span>
+    return (
+      <MediaImg
+        src={url}
+        alt=""
+        className="size-10 shrink-0 rounded-sm object-cover"
+        fallback={
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-surface-soft text-subtle">
+            <ImageOff size={15} aria-hidden />
+          </span>
+        }
+      />
     );
   };
 

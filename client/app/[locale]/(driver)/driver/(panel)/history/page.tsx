@@ -1,32 +1,42 @@
 import type { Metadata } from "next";
+import { History } from "lucide-react";
 
-import { AssignmentCard } from "@/components/driver/AssignmentCard";
+import { AssignmentDays, DriverEmpty, DriverPageHeader } from "@/components/driver/DriverPage";
 import { listDriverAssignments } from "@/lib/api/driverPanel";
 import { getI18n } from "@/lib/i18n/server";
+import type { DriverAssignment } from "@/types/driver";
 
 export const metadata: Metadata = { title: "History" };
 
 export default async function DriverHistoryPage() {
   const [{ locale }, result] = await Promise.all([getI18n(), listDriverAssignments({ scope: "history", pageSize: 100 })]);
 
+  // What the list holds, counted: driven, no-shows, turned down, taken away.
+  const count = (test: (assignment: DriverAssignment) => boolean) => result.data.filter(test).length;
+  const summary = [
+    [count((a) => a.status === "COMPLETED"), "driven", "driven"],
+    [count((a) => a.status === "NO_SHOW" || (a.status === "ACCEPTED" && a.leg.status === "NO_SHOW_REPORTED")), "no-show", "no-shows"],
+    [count((a) => a.status === "DECLINED"), "declined", "declined"],
+    [count((a) => a.status === "REVOKED"), "reassigned", "reassigned"],
+  ]
+    .filter(([n]) => Number(n) > 0)
+    .map(([n, one, many]) => `${n} ${n === 1 ? one : many}`)
+    .join(" · ");
+
   return (
-    <section aria-labelledby="driver-history">
-      <h1 id="driver-history" className="text-[1.125rem] font-semibold text-ink">
-        History
-      </h1>
+    <>
+      <DriverPageHeader
+        title="History"
+        meta={summary || undefined}
+      />
+
       {result.data.length === 0 ? (
-        <p className="mt-3 rounded-sm border border-dashed border-line p-6 text-center text-[0.9375rem] text-muted">
-          No past jobs yet.
-        </p>
+        <DriverEmpty icon={History} title="No past jobs yet">
+          Jobs you have driven, and offers you turned down, are kept here.
+        </DriverEmpty>
       ) : (
-        <ul className="mt-3 space-y-3">
-          {result.data.map((assignment) => (
-            <li key={assignment.id}>
-              <AssignmentCard assignment={assignment} locale={locale} />
-            </li>
-          ))}
-        </ul>
+        <AssignmentDays assignments={result.data} locale={locale} label="Past jobs by day" />
       )}
-    </section>
+    </>
   );
 }

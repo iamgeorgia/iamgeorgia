@@ -25,7 +25,7 @@ import type { Booking } from "@/types/booking";
  */
 
 const FIELD =
-  "h-11 w-full rounded-sm border bg-background px-3 text-[0.875rem] text-ink transition-colors focus:outline-none";
+  "h-11 w-full rounded-sm border bg-surface px-3 text-[0.875rem] text-ink transition-colors placeholder:text-subtle focus:outline-none";
 
 type Status =
   | { kind: "idle" }
@@ -115,8 +115,8 @@ export function PortalBookingEditor({ booking }: { booking: Booking }) {
 
   if (!amendable) {
     return (
-      <section className="rounded-sm border border-line bg-surface p-6">
-        <h2 className="font-display text-[1.25rem] text-ink">Booking details</h2>
+      <section className="rounded-md border border-line bg-surface px-4 py-5 sm:px-5">
+        <h2 className="text-[0.9375rem] font-semibold text-ink">Booking details</h2>
         <p className="mt-3 text-[0.875rem] leading-relaxed text-muted">
           {booking.status === "CANCELLED"
             ? "This booking is cancelled, so its details are now a record of what was sold and cannot be edited."
@@ -127,16 +127,16 @@ export function PortalBookingEditor({ booking }: { booking: Booking }) {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-sm border border-line bg-surface">
-      <div className="border-b border-line p-6">
-        <h2 className="font-display text-[1.25rem] text-ink">Booking details</h2>
-        <p className="mt-2 text-[0.875rem] leading-relaxed text-muted">
+    <form onSubmit={submit} className="rounded-md border border-line bg-surface">
+      <div className="border-b border-line px-4 py-4 sm:px-5">
+        <h2 className="text-[0.9375rem] font-semibold text-ink">Booking details</h2>
+        <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
           Correct who is arriving and what the property should know. Changes reach the property
           immediately.
         </p>
       </div>
 
-      <div className="grid gap-5 p-6 sm:grid-cols-2">
+      <div className="grid gap-x-4 gap-y-5 px-4 py-5 sm:grid-cols-2 sm:px-5">
         <Field
           id="firstName"
           label="Lead guest first name"
@@ -184,7 +184,7 @@ export function PortalBookingEditor({ booking }: { booking: Booking }) {
             rows={3}
             maxLength={1000}
             className={cn(
-              "w-full rounded-sm border bg-background px-3 py-2.5 text-[0.875rem] text-ink transition-colors focus:outline-none",
+              "w-full rounded-sm border bg-surface px-3 py-2.5 text-[0.875rem] text-ink transition-colors placeholder:text-subtle focus:outline-none",
               errors.specialRequests ? "border-error focus:border-error" : "border-line focus:border-ink",
             )}
           />
@@ -204,20 +204,20 @@ export function PortalBookingEditor({ booking }: { booking: Booking }) {
           </p>
           <p className="mt-1.5 text-[0.8125rem] leading-relaxed text-muted">
             Changing any of those means giving the rooms back and taking them again at whatever
-            they cost today. Cancel this booking and make a new one — the cancellation terms below
+            they cost today. Cancel this booking and make a new one — the cancellation terms on this page
             tell you what that costs right now.
           </p>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-end gap-4 border-t border-line px-6 py-4">
+      <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-2 border-t border-line px-4 py-3.5 sm:px-5">
         {status.kind === "error" && (
           <p role="alert" className="me-auto text-[0.8125rem] text-error-text">
             {status.message}
           </p>
         )}
         {status.kind === "saved" && (
-          <p className="me-auto flex items-center gap-1.5 text-[0.8125rem] text-success">
+          <p role="status" className="me-auto flex items-center gap-1.5 text-[0.8125rem] text-success">
             <Check size={14} aria-hidden />
             Saved
           </p>
@@ -226,7 +226,7 @@ export function PortalBookingEditor({ booking }: { booking: Booking }) {
         <button
           type="submit"
           disabled={status.kind === "saving"}
-          className="inline-flex h-10 items-center gap-2 rounded-sm bg-ink px-5 text-[0.8125rem] font-semibold text-on-dark transition-colors hover:bg-ink-soft disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-5 text-[0.875rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:pointer-events-none disabled:opacity-60"
         >
           {status.kind === "saving" && <Loader2 size={14} className="animate-spin" aria-hidden />}
           Save changes

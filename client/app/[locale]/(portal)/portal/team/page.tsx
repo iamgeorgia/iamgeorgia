@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
-import { Container } from "@/components/ui/Container";
+import { PortalContainer, PortalPageHeader } from "@/components/partners/PortalPage";
 import { TeamSection } from "@/components/partners/TeamSection";
 import { getGrantable, listUsers } from "@/lib/api/users";
 import { getSession } from "@/lib/auth/session";
@@ -48,16 +48,13 @@ export default async function PortalTeamPage() {
   ]);
 
   return (
-    <Container className="py-12 sm:py-16">
-      <div className="mx-auto max-w-3xl">
-        <h1 className="font-display text-[2rem] leading-tight text-ink sm:text-[2.5rem]">Team</h1>
-        <p className="mt-4 max-w-2xl text-[1rem] leading-relaxed text-muted">
-          Invite the people who book and manage {session.partner.name}&apos;s account, choose what
-          each of them can do, and switch off anyone who has left.
-        </p>
+    <PortalContainer>
+      <PortalPageHeader
+        title="Team"
+        description={`Invite the people who book and manage ${session.partner.name}'s account, choose what each of them can do, and switch off anyone who has left.`}
+      />
 
-        <TeamSection members={team.data} total={team.total} viewer={session.user} grantable={grantable.roles} />
-      </div>
-    </Container>
+      <TeamSection members={team.data} total={team.total} viewer={session.user} grantable={grantable.roles} />
+    </PortalContainer>
   );
 }

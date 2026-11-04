@@ -211,13 +211,30 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
                     className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
                     aria-hidden
                   />
+                  {/* The hint is drawn rather than set as `placeholder`: a
+                      placeholder cannot change with the screen, and the full
+                      sentence was cut to "Search bookings |" on a phone. The
+                      single-space placeholder keeps `:placeholder-shown`
+                      working, which hides the hint once there is a value.
+                      Three lengths, each the longest that fits its band: the
+                      field is ~150px on a 360px phone, and from `sm` it shares
+                      the bar with the account name, so the full sentence only
+                      has room from `md`. */}
                   <input
                     type="search"
                     name="search"
-                    placeholder="Search bookings by reference, name or email…"
-                    aria-label="Search bookings"
-                    className="h-10 w-full rounded-sm border border-line bg-surface ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
+                    placeholder=" "
+                    aria-label="Search bookings by reference, name or email"
+                    className="peer h-10 w-full rounded-sm border border-line bg-surface ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
                   />
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-y-0 start-9 end-3 hidden items-center text-sm text-subtle peer-placeholder-shown:flex"
+                  >
+                    <span className="truncate min-[380px]:hidden">Search…</span>
+                    <span className="hidden truncate min-[380px]:block md:hidden">Search bookings…</span>
+                    <span className="hidden truncate md:block">Search bookings by reference, name or email…</span>
+                  </span>
                 </form>
               )}
 

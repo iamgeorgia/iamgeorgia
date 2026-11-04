@@ -198,7 +198,7 @@ export default async function AdminPayablePage({ params }: PageProps<"/[locale]/
         </div>
       )}
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
           <AdminPanel
             title="What is owed"

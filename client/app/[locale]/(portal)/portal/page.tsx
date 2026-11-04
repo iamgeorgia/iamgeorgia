@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { Ban, Clock, PauseCircle, PenLine, ShieldBan, XCircle } from "lucide-react";
 
 import { PortalStatusPanel } from "@/components/partners/PortalStatusPanel";
-import { Container } from "@/components/ui/Container";
 import { getSession } from "@/lib/auth/session";
 import { localePath } from "@/lib/i18n/config";
 import { getLocale } from "@/lib/i18n/server";
@@ -86,17 +85,16 @@ export default async function PortalHomePage() {
   const panel = panels[partner.status as keyof typeof panels];
 
   return (
-    <Container className="py-12 sm:py-16">
-      <div className="mx-auto max-w-2xl">
-        <PortalStatusPanel
-          icon={panel.icon}
-          tone={panel.tone}
-          title={panel.title}
-          body={panel.body}
-          note={panel.note}
-          partner={partner}
-        />
-      </div>
-    </Container>
+    // Centred: there is no sidebar to line up with, and the page is one message.
+    <div className="mx-auto w-full max-w-2xl px-4 py-10 sm:px-6 sm:py-16">
+      <PortalStatusPanel
+        icon={panel.icon}
+        tone={panel.tone}
+        title={panel.title}
+        body={panel.body}
+        note={panel.note}
+        partner={partner}
+      />
+    </div>
   );
 }

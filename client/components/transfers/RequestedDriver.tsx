@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Clock, Languages, Phone, ShieldCheck, Star, UserRound } from "lucide-react";
+import { MediaImg } from "@/components/ui/MediaImg";
 
 import { fill } from "@/lib/i18n/fill";
 import { useI18n } from "@/lib/i18n/provider";
@@ -36,14 +37,16 @@ export function RequestedDriver({
       {label && <p className="type-caption text-muted">{label}</p>}
 
       <div className={label ? "mt-3 flex items-start gap-4" : "flex items-start gap-4"}>
-        {photo ? (
-          // eslint-disable-next-line @next/next/no-img-element -- API-served
-          <img src={photo} alt="" className="size-16 shrink-0 rounded-full object-cover" />
-        ) : (
-          <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
-            <UserRound size={24} aria-hidden />
-          </span>
-        )}
+        <MediaImg
+          src={photo}
+          alt=""
+          className="size-16 shrink-0 rounded-full object-cover"
+          fallback={
+            <span className="flex size-16 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
+              <UserRound size={24} aria-hidden />
+            </span>
+          }
+        />
 
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap items-center gap-x-2 text-[1rem] font-medium text-ink">
@@ -75,10 +78,8 @@ export function RequestedDriver({
 
           {vehicle && (
             <p className="type-body-sm mt-2 flex items-center gap-3 text-body">
-              {carPhoto && (
-                // eslint-disable-next-line @next/next/no-img-element -- API-served
-                <img src={carPhoto} alt="" className="h-10 w-14 shrink-0 rounded-sm object-cover" />
-              )}
+              {/* No photo or a failed one: drop it rather than hold a gap in the line. */}
+              <MediaImg src={carPhoto} alt="" className="h-10 w-14 shrink-0 rounded-sm object-cover" fallback={null} />
               <span>
                 {vehicle.make} {vehicle.model}
                 {vehicle.colour ? `, ${vehicle.colour.toLowerCase()}` : ""}

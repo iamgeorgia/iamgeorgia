@@ -158,6 +158,16 @@ export default async function AdminOverviewPage() {
 
   const decide = widgetsIn(placed, "decide");
   const watchQueues = widgetsIn(placed, "watch").filter((widget) => widget.acts);
+  const watchWidgets = (
+    <>
+      {arrivals && shown.has("arrivals") && <ArrivalsWidget arrivals={arrivals} path={path} />}
+      {deadlinesUpcoming && (
+        <DeadlinesWeekWidget upcoming={deadlinesUpcoming} overdue={deadlinesOverdue?.total ?? 0} today={today} path={path} />
+      )}
+      {watchQueues.map(renderQueue)}
+      {recentPayments && <RecentPaymentsWidget payments={recentPayments.data} path={path} />}
+    </>
+  );
   const tiles =
     (bookingSummary ? (can(session, "bookings.read") ? 3 : 2) : 0) +
     (paymentsDue && !shown.has("financeFigures") ? 1 : 0) +
@@ -204,7 +214,7 @@ export default async function AdminOverviewPage() {
           <h2 id="overview-decide" className="text-[0.6875rem] font-semibold tracking-[0.16em] text-subtle uppercase">
             Needs a decision
           </h2>
-          <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-2">{decide.map(renderQueue)}</div>
+          <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-2 [&>*]:min-w-0">{decide.map(renderQueue)}</div>
         </section>
       )}
 
@@ -224,22 +234,26 @@ export default async function AdminOverviewPage() {
           <h2 id="overview-watch" className="text-[0.6875rem] font-semibold tracking-[0.16em] text-subtle uppercase">
             {decide.length > 0 ? "Keeping an eye on" : "Today"}
           </h2>
-          {/* `grid-cols-1` and the column's `min-w-0`: below `xl` the grid
-              has one implicit track, sized by the widest min-content inside
-              it, and a deadline's unbreakable "reference · title" line made
-              that 595px on a phone — the bookings table beside it stretched
-              to match and the deadlines lost their right edge. */}
-          <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-3">
-            {latest && <LatestBookingsWidget bookings={latest} path={path} />}
-            <div className="flex min-w-0 flex-col gap-6">
-              {arrivals && shown.has("arrivals") && <ArrivalsWidget arrivals={arrivals} path={path} />}
-              {deadlinesUpcoming && (
-                <DeadlinesWeekWidget upcoming={deadlinesUpcoming} overdue={deadlinesOverdue?.total ?? 0} today={today} path={path} />
-              )}
-              {watchQueues.map(renderQueue)}
-              {recentPayments && <RecentPaymentsWidget payments={recentPayments.data} path={path} />}
+          {/* Explicit `grid-cols-1` (`minmax(0, 1fr)`) and `min-w-0` on each
+              column: on the implicit `auto` track a deadline's unbreakable
+              "reference · title" line reported its full, untruncated width
+              upwards and the whole section — table included — grew to ~590px
+              on a phone, so the deadlines lost their right edge. From `xl`
+              the table takes two thirds and the side widgets the last one;
+              with no table to show, the widgets share the row themselves
+              instead of leaving two thirds empty. */}
+          {latest ? (
+            <div className="mt-3 grid grid-cols-1 gap-6 xl:grid-cols-3">
+              <div className="min-w-0 xl:col-span-2">
+                <LatestBookingsWidget bookings={latest} path={path} />
+              </div>
+              <div className="flex min-w-0 flex-col gap-6">{watchWidgets}</div>
             </div>
-          </div>
+          ) : (
+            <div className="mt-3 grid grid-cols-1 items-start gap-6 lg:grid-cols-2 xl:grid-cols-3 [&>*]:min-w-0">
+              {watchWidgets}
+            </div>
+          )}
         </section>
       )}
     </AdminContainer>

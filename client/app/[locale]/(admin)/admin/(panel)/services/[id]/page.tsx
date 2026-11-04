@@ -69,7 +69,7 @@ export default async function AdminServicePage({
         actions={service.status ? <HotelStatusBadge status={service.status} /> : undefined}
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 flex flex-col gap-6 lg:col-span-2">
           <AdminPanel title="Service">
             <ServiceEditor

@@ -1,6 +1,7 @@
 "use client";
 
 import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
+import { MediaImg } from "@/components/ui/MediaImg";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
@@ -116,12 +117,12 @@ export function FleetBrowser({
               <Row key={vehicle.id}>
                 <Cell>
                   <div className="flex items-center gap-3">
-                    {thumb(vehicle) ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- API-served
-                      <img src={thumb(vehicle)} alt="" className="h-10 w-14 shrink-0 rounded-sm object-cover" />
-                    ) : (
-                      <span className="h-10 w-14 shrink-0 rounded-sm bg-surface-soft" aria-hidden />
-                    )}
+                    <MediaImg
+                      src={thumb(vehicle)}
+                      alt=""
+                      className="h-10 w-14 shrink-0 rounded-sm object-cover"
+                      fallback={<span className="h-10 w-14 shrink-0 rounded-sm bg-surface-soft" aria-hidden />}
+                    />
                     <div className="min-w-0">
                       <Link
                         href={path(`/admin/transfers/fleet/${vehicle.id}`)}

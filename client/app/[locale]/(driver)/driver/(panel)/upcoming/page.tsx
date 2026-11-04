@@ -1,32 +1,43 @@
 import type { Metadata } from "next";
+import { CalendarDays } from "lucide-react";
 
-import { AssignmentCard } from "@/components/driver/AssignmentCard";
+import { AssignmentDays, DriverEmpty, DriverPageHeader } from "@/components/driver/DriverPage";
+import { DriverFreshness } from "@/components/driver/DriverFreshness";
 import { listDriverAssignments } from "@/lib/api/driverPanel";
+import { DRIVER_FALLBACK_TIME_ZONE } from "@/lib/driver/assignment";
 import { getI18n } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "Upcoming" };
 
 export default async function DriverUpcomingPage() {
   const [{ locale }, result] = await Promise.all([getI18n(), listDriverAssignments({ scope: "upcoming", pageSize: 100 })]);
+  const offers = result.data.filter((assignment) => assignment.status === "OFFERED").length;
+  const renderedAt = new Date().toISOString();
 
   return (
-    <section aria-labelledby="driver-upcoming">
-      <h1 id="driver-upcoming" className="text-[1.125rem] font-semibold text-ink">
-        Upcoming
-      </h1>
+    <>
+      <DriverPageHeader
+        title="Upcoming"
+        aside={<DriverFreshness renderedAt={renderedAt} timeZone={result.data[0]?.leg.timezone || DRIVER_FALLBACK_TIME_ZONE} />}
+        meta={
+          result.data.length > 0
+            ? [
+                result.data.length === 1 ? "1 job" : `${result.data.length} jobs`,
+                offers > 0 && (offers === 1 ? "1 waiting for your answer" : `${offers} waiting for your answer`),
+              ]
+                .filter(Boolean)
+                .join(" · ")
+            : undefined
+        }
+      />
+
       {result.data.length === 0 ? (
-        <p className="mt-3 rounded-sm border border-dashed border-line p-6 text-center text-[0.9375rem] text-muted">
-          Nothing scheduled yet.
-        </p>
+        <DriverEmpty icon={CalendarDays} title="Nothing scheduled yet">
+          New jobs from dispatch appear here, and on Today when they are waiting for your answer.
+        </DriverEmpty>
       ) : (
-        <ul className="mt-3 space-y-3">
-          {result.data.map((assignment) => (
-            <li key={assignment.id}>
-              <AssignmentCard assignment={assignment} locale={locale} />
-            </li>
-          ))}
-        </ul>
+        <AssignmentDays assignments={result.data} locale={locale} label="Upcoming jobs by day" jump />
       )}
-    </section>
+    </>
   );
 }
