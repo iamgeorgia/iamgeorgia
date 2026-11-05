@@ -626,12 +626,31 @@ describe('invoicing flows', { skip: dbAvailable ? false : 'Postgres is not reach
 
         const { invoice } = await issue(draft.id);
 
+        // The real API refuses a send with a 200 and an error body (an
+        // unverified sender, seen 2026-10-21): the document keeps its status
+        // and shows the provider's words; nothing is retried.
+        stub.failNext(200, {
+            body: { status: 'error', message: 'The sender’s email address has not been verified.' },
+            path: `/invoices/${invoice.externalId}/send_by_email.json`,
+            method: 'POST'
+        });
+        const refused = await request(app).post(`/api/admin/invoices/${draft.id}/send`).set('Cookie', cookies.ACCOUNTANT).send({});
+        assert.equal(refused.status, 202, JSON.stringify(refused.body));
+        const [handled] = await run(TOPICS.INVOICE_SEND_REQUESTED, draft.id);
+        assert.equal(handled, true, 'a refusal is final, not retried');
+        const after = await prisma.invoice.findUnique({ where: { id: draft.id } });
+        assert.equal(after.status, 'ISSUED');
+        assert.match(after.syncError, /sender’s email address has not been verified/);
+        assert.equal(stub.invoices.get(invoice.externalId).sent_to, undefined);
+
         const send = await request(app).post(`/api/admin/invoices/${draft.id}/send`).set('Cookie', cookies.ACCOUNTANT).send({ to: 'accounts@caucasus.test' });
         assert.equal(send.status, 202, JSON.stringify(send.body));
         const [sent] = await run(TOPICS.INVOICE_SEND_REQUESTED, draft.id);
         assert.equal(sent, true);
         assert.equal(stub.invoices.get(invoice.externalId).sent_to, 'accounts@caucasus.test');
-        assert.equal((await prisma.invoice.findUnique({ where: { id: draft.id } })).status, 'SENT');
+        const done = await prisma.invoice.findUnique({ where: { id: draft.id } });
+        assert.equal(done.status, 'SENT');
+        assert.equal(done.syncError, null, 'a send that went clears the refusal');
 
         const duplicate = await request(app).post(`/api/admin/finance/receivables/${booking.receivable.id}/invoices`).set('Cookie', cookies.ACCOUNTANT).send({ kind: 'PROFORMA' });
         assert.equal(duplicate.status, 409);
@@ -664,5 +683,68 @@ describe('invoicing flows', { skip: dbAvailable ? false : 'Postgres is not reach
         assert.equal(vatByHand.status, 202);
         assert.equal(vatByHand.body.invoice.fromInvoice.id, manual.body.invoice.id, 'chained to the live proforma');
         assert.equal(vatByHand.body.invoice.paidCents, 0);
+    });
+
+    it('answers 400, not 500, to a date that does not exist, in the invoice list, on a document and in the reports (BUG-09)', async () => {
+        for (const from of ['2026-13-45', '2026-02-30']) {
+            const list = await request(app).get(`/api/admin/invoices?from=${from}`).set('Cookie', cookies.ACCOUNTANT);
+            assert.equal(list.status, 400, `${from}: ${JSON.stringify(list.body)}`);
+
+            const report = await request(app).get(`/api/admin/finance/reports/summary?from=${from}`).set('Cookie', cookies.ACCOUNTANT);
+            assert.equal(report.status, 400, `${from}: ${JSON.stringify(report.body)}`);
+        }
+
+        const range = await request(app).get('/api/admin/invoices?from=2026-02-28&to=2026-03-01').set('Cookie', cookies.ACCOUNTANT);
+        assert.equal(range.status, 200, JSON.stringify(range.body));
+
+        const booking = await booked();
+        const before = (await invoicesOf(booking.receivable.id)).length;
+        const dated = await request(app).post(`/api/admin/finance/receivables/${booking.receivable.id}/invoices`).set('Cookie', cookies.ACCOUNTANT).send({ kind: 'ADVANCE', dueDate: '2026-02-30' });
+        assert.equal(dated.status, 400, JSON.stringify(dated.body));
+        assert.equal((await invoicesOf(booking.receivable.id)).length, before, 'nothing written');
+    });
+
+    it('refuses hand-written lines that bill more than the receivable, and writes nothing (BUG-10)', async () => {
+        const booking = await booked();
+        const owed = booking.receivable.amountCents;
+        const before = (await invoicesOf(booking.receivable.id)).length;
+        const issueByHand = (lines) =>
+            request(app).post(`/api/admin/finance/receivables/${booking.receivable.id}/invoices`).set('Cookie', cookies.ACCOUNTANT).send({ kind: 'ADVANCE', lines });
+
+        // One line a cent over, and two lines that only add up to too much.
+        for (const lines of [
+            [{ description: 'Transfer', quantity: 1, totalGrossCents: owed + 1 }],
+            [{ description: 'Transfer', quantity: 1, totalGrossCents: owed }, { description: 'Extra', quantity: 1, totalGrossCents: 1 }],
+            [{ description: 'Proforma by hand', quantity: 1, totalGrossCents: 99_999_900 }]
+        ]) {
+            const refused = await issueByHand(lines);
+            assert.equal(refused.status, 422, JSON.stringify(refused.body));
+            assert.equal(refused.body.error.details.reason, 'LINES_EXCEED_RECEIVABLE');
+            assert.equal(refused.body.error.details.amountCents, owed);
+        }
+
+        assert.equal((await invoicesOf(booking.receivable.id)).length, before, 'nothing written, nothing sent to the provider');
+    });
+
+    it('keeps a multi-night line at its own total in the provider stub (TI-01)', async () => {
+        const res = await fetch(`${stub.url}/invoices.json`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+                api_token: stub.apiToken,
+                invoice: {
+                    kind: 'proforma',
+                    oid: `TI01-${unique('x')}`,
+                    currency: 'GEL',
+                    positions: [
+                        { name: 'Room, two nights', quantity: 2, tax: '18', total_price_gross: '132.00' },
+                        { name: 'Transfer', quantity: 1, tax: '18', total_price_gross: '50.00' }
+                    ]
+                }
+            })
+        });
+        assert.equal(res.status, 201);
+        // `total_price_gross` is the line's total: 132.00 + 50.00, not 2 × 132.00 + 50.00.
+        assert.equal((await res.json()).price_gross, '182.00');
     });
 });

@@ -8,6 +8,8 @@ import { ToursBrowser } from "@/components/admin/ToursBrowser";
 import { listTours } from "@/lib/api/tours";
 import { tourQueryFromParams } from "@/lib/admin/tours";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Tours" };
 
@@ -19,6 +21,7 @@ export const metadata: Metadata = { title: "Tours" };
  * totals, not records.
  */
 export default async function AdminToursPage({ searchParams }: PageProps<"/[locale]/admin/tours">) {
+  const session = await requireScreen();
   const { path } = await getI18n();
   const query = tourQueryFromParams(await searchParams);
 
@@ -34,13 +37,15 @@ export default async function AdminToursPage({ searchParams }: PageProps<"/[loca
         title="Tours"
         description="Every journey on the platform and where each sits in its lifecycle."
         actions={
-          <Link
-            href={path("/admin/tours/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add tour
-          </Link>
+          can(session, "catalogue.write", "tours.write") ? (
+            <Link
+              href={path("/admin/tours/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add tour
+            </Link>
+          ) : undefined
         }
       />
 

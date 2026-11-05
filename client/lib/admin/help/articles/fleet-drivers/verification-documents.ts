@@ -14,7 +14,6 @@ export const article = {
   title: "Verifying drivers and keeping documents",
   summary: "What the verification states mean, what dispatch does with them, how private documents are kept, and a routine for checks.",
   category: "fleet-drivers",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["verification", "verified", "not checked", "checks in progress", "rejected", "override", "documents", "licence", "insurance", "expiry", "expired", "audit"],
   related: ["fd-driver-detail", "fd-car-detail", "dp-assigning-a-driver", "md-documents"],
   blocks: [

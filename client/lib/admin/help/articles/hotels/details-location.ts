@@ -17,7 +17,6 @@ export const article = {
   title: "Details, policies and location",
   summary: "The words guests read and the pin on the map: check-in times, descriptions, policies, amenities, address and coordinates — all of them needed before publishing.",
   category: "hotels",
-  roles: ["ADMIN"],
   routes: [
     { pattern: "/admin/hotels/[slug]/details", section: "details" },
     { pattern: "/admin/hotels/[slug]/location", section: "location" },

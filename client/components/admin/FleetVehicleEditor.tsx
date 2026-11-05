@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { FormError, SelectInput, SubmitButton } from "./FormControls";
 import {
   FleetVehicleFields,
@@ -10,6 +11,7 @@ import {
   fleetValuesToBody,
   type FleetValues,
 } from "./FleetVehicleFields";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import { updateFleetVehicle } from "@/lib/api/fleet";
 import { vehicleBodyOptions, vehicleClassLabels } from "@/lib/admin/transfers";
@@ -35,6 +37,10 @@ export function FleetVehicleEditor({
   classes: TransferVehicle[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  // Read-only without the right: the fieldset disables every control and the
+  // Save button gives way to one line saying why.
+  const canEdit = can("dispatch.write");
 
   const [values, setValues] = useState<FleetValues>(() => fleetValuesFrom(vehicle));
   const [providerId, setProviderId] = useState(vehicle.provider?.id ?? "");
@@ -74,6 +80,7 @@ export function FleetVehicleEditor({
 
   return (
     <div>
+      <fieldset disabled={!canEdit} className="min-w-0">
       <div className="grid gap-5 sm:grid-cols-3">
         <SelectInput
           id="fleet-class"
@@ -117,12 +124,19 @@ export function FleetVehicleEditor({
       <div className="mt-8 border-t border-line pt-6">
         <FleetVehicleFields values={values} onChange={set} fieldErrors={fieldErrors} />
       </div>
+      </fieldset>
 
-      <FormError message={error} />
+      {canEdit ? (
+        <>
+          <FormError message={error} />
 
-      <SubmitButton className="mt-6" busy={busy} saved={saved} onClick={save}>
-        {busy ? "Saving…" : saved ? "Saved" : "Save car"}
-      </SubmitButton>
+          <SubmitButton className="mt-6" busy={busy} saved={saved} onClick={save}>
+            {busy ? "Saving…" : saved ? "Saved" : "Save car"}
+          </SubmitButton>
+        </>
+      ) : (
+        <ReadOnlyNote needs="dispatch.write" what="Editing this car" className="mt-6" />
+      )}
     </div>
   );
 }

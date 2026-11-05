@@ -13,7 +13,9 @@ import {
   SubmitButton,
   TextInput,
 } from "./FormControls";
+import { useCan } from "./AdminViewerContext";
 import { EntityPicker, OptionChecklist } from "./EntityPicker";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   loadRatePlanOptions,
   loadRoomTypeOptions,
@@ -198,6 +200,8 @@ const toInput = (draft: SlotDraft): PackageComponentInput => {
  */
 export function PackageComponentsBuilder({ pkg }: { pkg: PackageWithChecklist }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [slots, setSlots] = useState<SlotDraft[]>(() => pkg.components.map(toDraft));
   const [busy, setBusy] = useState(false);
@@ -279,6 +283,9 @@ export function PackageComponentsBuilder({ pkg }: { pkg: PackageWithChecklist })
         </p>
       )}
 
+      {/* Disabling the fieldset locks every input, picker and chip inside the
+          slots; the reorder, remove and add buttons are hidden instead. */}
+      <fieldset disabled={!canEdit} className="min-w-0">
       <ol className="flex flex-col gap-4">
         {slots.map((slot, index) => {
           const Icon = ICONS[slot.componentType];
@@ -305,6 +312,7 @@ export function PackageComponentsBuilder({ pkg }: { pkg: PackageWithChecklist })
                   </span>
                 </span>
 
+                {canEdit && (
                 <span className="flex items-center gap-1">
                   <button
                     type="button"
@@ -336,6 +344,7 @@ export function PackageComponentsBuilder({ pkg }: { pkg: PackageWithChecklist })
                     <Trash2 size={14} aria-hidden />
                   </button>
                 </span>
+                )}
               </div>
 
               <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -640,36 +649,43 @@ export function PackageComponentsBuilder({ pkg }: { pkg: PackageWithChecklist })
           );
         })}
       </ol>
+      </fieldset>
 
-      <div className="flex flex-wrap items-center gap-2">
-        {TYPES.map((type) => {
-          const Icon = ICONS[type];
+      {canEdit && (
+        <div className="flex flex-wrap items-center gap-2">
+          {TYPES.map((type) => {
+            const Icon = ICONS[type];
 
-          return (
-            <button
-              key={type}
-              type="button"
-              onClick={() => {
-                dirty();
-                setSlots((current) => [...current, emptySlot(type)]);
-              }}
-              className="inline-flex h-10 items-center gap-2 rounded-sm border border-line px-3 text-[0.8125rem] font-medium text-ink transition-colors hover:border-ink"
-            >
-              <Plus size={14} aria-hidden />
-              <Icon size={14} className="text-brand-text" aria-hidden />
-              {componentTypeLabels[type]}
-            </button>
-          );
-        })}
-      </div>
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => {
+                  dirty();
+                  setSlots((current) => [...current, emptySlot(type)]);
+                }}
+                className="inline-flex h-10 items-center gap-2 rounded-sm border border-line px-3 text-[0.8125rem] font-medium text-ink transition-colors hover:border-ink"
+              >
+                <Plus size={14} aria-hidden />
+                <Icon size={14} className="text-brand-text" aria-hidden />
+                {componentTypeLabels[type]}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <FormError message={error} />
 
-      <div>
-        <SubmitButton busy={busy} saved={saved} onClick={() => void save()}>
-          Save parts
-        </SubmitButton>
-      </div>
+      {canEdit ? (
+        <div>
+          <SubmitButton busy={busy} saved={saved} onClick={() => void save()}>
+            Save parts
+          </SubmitButton>
+        </div>
+      ) : (
+        <ReadOnlyNote needs="catalogue.write" what="Editing the parts" />
+      )}
     </div>
   );
 }

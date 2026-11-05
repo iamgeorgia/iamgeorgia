@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import Link from "next/link";
 import { MapPin } from "lucide-react";
 
@@ -47,7 +47,7 @@ export function HotelListItem({ hotel, className, eager }: HotelListItemProps) {
           aria-hidden
           className="relative aspect-4/3 w-full shrink-0 overflow-hidden rounded-sm bg-line sm:aspect-square sm:w-56 lg:w-64"
         >
-          <Image
+          <SafeImage
             src={hotel.image}
             alt=""
             fill

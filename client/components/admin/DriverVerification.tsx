@@ -4,8 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { DriverVerificationBadge } from "./FleetBadges";
 import { FormError, SelectInput, SubmitButton, TextArea } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { verifyDriver } from "@/lib/api/drivers";
 import { verificationOptions } from "@/lib/admin/fleet";
@@ -20,6 +22,8 @@ import type { DriverAdmin, DriverVerificationStatus } from "@/types/driver";
  */
 export function DriverVerification({ driver }: { driver: DriverAdmin }) {
   const router = useRouter();
+  const can = useCan();
+  const canVerify = can("dispatch.write");
   const [status, setStatus] = useState<DriverVerificationStatus>(driver.verificationStatus);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
@@ -52,27 +56,33 @@ export function DriverVerification({ driver }: { driver: DriverAdmin }) {
         )}
       </div>
 
-      <div className="mt-4 space-y-4">
-        <SelectInput
-          label="Set to"
-          value={status}
-          onChange={(event) => setStatus(event.target.value as DriverVerificationStatus)}
-          options={verificationOptions}
-        />
-        <TextArea
-          label="Note"
-          rows={2}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          hint="What was checked. Kept in the audit trail, not on the profile."
-        />
-      </div>
+      {canVerify ? (
+        <>
+          <div className="mt-4 space-y-4">
+            <SelectInput
+              label="Set to"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as DriverVerificationStatus)}
+              options={verificationOptions}
+            />
+            <TextArea
+              label="Note"
+              rows={2}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              hint="What was checked. Kept in the audit trail, not on the profile."
+            />
+          </div>
 
-      <FormError message={error} />
+          <FormError message={error} />
 
-      <SubmitButton className="mt-4" busy={busy} disabled={status === driver.verificationStatus && !note.trim()} onClick={save}>
-        {busy ? "Saving…" : "Record"}
-      </SubmitButton>
+          <SubmitButton className="mt-4" busy={busy} disabled={status === driver.verificationStatus && !note.trim()} onClick={save}>
+            {busy ? "Saving…" : "Record"}
+          </SubmitButton>
+        </>
+      ) : (
+        <ReadOnlyNote needs="dispatch.write" what="Recording a verification decision" className="mt-4" />
+      )}
     </AdminPanel>
   );
 }

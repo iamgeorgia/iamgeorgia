@@ -1,9 +1,11 @@
 import { z } from 'zod';
+import { bookingFilterFields } from '../lib/listing/bookingFilters.js';
 
 import { countryField, emailField, nameField, phoneField, textField } from './normalize.js';
+import { titleField } from './normalize.js';
 import { dateOnlyField } from './ratePlan.js';
 
-const TOUR_BOOKING_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
+const TOUR_BOOKING_STATUSES = ['PENDING_APPROVAL', 'PENDING', 'CONFIRMED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'];
 const TRAVELLER_TYPES = ['ADULT', 'CHILD', 'INFANT'];
 
 export const tourHoldSchema = z.object({ token: z.string().min(20).max(4000) }).strict();
@@ -23,6 +25,7 @@ export const confirmTourBookingSchema = z
 
         leadTraveller: z
             .object({
+                title: titleField.optional(),
                 firstName: nameField,
                 lastName: nameField,
                 email: emailField,
@@ -37,6 +40,7 @@ export const confirmTourBookingSchema = z
                         type: z.enum(TRAVELLER_TYPES).default('ADULT'),
                         firstName: nameField,
                         lastName: nameField,
+                        title: titleField.optional(),
                         age: z.number().int().min(0).max(120).optional(),
                         passportNumber: textField(40).optional(),
                         nationality: countryField.optional(),
@@ -85,6 +89,7 @@ export const amendTourBookingSchema = z
     .strict();
 
 export const tourBookingQuerySchema = z.object({
+    ...bookingFilterFields,
     status: z.union([z.enum(TOUR_BOOKING_STATUSES), z.array(z.enum(TOUR_BOOKING_STATUSES))]).optional(),
     tourId: z.string().min(1).optional(),
     partnerId: z.string().min(1).optional(),

@@ -1,14 +1,10 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { Info } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { InvoicesBrowser } from "@/components/admin/finance/InvoicesBrowser";
 import { getInvoicingSettings, listInvoices, type InvoiceQuery } from "@/lib/api/invoices";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { requireScreen } from "@/lib/auth/session";
 import type { InvoiceKind, InvoiceStatus } from "@/types/invoice";
 
 export const metadata: Metadata = { title: "Invoices" };
@@ -48,11 +44,8 @@ function invoiceQueryFromParams(params: Record<string, string | string[] | undef
 export default async function AdminInvoicesPage({
   searchParams,
 }: PageProps<"/[locale]/admin/finance/invoices">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "invoices.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const query = invoiceQueryFromParams(await searchParams);
 

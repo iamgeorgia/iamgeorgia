@@ -58,6 +58,13 @@ export const listPartners = (query: PartnerQuery = {}) =>
 
 export const getPartner = (id: string) => serverFetch<Partner>(`/api/admin/partners/${id}`);
 
+/** The same register from the browser, for a picker that searches as somebody types. */
+export const listPartnersClient = (query: PartnerQuery = {}) =>
+  apiFetch<Paginated<PartnerSummary>>(`/api/admin/partners${toQueryString(query)}`);
+
+/** One partner from the browser: a filter chip naming the id the URL carries. */
+export const getPartnerClient = (id: string) => apiFetch<Partner>(`/api/admin/partners/${id}`);
+
 export const getPartnerAudit = (id: string) =>
   serverFetch<{ data: AuditEntry[] }>(`/api/admin/partners/${id}/audit`);
 

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import {
   AdminBreadcrumbs,
@@ -14,9 +14,8 @@ import { getHotel } from "@/lib/api/hotels";
 import { getService } from "@/lib/api/services";
 import { getTour } from "@/lib/api/tours";
 import { listAdminTransferProviders } from "@/lib/api/transfers";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import { can } from "@/types/auth";
 import type { SupplierTerms, SupplierTermsKind } from "@/types/finance";
 
@@ -87,11 +86,8 @@ async function subjectFor(kind: SupplierTermsKind, id: string): Promise<Subject>
 export default async function AdminSupplierTermsPage({
   params,
 }: PageProps<"/[locale]/admin/finance/terms/[kind]/[id]">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.payables.read", "catalogue.write")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { kind, id } = await params;
 

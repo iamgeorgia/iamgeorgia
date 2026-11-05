@@ -82,7 +82,7 @@ export const readQuoteToken = (token) => {
     // Quotes go stale because fares and road closures move underneath them. An
     // expired token is 410 rather than 400: it was real, and it is now spent.
     if (Date.now() - decoded.iat > config.transfer.quoteTokenTtlMs) {
-        throw new GoneError('That quote has expired. Search again for current fares.');
+        throw new GoneError('That quote has expired. Search again for current fares.', { reason: 'OFFER_EXPIRED' });
     }
 
     return {

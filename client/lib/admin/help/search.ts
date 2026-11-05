@@ -1,4 +1,4 @@
-import type { HelpArticle, HelpBlock, HelpRole } from "./types";
+import type { HelpArticle, HelpBlock } from "./types";
 
 /**
  * Searching the manual, in the browser, with no server.
@@ -15,7 +15,6 @@ export interface HelpSearchEntry {
   title: string;
   summary: string;
   category: HelpArticle["category"];
-  roles: HelpRole[];
   keywords: string;
   /** The section headings, joined: "cancel a leg" should find the board's "Cancelling a leg". */
   headings: string;
@@ -62,7 +61,6 @@ export function buildHelpSearchIndex(articles: HelpArticle[]): HelpSearchEntry[]
     title: article.title,
     summary: article.summary,
     category: article.category,
-    roles: article.roles,
     keywords: article.keywords.join(" ").toLowerCase(),
     headings: article.blocks
       .flatMap((block) => (block.type === "heading" ? [block.text] : []))
@@ -129,21 +127,20 @@ function snippetFor(entry: HelpSearchEntry, tokens: string[]): string {
 }
 
 /**
- * The best twenty matches a role may read, strongest first. An empty or
- * one-letter query returns nothing rather than everything — a list of every
- * article is the hub, not a search result.
+ * The best twenty matches, strongest first. The index is built from the
+ * articles the reader may open (`helpArticlesFor`), so there is nothing to
+ * filter here. An empty or one-letter query returns nothing rather than
+ * everything — a list of every article is the hub, not a search result.
  */
 export function searchHelp(
   index: HelpSearchEntry[],
   query: string,
-  role: HelpRole,
   limit = 20,
 ): HelpSearchHit[] {
   const tokens = tokenize(query);
   if (tokens.length === 0) return [];
 
   return index
-    .filter((entry) => entry.roles.includes(role))
     .map((entry) => ({ entry, score: scoreEntry(entry, tokens), snippet: "" }))
     .filter((hit) => hit.score > 0)
     .sort((a, b) => b.score - a.score || a.entry.title.localeCompare(b.entry.title))

@@ -1,8 +1,13 @@
 import { apiFetch, serverFetch } from "./client";
+import { actAsInit, type ActAsOptions } from "./manualBookings";
 import { toQueryString, type QueryValue } from "./query";
+import type { CancellationQuote } from "@/types/booking";
 import type { Paginated } from "@/types/partner";
 import type {
   Service,
+  ServiceBooking,
+  ServiceBookingQuery,
+  ServiceBookingSummary,
   ServiceCategory,
   ServiceStatus,
   ServiceSummary,
@@ -39,6 +44,38 @@ export const listPublicServices = (query: ServiceQuery = {}) =>
 
 export const getPublicService = (slug: string, query: { locale?: string } = {}) =>
   serverFetch<Service>(`/api/services/${slug}${toQueryString(query)}`);
+
+/** The catalogue from the browser, for the desk: what this buyer may book, at their price. */
+export const listPublicServicesClient = (query: ServiceQuery = {}, options: ActAsOptions = {}) =>
+  apiFetch<Paginated<ServiceSummary>>(`/api/services${toQueryString(query)}`, actAsInit(options));
+
+// --- service bookings (admin) ----------------------------------------------
+
+export const listAdminServiceBookings = (query: ServiceBookingQuery = {}) =>
+  serverFetch<Paginated<ServiceBookingSummary>>(`/api/admin/services/bookings${toQueryString(query)}`);
+
+export const getAdminServiceBooking = (reference: string) =>
+  serverFetch<ServiceBooking>(`/api/admin/services/bookings/${reference}`);
+
+export const getAdminServiceCancellationQuote = (reference: string) =>
+  serverFetch<CancellationQuote>(`/api/admin/services/bookings/${reference}/cancellation-quote`);
+
+/** The operator's yes to an on-request service booking. */
+export const confirmServiceRequest = (reference: string) =>
+  apiFetch<ServiceBooking>(`/api/admin/services/bookings/${reference}/confirm`, { method: "POST" });
+
+/** The operator's no. The reason is required; the buyer reads it. */
+export const declineServiceRequest = (reference: string, reason: string) =>
+  apiFetch<ServiceBooking>(`/api/admin/services/bookings/${reference}/decline`, {
+    method: "POST",
+    body: { reason },
+  });
+
+export const cancelServiceBookingAsAdmin = (reference: string, reason?: string) =>
+  apiFetch<ServiceBookingSummary & { cancellation: CancellationQuote }>(
+    `/api/admin/services/bookings/${reference}/cancel`,
+    { method: "POST", body: reason ? { reason } : {} },
+  );
 
 // --- admin ------------------------------------------------------------------
 

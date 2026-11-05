@@ -127,6 +127,8 @@ enum PaymentTiming {
 }
 
 enum HotelBookingStatus {
+  /// Waiting for the platform's yes (OD1); rooms claimed, nothing owed yet.
+  PENDING_APPROVAL
   PENDING
   CONFIRMED
   CANCELLED
@@ -492,6 +494,8 @@ enum ConfirmationMode {
 }
 
 enum TourBookingStatus {
+  /// Waiting for the platform's yes; the operator is asked only after it.
+  PENDING_APPROVAL
   PENDING
   CONFIRMED
   CANCELLED
@@ -536,6 +540,7 @@ enum ServiceBasis {
 }
 
 enum ServiceBookingStatus {
+  PENDING_APPROVAL
   PENDING
   CONFIRMED
   CANCELLED
@@ -609,6 +614,8 @@ enum OrderKind {
 }
 
 enum OrderStatus {
+  /// At least one part waits for the platform's yes; approved as one.
+  PENDING_APPROVAL
   PENDING_CONFIRMATION
   CONFIRMED
   PARTIALLY_CANCELLED
@@ -619,6 +626,8 @@ enum OrderStatus {
 }
 
 enum OrderItemStatus {
+  /// The child booking is PENDING_APPROVAL; becomes REQUESTED or CONFIRMED on approval.
+  AWAITING_APPROVAL
   REQUESTED
   CONFIRMED
   DECLINED
@@ -1295,14 +1304,35 @@ model TourBooking {
   /// statement that enqueues the alert, so a crash cannot double-send.
   overdueAlertAt    DateTime?        @map("overdue_alert_at")
 
+  /// Platform approval (OD1): before the operator is asked.
+  approvalRequestedAt    DateTime? @map("approval_requested_at")
+  approvalDeadlineAt     DateTime? @map("approval_deadline_at")
+  approvalOverdueAlertAt DateTime? @map("approval_overdue_alert_at")
+  approvedAt             DateTime? @map("approved_at")
+  approvedByUserId       String?   @map("approved_by_user_id")
+  approvedByName         String?   @map("approved_by_name")
+  rejectedAt             DateTime? @map("rejected_at")
+  rejectedByUserId       String?   @map("rejected_by_user_id")
+  rejectedByName         String?   @map("rejected_by_name")
+  rejectionReason        String?   @map("rejection_reason")
+
   confirmedAt             DateTime? @map("confirmed_at")
   cancelledAt             DateTime? @map("cancelled_at")
   cancellationChargeCents Int?      @map("cancellation_charge_cents")
   cancellationReason      String?   @map("cancellation_reason")
   completedAt             DateTime? @map("completed_at")
 
-  /// Where it came from: web, partner API, admin.
-  source String @default("web")
+  /// The desk's fields (manual bookings), as on hotel bookings.
+  customerId            String?   @map("customer_id")
+  customer              Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedManagerUserId String?   @map("assigned_manager_user_id")
+  assignedManager       User?     @relation("TourBookingManager", fields: [assignedManagerUserId], references: [id], onDelete: SetNull)
+  internalNotes         String?   @map("internal_notes")
+  priceAdjustmentCents  Int       @default(0) @map("price_adjustment_cents")
+  priceAdjustmentReason String?   @map("price_adjustment_reason")
+
+  /// Where it came from: the session, or the desk's channel.
+  source BookingSource @default(WEB)
 
   travellers TourBookingTraveller[]
   hold       TourHold?
@@ -1318,6 +1348,10 @@ model TourBooking {
   @@index([tourOptionId, date])
   @@index([partnerId, createdAt])
   @@index([status, date])
+  @@index([status, approvalDeadlineAt])
+  @@index([assignedManagerUserId])
+  @@index([customerId])
+  @@index([createdAt])
   @@map("tour_bookings")
 }
 
@@ -1332,6 +1366,8 @@ model TourBookingTraveller {
   type      BookingGuestType @default(ADULT)
   firstName String           @map("first_name")
   lastName  String           @map("last_name")
+  /// MR, MRS, MS, MISS, MSTR — optional; printed on documents only when given.
+  title     String?
   /// Age on the departure date, frozen.
   age       Int?
   isLead    Boolean          @default(false) @map("is_lead")
@@ -1545,13 +1581,35 @@ model ServiceBooking {
   declinedAt        DateTime?        @map("declined_at")
   declineReason     String?          @map("decline_reason")
 
+  /// Platform approval (OD1): before the provider is asked.
+  approvalRequestedAt    DateTime? @map("approval_requested_at")
+  approvalDeadlineAt     DateTime? @map("approval_deadline_at")
+  approvalOverdueAlertAt DateTime? @map("approval_overdue_alert_at")
+  approvedAt             DateTime? @map("approved_at")
+  approvedByUserId       String?   @map("approved_by_user_id")
+  approvedByName         String?   @map("approved_by_name")
+  rejectedAt             DateTime? @map("rejected_at")
+  rejectedByUserId       String?   @map("rejected_by_user_id")
+  rejectedByName         String?   @map("rejected_by_name")
+  rejectionReason        String?   @map("rejection_reason")
+
   confirmedAt             DateTime? @map("confirmed_at")
   cancelledAt             DateTime? @map("cancelled_at")
   cancellationChargeCents Int?      @map("cancellation_charge_cents")
   cancellationReason      String?   @map("cancellation_reason")
   completedAt             DateTime? @map("completed_at")
 
-  source String @default("web")
+  /// The desk's fields (manual bookings), as on hotel bookings.
+  customerId            String?   @map("customer_id")
+  customer              Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedManagerUserId String?   @map("assigned_manager_user_id")
+  assignedManager       User?     @relation("ServiceBookingManager", fields: [assignedManagerUserId], references: [id], onDelete: SetNull)
+  internalNotes         String?   @map("internal_notes")
+  priceAdjustmentCents  Int       @default(0) @map("price_adjustment_cents")
+  priceAdjustmentReason String?   @map("price_adjustment_reason")
+
+  /// Where it came from: the session, or the desk's channel.
+  source BookingSource @default(WEB)
 
   orderItem OrderItem?
 
@@ -1564,6 +1622,10 @@ model ServiceBooking {
   @@index([serviceId, date])
   @@index([partnerId, createdAt])
   @@index([status, date])
+  @@index([status, approvalDeadlineAt])
+  @@index([assignedManagerUserId])
+  @@index([customerId])
+  @@index([createdAt])
   @@map("service_bookings")
 }
 
@@ -1625,6 +1687,7 @@ model Package {
   translations PackageTranslation[]
   kosher       KosherPackageProfile?
   orders       Order[]
+  orderItems   OrderItem[]
   pricingRules PricingRule[]
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1828,13 +1891,33 @@ model Order {
   requestDeadlineAt DateTime? @map("request_deadline_at")
   overdueAlertAt    DateTime? @map("overdue_alert_at")
 
+  /// Platform approval (OD1): one decision for the whole order.
+  approvalRequestedAt    DateTime? @map("approval_requested_at")
+  approvalDeadlineAt     DateTime? @map("approval_deadline_at")
+  approvalOverdueAlertAt DateTime? @map("approval_overdue_alert_at")
+  approvedAt             DateTime? @map("approved_at")
+  approvedByUserId       String?   @map("approved_by_user_id")
+  approvedByName         String?   @map("approved_by_name")
+  rejectedAt             DateTime? @map("rejected_at")
+  rejectedByUserId       String?   @map("rejected_by_user_id")
+  rejectedByName         String?   @map("rejected_by_name")
+  rejectionReason        String?   @map("rejection_reason")
+
   confirmedAt             DateTime? @map("confirmed_at")
   cancelledAt             DateTime? @map("cancelled_at")
   cancellationChargeCents Int?      @map("cancellation_charge_cents")
   cancellationReason      String?   @map("cancellation_reason")
   completedAt             DateTime? @map("completed_at")
 
-  source String @default("web")
+  /// The desk's fields (manual bookings), as on hotel bookings.
+  customerId            String?   @map("customer_id")
+  customer              Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedManagerUserId String?   @map("assigned_manager_user_id")
+  assignedManager       User?     @relation("OrderManager", fields: [assignedManagerUserId], references: [id], onDelete: SetNull)
+  internalNotes         String?   @map("internal_notes")
+
+  /// Where it came from: the session, or the desk's channel.
+  source BookingSource @default(WEB)
 
   items OrderItem[]
 
@@ -1847,6 +1930,10 @@ model Order {
   @@index([status, startDate])
   @@index([packageId])
   @@index([status, requestDeadlineAt])
+  @@index([status, approvalDeadlineAt])
+  @@index([assignedManagerUserId])
+  @@index([customerId])
+  @@index([createdAt])
   @@map("orders")
 }
 
@@ -1877,6 +1964,16 @@ model OrderItem {
   /// This item's share of the package adjustment, frozen at confirmation.
   adjustmentCents Int @default(0) @map("adjustment_cents")
   lineTotalCents  Int @map("line_total_cents")
+
+  /// A CUSTOM order (the cart, OD2) flattens a package into its items: each
+  /// keeps the package it came from, its slot there, and a `groupKey` that
+  /// ties the group together; `adjustmentSource` says whose figure the
+  /// adjustment is (the package's discount share, the desk's, or none).
+  packageId        String?  @map("package_id")
+  package          Package? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  packageSlotIndex Int?     @map("package_slot_index")
+  groupKey         String?  @map("group_key")
+  adjustmentSource String   @default("NONE") @map("adjustment_source")
 
   cancellationChargeCents Int?      @map("cancellation_charge_cents")
   cancelledAt             DateTime? @map("cancelled_at")
@@ -2526,6 +2623,20 @@ model HotelBooking {
   /// printed next year must still describe the property that was booked.
   hotelSnapshot Json @map("hotel_snapshot")
 
+  /// Platform approval (OD1): written PENDING_APPROVAL with its rooms
+  /// claimed, then confirmed or rejected by an operator. The names are a
+  /// snapshot, so a deleted account still leaves a signature on the decision.
+  approvalRequestedAt    DateTime? @map("approval_requested_at")
+  approvalDeadlineAt     DateTime? @map("approval_deadline_at")
+  approvalOverdueAlertAt DateTime? @map("approval_overdue_alert_at")
+  approvedAt             DateTime? @map("approved_at")
+  approvedByUserId       String?   @map("approved_by_user_id")
+  approvedByName         String?   @map("approved_by_name")
+  rejectedAt             DateTime? @map("rejected_at")
+  rejectedByUserId       String?   @map("rejected_by_user_id")
+  rejectedByName         String?   @map("rejected_by_name")
+  rejectionReason        String?   @map("rejection_reason")
+
   confirmedAt             DateTime? @map("confirmed_at")
   cancelledAt             DateTime? @map("cancelled_at")
   cancellationChargeCents Int?      @map("cancellation_charge_cents")
@@ -2535,8 +2646,19 @@ model HotelBooking {
   /// part has.
   completedAt             DateTime? @map("completed_at")
 
-  /// Where it came from: web, partner API, admin.
-  source String @default("web")
+  /// The desk's fields (manual bookings): who the booking is for when there
+  /// is no partner, who is looking after it, what the desk wrote down, and
+  /// the audited adjustment on the catalogue price (OD3).
+  customerId            String?   @map("customer_id")
+  customer              Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedManagerUserId String?   @map("assigned_manager_user_id")
+  assignedManager       User?     @relation("HotelBookingManager", fields: [assignedManagerUserId], references: [id], onDelete: SetNull)
+  internalNotes         String?   @map("internal_notes")
+  priceAdjustmentCents  Int       @default(0) @map("price_adjustment_cents")
+  priceAdjustmentReason String?   @map("price_adjustment_reason")
+
+  /// Where it came from: the session, or the desk's channel.
+  source BookingSource @default(WEB)
 
   rooms    HotelBookingRoom[]
   hold     BookingHold?
@@ -2552,6 +2674,10 @@ model HotelBooking {
   @@index([hotelId, checkIn])
   @@index([partnerId, createdAt])
   @@index([status, checkIn])
+  @@index([status, approvalDeadlineAt])
+  @@index([assignedManagerUserId])
+  @@index([customerId])
+  @@index([createdAt])
   @@map("hotel_bookings")
 }
 
@@ -2629,6 +2755,8 @@ model BookingGuest {
   type      BookingGuestType @default(ADULT)
   firstName String           @map("first_name")
   lastName  String           @map("last_name")
+  /// MR, MRS, MS, MISS, MSTR — optional; printed on documents only when given.
+  title     String?
   /// Age at check-in, frozen. A birthday during the stay does not reprice.
   age       Int?
   isLead    Boolean          @default(false) @map("is_lead")
@@ -3380,6 +3508,22 @@ enum AuditAction {
   FINANCE_REPORT_EXPORTED
   FINANCE_REMINDER_SETTINGS_UPDATED
   OUTBOX_EVENT_RETRIED
+  BOOKING_APPROVED
+  BOOKING_REJECTED
+  BOOKING_APPROVAL_EXPIRED
+  PARTNER_BOOKING_APPROVAL_CHANGED
+  BOOKING_PRICE_ADJUSTED
+  BOOKING_MANAGER_ASSIGNED
+  BOOKING_NOTES_CHANGED
+  CUSTOMER_CREATED
+  CUSTOMER_UPDATED
+  BOOKING_DEADLINE_CHANGED
+  REMINDER_POLICY_UPDATED
+  MAIL_PROVIDER_CONNECTED
+  MAIL_PROVIDER_CONNECT_REJECTED
+  MAIL_PROVIDER_DISCONNECTED
+  MAIL_PROVIDER_REVOKED
+  MAIL_PROVIDER_TEST_SENT
 
   @@map("audit_action")
 }
@@ -3467,6 +3611,12 @@ model User {
 
   serviceBookingsMade ServiceBooking[] @relation("ServiceBookingBookedBy")
   ordersMade          Order[]          @relation("OrderBookedBy")
+  /// The desk: bookings this member of staff is looking after.
+  managedHotelBookings    HotelBooking[]    @relation("HotelBookingManager")
+  managedTransferBookings TransferBooking[] @relation("TransferBookingManager")
+  managedTourBookings     TourBooking[]     @relation("TourBookingManager")
+  managedServiceBookings  ServiceBooking[]  @relation("ServiceBookingManager")
+  managedOrders           Order[]           @relation("OrderManager")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
   paymentsRecorded    PaymentRecord[]  @relation("PaymentRecordedBy")
@@ -3609,6 +3759,9 @@ model Partner {
   paymentDueDays   Int                 @default(14) @map("payment_due_days")
   paymentDueAnchor ReceivableDueAnchor @default(CONFIRMATION) @map("payment_due_anchor")
   paymentTermsNote String?             @map("payment_terms_note")
+  /// Whether this company's bookings wait for the platform's yes (OD1:
+  /// REQUIRED for everyone; AUTO is an admin's exception, never a default).
+  bookingApproval  BookingApprovalMode @default(REQUIRED) @map("booking_approval")
 
   /// How much the company may owe, open, in one currency. Null is no limit.
   /// Counts only that currency's open receivables; nothing is summed across
@@ -3618,6 +3771,7 @@ model Partner {
   creditLimitCurrency String?         @map("credit_limit_currency") @db.Char(3)
   creditLimitMode     CreditLimitMode @default(BLOCK) @map("credit_limit_mode")
   penalties           PenaltyEntry[]  @relation("PartnerPenalties")
+  reminderPolicies    ReminderPolicy[] @relation("PartnerReminderPolicies")
 
   /// The signed contract, as a private file; approval waits for it unless
   /// `contractRequired` was switched off (partners approved before the gate
@@ -3854,6 +4008,7 @@ enum TransferStatus {
 }
 
 enum TransferBookingStatus {
+  PENDING_APPROVAL
   PENDING
   CONFIRMED
   CANCELLED
@@ -4317,6 +4472,25 @@ model TransferBooking {
   /// is owed.
   cancellationSchedule Json @map("cancellation_schedule")
 
+  /// Platform approval (OD1), as on hotel bookings.
+  approvalRequestedAt    DateTime? @map("approval_requested_at")
+  approvalDeadlineAt     DateTime? @map("approval_deadline_at")
+  approvalOverdueAlertAt DateTime? @map("approval_overdue_alert_at")
+  approvedAt             DateTime? @map("approved_at")
+  approvedByUserId       String?   @map("approved_by_user_id")
+  approvedByName         String?   @map("approved_by_name")
+  rejectedAt             DateTime? @map("rejected_at")
+  rejectedByUserId       String?   @map("rejected_by_user_id")
+  rejectedByName         String?   @map("rejected_by_name")
+  rejectionReason        String?   @map("rejection_reason")
+
+  /// A partner's choice of driver and car, kept while the booking waits for
+  /// approval and offered at the moment it is approved. Ids only, and no
+  /// foreign key: a driver retired meanwhile simply leaves the legs
+  /// unassigned, with an audit note, rather than blocking the approval.
+  preferredDriverId       String? @map("preferred_driver_id")
+  preferredFleetVehicleId String? @map("preferred_fleet_vehicle_id")
+
   confirmedAt             DateTime? @map("confirmed_at")
   cancelledAt             DateTime? @map("cancelled_at")
   cancellationChargeCents Int?      @map("cancellation_charge_cents")
@@ -4324,8 +4498,19 @@ model TransferBooking {
   /// Set by the roll-up when the last leg reaches a terminal state.
   completedAt             DateTime? @map("completed_at")
 
-  /// Where it came from: web, partner API, admin.
-  source String @default("web")
+  /// The desk's fields (manual bookings): who the booking is for when there
+  /// is no partner, who is looking after it, what the desk wrote down, and
+  /// the audited adjustment on the catalogue price (OD3).
+  customerId            String?   @map("customer_id")
+  customer              Customer? @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  assignedManagerUserId String?   @map("assigned_manager_user_id")
+  assignedManager       User?     @relation("TransferBookingManager", fields: [assignedManagerUserId], references: [id], onDelete: SetNull)
+  internalNotes         String?   @map("internal_notes")
+  priceAdjustmentCents  Int       @default(0) @map("price_adjustment_cents")
+  priceAdjustmentReason String?   @map("price_adjustment_reason")
+
+  /// Where it came from: the session, or the desk's channel.
+  source BookingSource @default(WEB)
 
   legs        TransferBookingLeg[]
   extras      TransferBookingExtra[]
@@ -4343,6 +4528,10 @@ model TransferBooking {
   @@index([routeId, pickupAt])
   @@index([partnerId, createdAt])
   @@index([status, pickupAt])
+  @@index([status, approvalDeadlineAt])
+  @@index([assignedManagerUserId])
+  @@index([customerId])
+  @@index([createdAt])
   @@map("transfer_bookings")
 }
 
@@ -4370,6 +4559,9 @@ model TransferBookingLeg {
   toPointName   String @map("to_point_name")
 
   pickupAt        DateTime @map("pickup_at")
+  /// The flight this leg meets or catches; the booking-level column is the
+  /// outbound's, kept for older rows and the voucher.
+  flightNumber    String?  @map("flight_number")
   distanceKm      Int      @map("distance_km")
   durationMinutes Int      @map("duration_minutes")
 
@@ -4578,6 +4770,17 @@ enum NotificationKind {
   APPROVAL_REQUESTED
   APPROVAL_DECIDED
   FINANCE_CREDIT_WARNING
+  BOOKING_NEW
+  BOOKING_AWAITING_APPROVAL
+  BOOKING_APPROVED
+  BOOKING_REJECTED
+  BOOKING_APPROVAL_OVERDUE
+  BOOKING_MODIFIED
+  SYSTEM
+  DEADLINE_PAYMENT_UPCOMING
+  DEADLINE_CANCELLATION_UPCOMING
+  DEADLINE_CONFIRMATION_UPCOMING
+  MAIL_PROVIDER_ALERT
 
   @@map("notification_kind")
 }
@@ -4948,15 +5151,30 @@ model TransferDriverRating {
 
 /// An in-app notification. Written by the outbox drain, never directly by a
 /// request handler, so every channel sees the same event once.
+/// The tabs a bell sorts its notices into. Derived from the kind when the
+/// row is written (`lib/notifications/categories.js`), stored so a list can
+/// filter on an index rather than on a list of kinds.
+enum NotificationCategory {
+  BOOKING
+  DISPATCH
+  FINANCE
+  APPROVAL
+  DEADLINE
+  SYSTEM
+
+  @@map("notification_category")
+}
+
 model Notification {
   id String @id @default(cuid())
 
   recipientUserId String @map("recipient_user_id")
   recipientUser   User   @relation("NotificationRecipient", fields: [recipientUserId], references: [id], onDelete: Cascade)
 
-  kind  NotificationKind
-  title String
-  body  String
+  kind     NotificationKind
+  category NotificationCategory @default(SYSTEM)
+  title    String
+  body     String
 
   /// Deep-link data: booking reference, leg, assignment, driver.
   payload Json @default("{}")
@@ -4964,10 +5182,17 @@ model Notification {
   entityType String? @map("entity_type")
   entityId   String? @map("entity_id")
 
+  /// One notice per person per fact: a handler that runs twice (a retry, two
+  /// sweepers) inserts the second with `skipDuplicates` and the unique index
+  /// below drops it. Null for notices that are legitimately repeated.
+  dedupeKey String? @map("dedupe_key")
+
   readAt    DateTime? @map("read_at")
   createdAt DateTime  @default(now()) @map("created_at")
 
+  @@unique([recipientUserId, dedupeKey])
   @@index([recipientUserId, readAt, createdAt])
+  @@index([recipientUserId, category, readAt, createdAt])
   @@map("notifications")
 }
 
@@ -4995,6 +5220,84 @@ model OutboxEvent {
 
   @@index([processedAt, nextAttemptAt])
   @@map("outbox_events")
+}
+
+/// The Google account the platform sends mail as, through the Gmail API.
+///
+/// One row per provider, written only by the administrator OAuth callback and
+/// read only by the mail transport. The refresh token is sealed with
+/// MAIL_CREDENTIALS_KEY (AES-256-GCM) and never leaves the server: no
+/// serializer reads `refreshTokenCipher`. `revokedAt` is set when Google
+/// refuses the token, so sends fail fast until an administrator reconnects.
+model MailProviderCredential {
+  provider String @id
+
+  accountEmail       String   @map("account_email")
+  refreshTokenCipher String   @map("refresh_token_cipher")
+  scopes             String[]
+
+  /// Snapshots rather than a foreign key: the audit trail is the record of
+  /// who connected it, and removing that admin must not touch the mailbox.
+  connectedByUserId String?  @map("connected_by_user_id")
+  connectedByEmail  String?  @map("connected_by_email")
+  connectedAt       DateTime @default(now()) @map("connected_at")
+
+  revokedAt     DateTime? @map("revoked_at")
+  lastAuthError String?   @map("last_auth_error")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("mail_provider_credentials")
+}
+
+/// One OAuth authorisation in flight.
+///
+/// The browser comes back from Google without the admin's session (the
+/// session cookie is SameSite=Strict), so this row is what authorises the
+/// callback: the state's hash, the admin who asked, ten minutes to live, used
+/// once. The raw state exists only in the authorisation URL and in an
+/// HttpOnly cookie bound to the callback path.
+model OAuthState {
+  id        String @id @default(cuid())
+  stateHash String @unique @map("state_hash")
+  purpose   String
+
+  userId String @map("user_id")
+
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt])
+  @@map("oauth_states")
+}
+
+/// Every email a real transport sent or refused, and every email sent from an
+/// outbox handler whatever the transport.
+///
+/// `dedupeKey` is set only inside an outbox event: a handler that emailed the
+/// guest and then failed on the supplier is retried whole, and the unique
+/// index is what stops the guest being emailed a second time. Recipients and
+/// subjects are kept (they are already in the application log); bodies are not.
+model MailLog {
+  id String @id @default(cuid())
+
+  provider          String
+  template          String
+  recipients        String
+  subject           String
+  status            String
+  providerMessageId String? @map("provider_message_id")
+  error             String?
+
+  outboxEventId String? @map("outbox_event_id")
+  dedupeKey     String? @unique @map("dedupe_key")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([provider, status, createdAt])
+  @@index([outboxEventId])
+  @@map("mail_logs")
 }
 
 // --- Finance --------------------------------------------------------------------
@@ -5216,6 +5519,9 @@ model Receivable {
   reference           String
   debtorPartnerId     String?             @map("debtor_partner_id")
   debtorPartner       Partner?            @relation("PartnerReceivables", fields: [debtorPartnerId], references: [id], onDelete: Restrict)
+  /// A buyer the desk booked for, with no partner account (manual bookings).
+  debtorCustomerId    String?             @map("debtor_customer_id")
+  debtorCustomer      Customer?           @relation("CustomerReceivables", fields: [debtorCustomerId], references: [id], onDelete: Restrict)
   debtorEmail         String              @map("debtor_email")
   debtorName          String              @map("debtor_name")
   currency            String              @db.Char(3)
@@ -5238,6 +5544,7 @@ model Receivable {
   @@index([status, dueAt])
   @@index([debtorPartnerId, status, createdAt])
   @@index([debtorEmail])
+  @@index([debtorCustomerId])
   @@index([currency, status])
   @@map("receivables")
 }
@@ -5356,6 +5663,9 @@ model InvoicingCustomer {
   partnerId        String?           @map("partner_id")
   partner          Partner?          @relation("PartnerInvoicingCustomers", fields: [partnerId], references: [id], onDelete: Cascade)
   guestEmail       String?           @map("guest_email")
+  /// A desk customer (manual bookings): its own client record at the provider.
+  customerId       String?           @map("customer_id")
+  customer         Customer?         @relation("CustomerInvoicingCustomers", fields: [customerId], references: [id], onDelete: Cascade)
   externalClientId String            @map("external_client_id")
   /// What was last sent to the provider — name, tax id, address — so a change
   /// on the partner is noticed and pushed before the next invoice.
@@ -5366,6 +5676,7 @@ model InvoicingCustomer {
 
   @@unique([provider, partnerId])
   @@unique([provider, guestEmail])
+  @@unique([provider, customerId])
   @@unique([provider, externalClientId])
   @@map("invoicing_customers")
 }
@@ -5428,6 +5739,15 @@ model InvoiceLine {
   taxRateBps       Int?    @map("tax_rate_bps")
   totalGrossCents  Int     @map("total_gross_cents")
   bookingReference String? @map("booking_reference")
+  /// HOTEL_ROOM, TRANSFER_LEG, TOUR, SERVICE, EXTRA, ADJUSTMENT,
+  /// CANCELLATION_CHARGE, MANUAL: what the line stands for.
+  kind             String?
+  /// Gross per unit when `quantity` > 1 (a room's nightly price); the total stays authoritative.
+  unitCents        Int?    @map("unit_cents")
+  /// The structured description — hotel, room, dates, PAX; route, flight,
+  /// vehicle — and its multi-line `text`, which the provider prints under
+  /// the line. Written once with the document and never edited (trigger).
+  detail           Json?
 
   @@index([invoiceId, sortOrder])
   @@map("invoice_lines")
@@ -5610,6 +5930,285 @@ model ApprovalRequest {
   @@index([requestedByUserId, status])
   @@index([subjectType, subjectId, status])
   @@map("approval_requests")
+}
+
+/// Where a booking came from. Derived from the session for the public routes
+/// (WEB, PARTNER, ADMIN); named by the desk for a manual booking (PHONE,
+/// EMAIL, EXTERNAL_AGENCY, DIRECT); DEMO for seeded rows.
+enum BookingSource {
+  WEB
+  PARTNER
+  ADMIN
+  PHONE
+  EMAIL
+  EXTERNAL_AGENCY
+  DIRECT
+  DEMO
+
+  @@map("booking_source")
+}
+
+enum CustomerKind {
+  INDIVIDUAL
+  COMPANY
+
+  @@map("customer_kind")
+}
+
+/// A buyer without a partner account: the company or person the desk books
+/// for over the phone or by email. Named, addressable and invoiceable — it is
+/// the provider's client record for a non-partner payer — and reusable, so a
+/// repeat caller is one row with every booking beneath it. The lead guest on
+/// each booking stays the traveller, who may be someone else.
+model Customer {
+  id String @id @default(cuid())
+
+  kind           CustomerKind @default(INDIVIDUAL)
+  /// The person, or the company's legal name.
+  name           String
+  contactName    String?      @map("contact_name")
+  email          String
+  phone          String?
+  billingAddress String?      @map("billing_address")
+  city           String?
+  country        String?
+  taxId          String?      @map("tax_id")
+  /// Internal, never shown to the customer.
+  notes          String?
+
+  createdByUserId String? @map("created_by_user_id")
+
+  hotelBookings      HotelBooking[]
+  transferBookings   TransferBooking[]
+  tourBookings       TourBooking[]
+  serviceBookings    ServiceBooking[]
+  orders             Order[]
+  receivables        Receivable[]        @relation("CustomerReceivables")
+  invoicingCustomers InvoicingCustomer[] @relation("CustomerInvoicingCustomers")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([name])
+  @@map("customers")
+}
+
+/// One row per booking of any product, kept in step by the services that
+/// change bookings and their money (`services/booking/index.service.js`).
+/// The cross-product register, the approvals queue and the filters that cut
+/// across products read this; the product tables stay the truth and a
+/// nightly reconcile rebuilds any row that drifted.
+model BookingIndex {
+  id String @id @default(cuid())
+
+  /// HOTEL | TRANSFER | TOUR | SERVICE | ORDER, and the row in that table.
+  product   String
+  bookingId String @map("booking_id")
+  reference String @unique
+  status    String
+  /// An order's kind; null for a product booking.
+  kind      String?
+
+  partnerId             String? @map("partner_id")
+  customerId            String? @map("customer_id")
+  assignedManagerUserId String? @map("assigned_manager_user_id")
+  /// The order a child booking belongs to, when it does.
+  orderId        String? @map("order_id")
+  orderReference String? @map("order_reference")
+
+  leadName      String  @map("lead_name")
+  leadEmail     String  @map("lead_email")
+  /// "Hotel Vera", "Tbilisi Airport → Tbilisi", "Kazbegi day trip · Shared seat".
+  title         String
+  destinationId String? @map("destination_id")
+
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  /// The first moment of the service, for sorting mixed products together.
+  startAt   DateTime @map("start_at")
+
+  currency   String @db.Char(3)
+  /// The buyer's total: sell, included tax and the desk's adjustment.
+  totalCents Int    @map("total_cents")
+
+  /// The receivable the buyer pays through — its own, or its order's.
+  receivableId     String?   @map("receivable_id")
+  receivableStatus String?   @map("receivable_status")
+  dueAt            DateTime? @map("due_at")
+  paidCents        Int       @default(0) @map("paid_cents")
+
+  approvalState      String?   @map("approval_state")
+  approvalDeadlineAt DateTime? @map("approval_deadline_at")
+
+  source BookingSource
+
+  /// Lower-cased reference, names, email and title: what the trigram index searches.
+  search String
+
+  createdAt   DateTime  @map("created_at")
+  confirmedAt DateTime? @map("confirmed_at")
+  cancelledAt DateTime? @map("cancelled_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@unique([product, bookingId])
+  @@index([status, startDate])
+  @@index([partnerId, createdAt])
+  @@index([customerId, createdAt])
+  @@index([assignedManagerUserId, startDate])
+  @@index([receivableStatus, dueAt])
+  @@index([createdAt])
+  @@index([status, approvalDeadlineAt])
+  @@index([search(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("booking_index")
+}
+
+// --- Deadlines ---------------------------------------------------------------
+
+enum DeadlineKind {
+  PAYMENT
+  FREE_CANCELLATION
+  CONFIRMATION
+
+  @@map("deadline_kind")
+}
+
+enum DeadlineStatus {
+  OPEN
+  MET
+  MISSED
+  CANCELLED
+
+  @@map("deadline_status")
+}
+
+enum DeadlineSource {
+  SYSTEM
+  MANUAL
+
+  @@map("deadline_source")
+}
+
+/// One row per (booking, kind): when the money is due, until when cancelling
+/// is free, by when the booking must be answered. A projection of the
+/// receivable's `dueAt`, the frozen cancellation schedule and the approval /
+/// request stamps (`services/booking/deadline.service.js`), kept in step
+/// beside the booking index, so the calendar and the reminders read one
+/// table while the truth stays where it was. Moving one by hand writes the
+/// truth first and this row follows.
+model BookingDeadline {
+  id String @id @default(cuid())
+
+  kind   DeadlineKind
+  status DeadlineStatus @default(OPEN)
+  source DeadlineSource @default(SYSTEM)
+
+  /// HOTEL | TRANSFER | TOUR | SERVICE | ORDER, and the row in that table.
+  product   String
+  bookingId String @map("booking_id")
+  reference String
+  /// PAYMENT only: the receivable whose `dueAt` this mirrors.
+  receivableId String? @map("receivable_id")
+
+  dueAt    DateTime @map("due_at")
+  /// Where the calendar day is counted for "N days before".
+  timezone String
+
+  // Denormalised for the calendar's filters: no join at read time.
+  partnerId             String? @map("partner_id")
+  customerId            String? @map("customer_id")
+  assignedManagerUserId String? @map("assigned_manager_user_id")
+  leadName              String  @map("lead_name")
+  title                 String
+
+  /// CONFIRMATION: `{ awaiting: "PLATFORM" | "SUPPLIER" }`.
+  meta Json @default("{}")
+
+  completedAt DateTime? @map("completed_at")
+
+  history   BookingDeadlineHistory[]
+  reminders DeadlineReminder[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([product, bookingId, kind])
+  @@index([status, dueAt])
+  @@index([kind, status, dueAt])
+  @@index([partnerId, dueAt])
+  @@index([assignedManagerUserId, dueAt])
+  @@index([receivableId])
+  @@map("booking_deadlines")
+}
+
+/// Every move of a deadline: from, to, by whom and why.
+model BookingDeadlineHistory {
+  id         String          @id @default(cuid())
+  deadlineId String          @map("deadline_id")
+  deadline   BookingDeadline @relation(fields: [deadlineId], references: [id], onDelete: Cascade)
+
+  fromAt          DateTime?      @map("from_at")
+  toAt            DateTime       @map("to_at")
+  source          DeadlineSource
+  reason          String?
+  changedByUserId String?        @map("changed_by_user_id")
+  changedByName   String?        @map("changed_by_name")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([deadlineId, createdAt])
+  @@map("booking_deadline_history")
+}
+
+/// One reminder per (deadline, offset): the claim that makes it fire once.
+model DeadlineReminder {
+  id         String          @id @default(cuid())
+  deadlineId String          @map("deadline_id")
+  deadline   BookingDeadline @relation(fields: [deadlineId], references: [id], onDelete: Cascade)
+  offsetDays Int             @map("offset_days")
+  sentAt     DateTime        @default(now()) @map("sent_at")
+
+  @@unique([deadlineId, offsetDays])
+  @@map("deadline_reminders")
+}
+
+/// How many days before each kind of deadline who is told, and how. One
+/// platform row per kind (`scope` PLATFORM) and, when a partner is treated
+/// differently, one per (kind, partner).
+model ReminderPolicy {
+  id String @id @default(cuid())
+
+  kind  DeadlineKind
+  /// "PLATFORM", or the partner's id: what the unique is on.
+  scope String @default("PLATFORM")
+  partnerId String?  @map("partner_id")
+  partner   Partner? @relation("PartnerReminderPolicies", fields: [partnerId], references: [id], onDelete: Cascade)
+
+  /// Calendar days before the deadline: 7, 3, 1, 0.
+  offsetsDays Int[]    @map("offsets_days")
+  /// IN_APP, EMAIL.
+  channels    String[]
+  /// STAFF, PARTNER, GUEST.
+  recipients  String[]
+  enabled     Boolean  @default(true)
+
+  updatedByUserId String? @map("updated_by_user_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([kind, scope])
+  @@index([partnerId])
+  @@map("reminder_policies")
+}
+
+enum BookingApprovalMode {
+  /// Confirmed the moment it is made, as the platform started out.
+  AUTO
+  /// Written PENDING_APPROVAL and let through by an operator.
+  REQUIRED
+
+  @@map("booking_approval_mode")
 }
 
 enum CreditLimitMode {

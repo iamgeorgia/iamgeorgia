@@ -4,10 +4,12 @@ import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/
 import { NewDriverForm } from "@/components/admin/NewDriverForm";
 import { listAdminTransferProviders } from "@/lib/api/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add a driver" };
 
 export default async function NewDriverPage() {
+  await requireScreen();
   const [{ data: providers }, { path }] = await Promise.all([listAdminTransferProviders(), getI18n()]);
 
   return (

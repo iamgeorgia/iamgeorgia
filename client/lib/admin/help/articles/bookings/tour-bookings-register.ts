@@ -11,7 +11,6 @@ export const article = {
   title: "Tour bookings register",
   summary: "Every departure sold and the requests still waiting for an answer — the tiles, the filters and what each row shows.",
   category: "bookings",
-  roles: ["ADMIN"],
   routes: ["/admin/tours/bookings"],
   keywords: ["TUR", "tour", "departure", "traveller", "request", "awaiting", "departing", "seats", "on request"],
   related: ["bk-tour-booking-detail", "bk-statuses-glossary", "tr-departures", "rf-search-filters"],

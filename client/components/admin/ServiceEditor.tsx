@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { FormError, SubmitButton } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   ServiceFields,
   serviceValuesError,
@@ -44,6 +46,10 @@ export function ServiceEditor({
   policies: CancellationPolicy[];
 }) {
   const router = useRouter();
+  // The services router asks for `catalogue.write` alone, prices included, so
+  // one capability locks or unlocks the whole form.
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [values, setValues] = useState<ServiceValues>(() => serviceValuesFrom(service));
   const [busy, setBusy] = useState(false);
@@ -83,20 +89,26 @@ export function ServiceEditor({
 
   return (
     <div>
-      <ServiceFields
-        values={values}
-        onChange={set}
-        destinations={destinations}
-        suppliers={suppliers}
-        policies={policies}
-        fieldErrors={fieldErrors}
-      />
+      <fieldset disabled={!canEdit} className="min-w-0">
+        <ServiceFields
+          values={values}
+          onChange={set}
+          destinations={destinations}
+          suppliers={suppliers}
+          policies={policies}
+          fieldErrors={fieldErrors}
+        />
+      </fieldset>
 
       <FormError message={error} />
 
-      <SubmitButton className="mt-6" busy={busy} saved={saved} onClick={save}>
-        {busy ? "Saving…" : saved ? "Saved" : "Save service"}
-      </SubmitButton>
+      {canEdit ? (
+        <SubmitButton className="mt-6" busy={busy} saved={saved} onClick={save}>
+          {busy ? "Saving…" : saved ? "Saved" : "Save service"}
+        </SubmitButton>
+      ) : (
+        <ReadOnlyNote className="mt-6" needs="catalogue.write" what="Editing this service" />
+      )}
     </div>
   );
 }

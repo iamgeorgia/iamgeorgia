@@ -5,6 +5,8 @@ import { AlertTriangle, Archive, Loader2, RotateCcw } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { archiveTransferRoute, updateTransferRoute } from "@/lib/api/transfers";
 import type { TransferRoute } from "@/types/transfer";
@@ -28,12 +30,18 @@ import type { TransferRoute } from "@/types/transfer";
  */
 export function TransferRouteDangerZone({ route }: { route: TransferRoute }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const archived = route.status === "ARCHIVED";
+
+  // The archive panel is nothing but the action; the archived panel also
+  // explains the state, which a reader still needs.
+  if (!canEdit && !archived) return null;
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -65,19 +73,23 @@ export function TransferRouteDangerZone({ route }: { route: TransferRoute }) {
           </p>
         )}
 
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => run(() => updateTransferRoute(route.id, { status: "DRAFT" }))}
-          className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm border border-line bg-surface px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink/40 hover:text-ink disabled:opacity-60"
-        >
-          {busy ? (
-            <Loader2 size={15} className="animate-spin" aria-hidden />
-          ) : (
-            <RotateCcw size={15} aria-hidden />
-          )}
-          Restore as a draft
-        </button>
+        {canEdit ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => updateTransferRoute(route.id, { status: "DRAFT" }))}
+            className="mt-4 inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm border border-line bg-surface px-4 text-[0.8125rem] font-medium text-body transition-colors hover:border-ink/40 hover:text-ink disabled:opacity-60"
+          >
+            {busy ? (
+              <Loader2 size={15} className="animate-spin" aria-hidden />
+            ) : (
+              <RotateCcw size={15} aria-hidden />
+            )}
+            Restore as a draft
+          </button>
+        ) : (
+          <ReadOnlyNote className="mt-4" needs="catalogue.write" what="Restoring this route" />
+        )}
       </AdminPanel>
     );
   }

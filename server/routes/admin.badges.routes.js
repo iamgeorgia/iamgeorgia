@@ -7,6 +7,7 @@ import { dateOnlyToUtc } from '../lib/time.js';
 import { countDueInstalments } from '../services/finance/reminder.service.js';
 import { countUnreadNotifications } from '../services/notifications/notification.service.js';
 import { countPendingApprovals } from '../services/finance/approval.service.js';
+import { countPendingApprovals as countPendingBookingApprovals } from '../services/booking/approval.service.js';
 
 /**
  * The queue counts on the admin panel's sidebar, in one request.
@@ -27,7 +28,7 @@ export const adminBadgeRoutes = Router();
 adminBadgeRoutes.use(authenticate, requireCapability(CAPABILITIES.CATALOGUE_READ));
 
 /** A hotel booking that still owes the operator something. */
-const ACTIVE_BOOKING_STATUSES = ['PENDING', 'CONFIRMED'];
+const ACTIVE_BOOKING_STATUSES = ['PENDING_APPROVAL', 'PENDING', 'CONFIRMED'];
 
 /** Applications submitted, and ones somebody is partway through filling in. */
 const PENDING_PARTNER_STATUSES = ['PENDING_APPROVAL', 'REGISTRATION_IN_PROGRESS'];
@@ -43,6 +44,7 @@ adminBadgeRoutes.get('/', async (req, res) => {
     const bookings = can(req.user, CAPABILITIES.BOOKINGS_READ);
     const dispatch = can(req.user, CAPABILITIES.DISPATCH_READ);
     const payables = can(req.user, CAPABILITIES.FINANCE_PAYABLES_READ);
+    const approves = can(req.user, CAPABILITIES.BOOKINGS_APPROVE);
 
     // The list takes `from`/`to` as calendar dates and treats `to` as
     // inclusive (`< to + 1 day`); the same arithmetic here keeps the badge and
@@ -50,24 +52,46 @@ adminBadgeRoutes.get('/', async (req, res) => {
     const today = dateOnlyToUtc(new Date().toISOString().slice(0, 10));
     const until = new Date(today.getTime() + (LEG_WINDOW_DAYS + 1) * 86_400_000);
 
-    const [pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders, paymentsDue, unreadNotifications, pendingApprovals] =
-        await Promise.all([
-            partners ? prisma.partner.count({ where: { status: { in: PENDING_PARTNER_STATUSES } } }) : null,
-            bookings ? prisma.hotelBooking.count({ where: { status: { in: ACTIVE_BOOKING_STATUSES } } }) : null,
-            dispatch
-                ? prisma.transferBookingLeg.count({
-                      where: { status: 'UNASSIGNED', pickupAt: { gte: today, lt: until } }
-                  })
-                : null,
+    const [
+        pendingPartners,
+        activeBookings,
+        unassignedLegs,
+        pendingTourRequests,
+        pendingOrders,
+        paymentsDue,
+        unreadNotifications,
+        pendingApprovals,
+        pendingBookingApprovals
+    ] = await Promise.all([
+        partners ? prisma.partner.count({ where: { status: { in: PENDING_PARTNER_STATUSES } } }) : null,
+        bookings ? prisma.hotelBooking.count({ where: { status: { in: ACTIVE_BOOKING_STATUSES } } }) : null,
+        // A leg of a booking still waiting for approval is not dispatch's yet.
+        dispatch
+            ? prisma.transferBookingLeg.count({
+                  where: { status: 'UNASSIGNED', pickupAt: { gte: today, lt: until }, booking: { status: { not: 'PENDING_APPROVAL' } } }
+              })
+            : null,
             bookings ? prisma.tourBooking.count({ where: { status: 'PENDING' } }) : null,
             bookings ? prisma.order.count({ where: { status: 'PENDING_CONFIRMATION' } }) : null,
             // Supplier instalments overdue or due this week: the Finance → Payables badge.
             payables ? countDueInstalments({ days: PAYMENTS_WINDOW_DAYS }) : null,
             // The bell. Everyone has one; it counts only the viewer's own rows.
             countUnreadNotifications(req.user.id),
-            // Requests waiting on this viewer's decision; null for someone who decides none.
-            countPendingApprovals(req.user)
-        ]);
+        // Requests waiting on this viewer's decision; null for someone who decides none.
+        countPendingApprovals(req.user),
+        // Bookings waiting for the platform's yes (OD1): the approvals queue.
+        approves ? countPendingBookingApprovals() : null
+    ]);
 
-    res.json({ pendingPartners, activeBookings, unassignedLegs, pendingTourRequests, pendingOrders, paymentsDue, unreadNotifications, pendingApprovals });
+    res.json({
+        pendingPartners,
+        activeBookings,
+        unassignedLegs,
+        pendingTourRequests,
+        pendingOrders,
+        paymentsDue,
+        unreadNotifications,
+        pendingApprovals,
+        pendingBookingApprovals
+    });
 });

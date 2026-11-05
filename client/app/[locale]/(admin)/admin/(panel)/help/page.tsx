@@ -6,14 +6,15 @@ import { AdminContainer, AdminPageHeader, AdminPanel } from "@/components/admin/
 import { HelpCategoryList } from "@/components/admin/help/HelpCategoryList";
 import { HelpHub } from "@/components/admin/help/HelpHub";
 import { QuickStartCard } from "@/components/admin/help/QuickStartCard";
-import { getSession } from "@/lib/auth/session";
+import { requireScreen } from "@/lib/auth/session";
 import {
   helpArticleById,
   helpArticlePath,
   helpArticlesIn,
   helpCategoriesFor,
-  helpRoleOf,
+  helpReadable,
   quickStartFor,
+  quickStartTitle,
 } from "@/lib/admin/help";
 import { getI18n } from "@/lib/i18n/server";
 
@@ -22,16 +23,17 @@ export const metadata: Metadata = { title: "Help & tutorials" };
 /**
  * The manual's front page: search, the reader's Quick Start, the areas, and
  * the three chapters worth reading before touching anything. Everything on
- * it is static data filtered to the viewer's role — the registry never
+ * it is static data filtered to what the viewer can open — the registry never
  * makes a request, so this is the one panel screen that cannot fail to load.
  */
 export default async function HelpHubPage() {
-  const [session, { path }] = await Promise.all([getSession(), getI18n()]);
-  const role = helpRoleOf(session?.user.role ?? "ADMIN");
+  const session = await requireScreen();
+  const { path } = await getI18n();
+  const capabilities = session.user.capabilities ?? [];
 
-  const categories = helpCategoriesFor(role);
+  const categories = helpCategoriesFor(capabilities);
   const counts = Object.fromEntries(
-    categories.map((category) => [category.id, helpArticlesIn(category.id, role).length]),
+    categories.map((category) => [category.id, helpArticlesIn(category.id, capabilities).length]),
   );
   const categoryTitles = Object.fromEntries(categories.map((category) => [category.id, category.title]));
 
@@ -43,7 +45,7 @@ export default async function HelpHubPage() {
     { id: "rf-troubleshooting", icon: Wrench, label: "When something goes wrong" },
   ]
     .map((entry) => ({ ...entry, article: helpArticleById(entry.id) }))
-    .filter((entry) => entry.article && entry.article.roles.includes(role));
+    .filter((entry) => entry.article && helpReadable(entry.article, capabilities));
 
   return (
     <AdminContainer>
@@ -54,9 +56,9 @@ export default async function HelpHubPage() {
       />
 
       <div className="mt-8">
-        <HelpHub role={role} categoryTitles={categoryTitles}>
+        <HelpHub capabilities={capabilities} categoryTitles={categoryTitles}>
           <div className="mt-8">
-            <QuickStartCard role={role} steps={quickStartFor(role)} />
+            <QuickStartCard title={quickStartTitle(capabilities)} steps={quickStartFor(capabilities)} />
           </div>
 
           <section className="mt-10">

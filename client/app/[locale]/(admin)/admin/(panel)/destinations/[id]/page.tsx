@@ -16,6 +16,7 @@ import { getDestination, getDestinationTree, listHotels } from "@/lib/api/hotels
 import { destinationTypeLabels } from "@/lib/admin/destinations";
 import { getI18n } from "@/lib/i18n/server";
 import type { Destination } from "@/types/catalogue";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Destination" };
 
@@ -35,6 +36,7 @@ export const metadata: Metadata = { title: "Destination" };
 export default async function AdminDestinationPage({
   params,
 }: PageProps<"/[locale]/admin/destinations/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const { path } = await getI18n();
 
@@ -81,7 +83,7 @@ export default async function AdminDestinationPage({
         }
       />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-8">
           <AdminPanel title="Details">
             <DestinationForm destination={destination} tree={tree.data} />

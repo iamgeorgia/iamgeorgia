@@ -4,9 +4,13 @@ import {
   ArrowUpRight,
   Banknote,
   BedDouble,
+  Bell,
+  BellRing,
+  Mail,
   Boxes,
   Bus,
   CalendarCheck,
+  CalendarClock,
   CalendarRange,
   Car,
   CarFront,
@@ -14,6 +18,7 @@ import {
   Coins,
   Compass,
   ConciergeBell,
+  Contact,
   ClipboardCheck,
   Gavel,
   Globe2,
@@ -21,6 +26,7 @@ import {
   Handshake,
   Landmark,
   LayoutDashboard,
+  Layers,
   Map,
   MapPin,
   PackageCheck,
@@ -50,9 +56,16 @@ import {
  * A vertical stays flat until it has more than one catalogue screen: hotels,
  * destinations and tours each have exactly one way in, and wrapping a single
  * link in a disclosure would be a control that hides one thing.
+ *
+ * Every item names the capability that earns it a place, so the sidebar an
+ * account sees is a function of what it holds and nothing else — a custom
+ * role made in the Roles editor gets exactly the screens its capabilities
+ * open, with no list here to update.
  */
 
 export type AdminBadgeKey =
+  /** Bookings and orders waiting for the platform's yes — Operations → Booking approvals. */
+  | "pendingBookingApprovals"
   | "pendingBookings"
   | "pendingPartners"
   | "unassignedLegs"
@@ -62,7 +75,7 @@ export type AdminBadgeKey =
   | "paymentsDue"
   /** Money changes waiting for a second person to approve them — Finance → Approvals. */
   | "pendingApprovals"
-  /** The viewer's own unread notices: the bell, not a sidebar pill. */
+  /** The viewer's own unread notices: the bell and the Notifications row. */
   | "unreadNotifications";
 
 export type AdminBadges = Record<AdminBadgeKey, number>;
@@ -74,11 +87,23 @@ export interface AdminNavItem {
   /** Shown as a count pill — the number of records awaiting a decision. */
   badgeKey?: AdminBadgeKey;
   /**
-   * The capabilities that open the screen, any one of them — the same names
-   * the server's guard on its endpoints asks for. Absent means every staff
-   * role (the manual).
+   * The capabilities that earn the screen a place in the sidebar, any one of
+   * them. Registers, queues, boards and reports are offered on their *read*
+   * capability; maintenance screens (the catalogue editors, the fleet, the
+   * applications queue) on the write capability that makes them useful, so a
+   * read-only role is not invited to a screen it can only look at. The screen
+   * table (`lib/admin/access.ts`) decides separately who may *open* a path,
+   * which is wider: a read-only role still reaches an editor by link. Absent
+   * means every staff account (the overview, the manual).
    */
   capability?: string | string[];
+  /**
+   * The capabilities that let the viewer *act* on the screen — change, record,
+   * approve. Not a gate: used to order the sidebar's groups so the one the
+   * viewer works in comes first (finance for an accountant, the queues for a
+   * desk). Absent for a screen that is only ever read.
+   */
+  acts?: string | string[];
 }
 
 /**
@@ -105,20 +130,54 @@ export function adminSectionItems(section: AdminNavSection): AdminNavItem[] {
   return section.groups.flatMap((group) => group.items);
 }
 
-/** Whether a set of held capabilities opens an item. */
+const anyOf = (needed: string | string[] | undefined, capabilities: readonly string[]): boolean => {
+  if (!needed) return false;
+  const list = Array.isArray(needed) ? needed : [needed];
+  return list.some((capability) => capabilities.includes(capability));
+};
+
+/** Whether a set of held capabilities earns an item its place. */
 export function canOpen(item: AdminNavItem, capabilities: readonly string[]): boolean {
-  if (!item.capability) return true;
-  const needed = Array.isArray(item.capability) ? item.capability : [item.capability];
-  return needed.some((capability) => capabilities.includes(capability));
+  return !item.capability || anyOf(item.capability, capabilities);
 }
+
+/** Whether a set of held capabilities lets the viewer act on an item. */
+export function canAct(item: AdminNavItem, capabilities: readonly string[]): boolean {
+  return anyOf(item.acts, capabilities);
+}
+
+export type AdminNavEntry = AdminNavItem | AdminNavSection;
+
+export interface AdminNavGroup {
+  /** Empty for the untitled run at the top that holds the overview. */
+  title: string;
+  entries: AdminNavEntry[];
+  /** Kept at the start or the end whatever the viewer holds. */
+  pinned?: "start" | "end";
+}
+
+export function isAdminNavSection(entry: AdminNavEntry): entry is AdminNavSection {
+  return "groups" in entry;
+}
+
+/** Every item in a group, sections flattened. */
+export const adminGroupItems = (group: AdminNavGroup): AdminNavItem[] =>
+  group.entries.flatMap((entry) => (isAdminNavSection(entry) ? adminSectionItems(entry) : [entry]));
 
 /**
  * The navigation as one account sees it, from the capabilities its session
- * carries: a screen that would answer 403 is not offered. The server enforces
- * the same split on every endpoint — this only keeps the sidebar honest.
+ * carries: a screen that would answer 403 is not offered, nor is one the
+ * viewer could only look at. The server enforces the same split on every
+ * endpoint — this only keeps the sidebar honest.
+ *
+ * Groups come back in the viewer's order: the ones holding a screen they can
+ * *act* on first, in the table's order among themselves, then the ones they
+ * only read. An accountant's sidebar therefore leads with Finance and a
+ * desk's with the queues, from the same table. The overview is always first
+ * and Support always last, whoever is looking.
  */
 export function navigationFor(capabilities: readonly string[]): AdminNavGroup[] {
-  return adminNavigation
+  const visible = adminNavigation
     .map((group) => ({
       ...group,
       entries: group.entries
@@ -137,50 +196,113 @@ export function navigationFor(capabilities: readonly string[]): AdminNavGroup[] 
         .filter((entry) => (isAdminNavSection(entry) ? entry.groups.length > 0 : canOpen(entry, capabilities))),
     }))
     .filter((group) => group.entries.length > 0);
-}
 
-export type AdminNavEntry = AdminNavItem | AdminNavSection;
+  const rank = (group: AdminNavGroup): number => {
+    if (group.pinned === "start") return 0;
+    if (group.pinned === "end") return 3;
+    return adminGroupItems(group).some((item) => canAct(item, capabilities)) ? 1 : 2;
+  };
 
-export interface AdminNavGroup {
-  title: string;
-  entries: AdminNavEntry[];
-}
-
-export function isAdminNavSection(entry: AdminNavEntry): entry is AdminNavSection {
-  return "groups" in entry;
+  // A stable sort: equal ranks keep the table's order.
+  return visible
+    .map((group, index) => ({ group, index, rank: rank(group) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map(({ group }) => group);
 }
 
 /**
- * Who the catalogue screens are listed for: the back-office desks — anyone
- * who edits the catalogue or works the bookings. A dispatcher may read the
- * catalogue too (the server grants `catalogue.read` so the fleet and dispatch
- * screens can pick points and classes), but does so through those screens;
- * the sidebar keeps offering a dispatcher the operations half it always had,
- * and the manual for the catalogue screens stays written for the desks.
+ * The first screen the sidebar offers this account once its groups are in
+ * order. The overview is offered to everyone, so today this is the overview
+ * for every role; the rule lives here so that stays one decision.
  */
-const BACK_OFFICE = ["catalogue.write", "bookings.read"];
+export function landingFor(capabilities: readonly string[]): string {
+  for (const group of navigationFor(capabilities)) {
+    const [first] = adminGroupItems(group);
+    if (first) return first.href;
+  }
+  return "/admin";
+}
+
+/** The desk's capabilities: handling and cancelling bookings. */
+const DESK = ["bookings.write", "bookings.cancel"];
+
+/**
+ * Anyone who edits a hotel's content or its prices. Transfer fares are not in
+ * here: the server gates every transfer catalogue write, fares included, on
+ * `catalogue.write` alone, so those screens are offered on that.
+ */
+const CATALOGUE_EDITORS = ["catalogue.write", "pricing.write"];
+
+/** Who the Approvals screen is for: whoever asks for money changes and whoever decides them. */
+const APPROVALS = [
+  "finance.refunds.request",
+  "finance.adjustments.request",
+  "finance.refunds.approve",
+  "finance.adjustments.approve",
+];
 
 export const adminNavigation: AdminNavGroup[] = [
   {
+    // The overview is everybody's: it composes itself from what the viewer
+    // holds, so the one address can be the landing page for every role.
+    title: "",
+    pinned: "start",
+    entries: [
+      { label: "Overview", href: "/admin", icon: LayoutDashboard },
+      // Beside the overview rather than in a group: the notices are the
+      // viewer's own, not a queue of anyone's, and every staff account holds
+      // the capability. Badged with the same unread count as the bell.
+      {
+        label: "Notifications",
+        href: "/admin/notifications",
+        icon: Bell,
+        badgeKey: "unreadNotifications",
+        capability: "notifications.read",
+      },
+    ],
+  },
+  {
     title: "Operations",
     entries: [
-      { label: "Overview", href: "/admin", icon: LayoutDashboard, capability: "bookings.read" },
-      // Two registers rather than one, because a TRF reference is not a BKG
-      // one and the two lists share no identifier space. Both are named for
-      // what they hold: "Bookings" on its own stopped being unambiguous the
-      // moment the second register appeared in the sidebar.
+      // First, because every booking passes through it (owner decision OD1):
+      // nothing is confirmed, no supplier is told and no invoice issues until
+      // somebody here says yes. Badged with everything still waiting.
+      {
+        label: "Booking approvals",
+        href: "/admin/bookings/approvals",
+        icon: ClipboardCheck,
+        badgeKey: "pendingBookingApprovals",
+        capability: "bookings.approve",
+        acts: "bookings.approve",
+      },
+      // Every product in one list, for the desk that has a name or an email
+      // and no idea which register the booking is on. Rows link out to the
+      // product's own detail page; nothing is worked here.
+      {
+        label: "All bookings",
+        href: "/admin/bookings/all",
+        icon: Layers,
+        capability: "bookings.read",
+        acts: DESK,
+      },
+      // Then one register per product, because a TRF reference is not a BKG
+      // one and the lists share no identifier space. Each is named for what
+      // it holds: "Bookings" on its own stopped being unambiguous the moment
+      // the second register appeared in the sidebar.
       {
         label: "Hotel bookings",
         href: "/admin/bookings",
         icon: CalendarCheck,
         badgeKey: "pendingBookings",
         capability: "bookings.read",
+        acts: DESK,
       },
       {
         label: "Transfer bookings",
         href: "/admin/transfers/bookings",
         icon: CarFront,
         capability: ["bookings.read", "dispatch.read"],
+        acts: [...DESK, "dispatch.write"],
       },
       // TUR references. Badged with on-request bookings the operator has yet
       // to answer — seats are already claimed, so a request left waiting is
@@ -191,6 +313,16 @@ export const adminNavigation: AdminNavGroup[] = [
         icon: Compass,
         badgeKey: "pendingTourRequests",
         capability: "bookings.read",
+        acts: DESK,
+      },
+      // SVC references: a kosher meal, a guide, a mashgiach booked on its
+      // own, and the on-request ones the supplier has yet to answer.
+      {
+        label: "Service bookings",
+        href: "/admin/services/bookings",
+        icon: ConciergeBell,
+        capability: "bookings.read",
+        acts: DESK,
       },
       // ORD references: a package booked as one thing, with a hotel, a
       // transfer, a tour and a service under it. Badged with the orders
@@ -201,6 +333,7 @@ export const adminNavigation: AdminNavGroup[] = [
         icon: PackageCheck,
         badgeKey: "pendingOrders",
         capability: "bookings.read",
+        acts: DESK,
       },
       // Legs, not bookings, and badged with the ones nobody is driving yet.
       {
@@ -209,17 +342,43 @@ export const adminNavigation: AdminNavGroup[] = [
         icon: Radio,
         badgeKey: "unassignedLegs",
         capability: "dispatch.read",
+        acts: "dispatch.write",
+      },
+      {
+        label: "Deadlines",
+        href: "/admin/deadlines",
+        icon: CalendarClock,
+        capability: "bookings.read",
+        acts: "bookings.deadlines.write",
       },
     ],
   },
   {
+    // Maintenance screens, offered to whoever edits them. A read-only role —
+    // management, the finance desks — still reaches every one of these by
+    // link, from a booking or a search, and sees it read-only; it is just not
+    // invited to a screen whose every button it cannot press.
     title: "Inventory",
     entries: [
       // First in the group, because everything under it is filed inside one:
       // a property, a tour or a pick-up point cannot be created until the place
       // it belongs to exists.
-      { label: "Destinations", href: "/admin/destinations", icon: Globe2, capability: BACK_OFFICE },
-      { label: "Hotels", href: "/admin/hotels", icon: BedDouble, capability: BACK_OFFICE },
+      {
+        label: "Destinations",
+        href: "/admin/destinations",
+        icon: Globe2,
+        capability: "catalogue.write",
+        acts: "catalogue.write",
+      },
+      // The desk keeps Hotels: it looks up rooms and availability to handle a
+      // booking, even though it changes nothing there.
+      {
+        label: "Hotels",
+        href: "/admin/hotels",
+        icon: BedDouble,
+        capability: [...CATALOGUE_EDITORS, "bookings.write"],
+        acts: CATALOGUE_EDITORS,
+      },
       {
         // A section rather than an item at /admin/transfers: that path only
         // redirects, and a disclosure that is also a link is a control whose
@@ -238,59 +397,132 @@ export const adminNavigation: AdminNavGroup[] = [
           {
             label: "Catalogue",
             items: [
-              { label: "Routes", href: "/admin/transfers/routes", icon: Route, capability: BACK_OFFICE },
+              {
+                label: "Routes",
+                href: "/admin/transfers/routes",
+                icon: Route,
+                capability: "catalogue.write",
+                acts: "catalogue.write",
+              },
               // Where a route starts and ends — filed right after the routes
               // that reference it.
-              { label: "Pick-up points", href: "/admin/transfers/points", icon: MapPin, capability: BACK_OFFICE },
+              {
+                label: "Pick-up points",
+                href: "/admin/transfers/points",
+                icon: MapPin,
+                capability: "catalogue.write",
+                acts: "catalogue.write",
+              },
               // The classes are what a traveller buys; the fleet is what turns
               // up. Two screens, because a class outlives any one car.
-              { label: "Vehicle classes", href: "/admin/transfers/vehicles", icon: Bus, capability: BACK_OFFICE },
-              { label: "Extras", href: "/admin/transfers/extras", icon: Coins, capability: BACK_OFFICE },
+              {
+                label: "Vehicle classes",
+                href: "/admin/transfers/vehicles",
+                icon: Bus,
+                capability: "catalogue.write",
+                acts: "catalogue.write",
+              },
+              {
+                label: "Extras",
+                href: "/admin/transfers/extras",
+                icon: Coins,
+                capability: "catalogue.write",
+                acts: "catalogue.write",
+              },
             ],
           },
           {
             label: "Fleet & drivers",
             items: [
-              { label: "Fleet", href: "/admin/transfers/fleet", icon: Car, capability: "dispatch.read" },
-              { label: "Drivers", href: "/admin/transfers/drivers", icon: UserRound, capability: "dispatch.read" },
-              { label: "Schedule", href: "/admin/transfers/schedule", icon: CalendarRange, capability: "dispatch.read" },
+              { label: "Fleet", href: "/admin/transfers/fleet", icon: Car, capability: "dispatch.write", acts: "dispatch.write" },
+              {
+                label: "Drivers",
+                href: "/admin/transfers/drivers",
+                icon: UserRound,
+                capability: "dispatch.write",
+                acts: "dispatch.write",
+              },
+              // The diary and the ratings queue are read as much as worked, so
+              // they stay on the read capability.
+              {
+                label: "Schedule",
+                href: "/admin/transfers/schedule",
+                icon: CalendarRange,
+                capability: "dispatch.read",
+                acts: "dispatch.write",
+              },
               // Ratings are about drivers, so they live beside them rather
               // than with the catalogue a traveller sees.
-              { label: "Ratings", href: "/admin/transfers/ratings", icon: Star, capability: "dispatch.read" },
+              { label: "Ratings", href: "/admin/transfers/ratings", icon: Star, capability: "dispatch.read", acts: "dispatch.write" },
             ],
           },
         ],
       },
-      { label: "Tours", href: "/admin/tours", icon: Map, capability: BACK_OFFICE },
+      // The tour operator edits tours and nothing else in the catalogue.
+      {
+        label: "Tours",
+        href: "/admin/tours",
+        icon: Map,
+        capability: ["catalogue.write", "tours.write"],
+        acts: ["catalogue.write", "tours.write"],
+      },
       // Packages sit after the products they are assembled from: a slot can
       // only name a hotel, a route or a tour that already exists.
-      { label: "Packages", href: "/admin/packages", icon: Boxes, capability: BACK_OFFICE },
-      { label: "Services", href: "/admin/services", icon: ConciergeBell, capability: BACK_OFFICE },
+      { label: "Packages", href: "/admin/packages", icon: Boxes, capability: "catalogue.write", acts: "catalogue.write" },
+      { label: "Services", href: "/admin/services", icon: ConciergeBell, capability: "catalogue.write", acts: "catalogue.write" },
     ],
   },
   {
     title: "Network",
     entries: [
-      { label: "Partners", href: "/admin/partners", icon: Handshake, capability: "partners.read" },
+      // The register is read by every desk that needs to know who booked;
+      // acting on a partner is approving it, setting its commission or its
+      // credit.
+      {
+        label: "Partners",
+        href: "/admin/partners",
+        icon: Handshake,
+        capability: "partners.read",
+        acts: ["partners.write", "finance.commission.write", "partners.credit.write"],
+      },
+      // The buyers with no partner account: the people and companies the
+      // desk books for. Read with the bookings, written by the desk.
+      {
+        label: "Customers",
+        href: "/admin/customers",
+        icon: Contact,
+        capability: "bookings.read",
+        acts: "bookings.write",
+      },
       {
         // The review queue, badged with what is waiting. It sits beside the
         // register rather than inside it because it is the screen an operator
         // opens first, and a saved filter cannot carry a count in the sidebar.
+        // Offered to whoever decides an application; everyone else reads the
+        // register, where applications are a filter.
         label: "Applications",
         href: "/admin/partners/applications",
         icon: ClipboardCheck,
         badgeKey: "pendingPartners",
-        capability: "partners.read",
+        capability: "partners.write",
+        acts: "partners.write",
       },
     ],
   },
   {
     // Who owes whom: what we owe suppliers, what buyers owe us, the money
-    // that moved, and the reports over it. Management reads it all; Finance
-    // also records payments; the desks and dispatch do not see it.
+    // that moved, and the reports over it. Management reads it all; the
+    // finance desks also record payments; the booking desks and dispatch do
+    // not see it.
     title: "Finance",
     entries: [
-      { label: "Finance overview", href: "/admin/finance", icon: Landmark, capability: "finance.payables.read" },
+      {
+        label: "Finance overview",
+        href: "/admin/finance",
+        icon: Landmark,
+        capability: "finance.payables.read",
+        acts: "finance.payments.write",
+      },
       // Badged with instalments late or due this week: the queue the
       // payment reminders are about, and the one a finance desk opens first.
       {
@@ -299,21 +531,41 @@ export const adminNavigation: AdminNavGroup[] = [
         icon: ArrowUpRight,
         badgeKey: "paymentsDue",
         capability: "finance.payables.read",
+        acts: ["finance.payments.write", "finance.adjustments.request"],
       },
-      { label: "Receivables", href: "/admin/finance/receivables", icon: ArrowDownLeft, capability: "finance.receivables.read" },
-      { label: "Payments", href: "/admin/finance/payments", icon: Banknote, capability: "finance.payments.read" },
+      {
+        label: "Receivables",
+        href: "/admin/finance/receivables",
+        icon: ArrowDownLeft,
+        capability: "finance.receivables.read",
+        acts: ["finance.payments.write", "finance.refunds.request", "finance.adjustments.request"],
+      },
+      {
+        label: "Payments",
+        href: "/admin/finance/payments",
+        icon: Banknote,
+        capability: "finance.payments.read",
+        acts: "finance.payments.write",
+      },
       // Proformas, VAT invoices and corrections issued through the invoicing provider.
-      { label: "Invoices", href: "/admin/finance/invoices", icon: FileText, capability: "invoices.read" },
+      { label: "Invoices", href: "/admin/finance/invoices", icon: FileText, capability: "invoices.read", acts: "invoices.write" },
       // Refunds and write-offs that need a second person; badged with those still waiting.
       {
         label: "Approvals",
         href: "/admin/finance/approvals",
         icon: ClipboardCheck,
         badgeKey: "pendingApprovals",
-        capability: ["finance.refunds.request", "finance.adjustments.request", "finance.refunds.approve", "finance.adjustments.approve"],
+        capability: APPROVALS,
+        acts: APPROVALS,
       },
       // Cancellation charges as the policy set them and as finance changed them.
-      { label: "Penalties", href: "/admin/finance/penalties", icon: Gavel, capability: "finance.receivables.read" },
+      {
+        label: "Penalties",
+        href: "/admin/finance/penalties",
+        icon: Gavel,
+        capability: "finance.receivables.read",
+        acts: "finance.adjustments.request",
+      },
       { label: "Reports", href: "/admin/finance/reports", icon: ChartColumn, capability: "finance.reports.read" },
     ],
   },
@@ -323,15 +575,35 @@ export const adminNavigation: AdminNavGroup[] = [
     // checking — management and finance as well as the admins.
     title: "People",
     entries: [
-      { label: "Staff", href: "/admin/users", icon: UsersRound, capability: "users.staff.manage" },
-      { label: "Roles", href: "/admin/roles", icon: ShieldCheck, capability: "roles.manage" },
+      { label: "Staff", href: "/admin/users", icon: UsersRound, capability: "users.staff.manage", acts: "users.staff.manage" },
+      { label: "Roles", href: "/admin/roles", icon: ShieldCheck, capability: "roles.manage", acts: "roles.manage" },
       { label: "Audit log", href: "/admin/audit", icon: ScrollText, capability: "audit.read" },
+    ],
+  },
+  {
+    title: "Settings",
+    entries: [
+      {
+        label: "Reminders",
+        href: "/admin/settings/reminders",
+        icon: BellRing,
+        capability: "settings.reminders.write",
+        acts: "settings.reminders.write",
+      },
+      {
+        label: "Email",
+        href: "/admin/settings/email",
+        icon: Mail,
+        capability: ["platform.admin", "settings.write"],
+        acts: "settings.write",
+      },
     ],
   },
   {
     // Last, and small: the manual is reached far less often than any queue,
     // but it must be reachable by everyone, so the item names no capability.
     title: "Support",
+    pinned: "end",
     entries: [{ label: "Help & tutorials", href: "/admin/help", icon: CircleHelp }],
   },
 ];
@@ -384,11 +656,8 @@ export function adminSectionBadgeCount(
  */
 export function adminScreenLabel(pathname: string): string | null {
   for (const group of adminNavigation) {
-    for (const entry of group.entries) {
-      const items = isAdminNavSection(entry) ? adminSectionItems(entry) : [entry];
-      const match = items.find((item) => item.href === pathname);
-      if (match) return match.label;
-    }
+    const match = adminGroupItems(group).find((item) => item.href === pathname);
+    if (match) return match.label;
   }
   return null;
 }

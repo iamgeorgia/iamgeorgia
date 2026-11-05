@@ -1,12 +1,14 @@
-import Link from "next/link";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Download, FileText } from "lucide-react";
 
-import { invoiceKindLabels, invoiceStatusLabels, invoiceStatusTone } from "@/lib/admin/finance";
+import { InvoiceLineDescription } from "@/components/admin/finance/InvoiceLineDescription";
+import { InvoiceStatusBadge } from "@/components/admin/finance/InvoiceStatusBadge";
+import { LinkPager } from "@/components/partners/LinkPager";
+import { PortalEmpty, PortalPanel } from "@/components/partners/PortalPage";
+import { invoiceKindLabels } from "@/lib/admin/finance";
 import { ownInvoicePdfUrl } from "@/lib/api/invoices";
 import { dateTimeFormat } from "@/lib/intl";
 import { formatMoney } from "@/lib/money";
-import { cn } from "@/lib/utils";
-import type { InvoiceStatus, PartnerInvoice } from "@/types/invoice";
+import type { PartnerInvoice } from "@/types/invoice";
 import type { Paginated } from "@/types/partner";
 
 /**
@@ -15,14 +17,6 @@ import type { Paginated } from "@/types/partner";
  * no state; the PDF is a plain link that streams from the API.
  */
 
-const TONES = {
-  neutral: "bg-surface-soft text-muted",
-  positive: "bg-success/12 text-success",
-  attention: "bg-warning/15 text-warning-text",
-  critical: "bg-error/12 text-error-text",
-  info: "bg-info/12 text-info",
-} as const;
-
 // Pinned to Tbilisi so every reader sees the same calendar day.
 const formatDate = (iso: string | null) =>
   iso
@@ -30,19 +24,6 @@ const formatDate = (iso: string | null) =>
         new Date(iso),
       )
     : "—";
-
-function InvoicePill({ status }: { status: InvoiceStatus }) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-[0.75rem] font-medium whitespace-nowrap",
-        TONES[invoiceStatusTone[status]],
-      )}
-    >
-      {invoiceStatusLabels[status]}
-    </span>
-  );
-}
 
 export function PortalInvoices({
   invoices,
@@ -53,35 +34,43 @@ export function PortalInvoices({
   hrefFor: (changes: Record<string, string | null>) => string;
 }) {
   return (
-    <section className="rounded-sm border border-line bg-surface">
-      <div className="p-5 sm:p-6">
-        <h2 className="font-display text-[1.25rem] text-ink">Invoices</h2>
-        <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">
-          {invoices.total === 0
-            ? "No invoices yet. A proforma is issued when a booking is confirmed, and a VAT invoice when it is paid in full."
-            : `${invoices.total} ${invoices.total === 1 ? "document" : "documents"}, newest first.`}
-        </p>
-      </div>
-
-      {invoices.data.length > 0 && (
-        <ul className="divide-y divide-line border-t border-line">
+    <PortalPanel
+      id="invoices"
+      title="Invoices"
+      icon={FileText}
+      description={
+        invoices.total === 0
+          ? undefined
+          : <bdi>{`${invoices.total} ${invoices.total === 1 ? "document" : "documents"}, newest first.`}</bdi>
+      }
+      bodyClassName=""
+    >
+      {invoices.data.length === 0 ? (
+        <PortalEmpty>
+          No invoices yet. A proforma is issued when a booking is confirmed, and a VAT invoice when it is
+          paid in full.
+        </PortalEmpty>
+      ) : (
+        <ul className="divide-y divide-line">
           {invoices.data.map((invoice) => (
-            <li key={invoice.id} className="p-5 sm:px-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+            <li key={invoice.id} className="px-4 py-4 sm:px-5">
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4 gap-y-2">
                 <div className="min-w-0">
-                  <p className="flex flex-wrap items-center gap-2">
+                  <p className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
                     <span className="font-mono text-[0.875rem] font-medium text-ink">{invoice.number ?? "—"}</span>
-                    <span className="text-[0.8125rem] text-muted">{invoiceKindLabels[invoice.kind]}</span>
-                    <InvoicePill status={invoice.status} />
+                    <InvoiceStatusBadge status={invoice.status} />
                   </p>
-                  <p className="mt-1 text-[0.8125rem] text-muted">
-                    {invoice.reference ? `For ${invoice.reference} · ` : ""}
+                  <p className="mt-1.5 text-[0.8125rem] text-muted">
+                    {invoiceKindLabels[invoice.kind]}
+                    {invoice.reference ? ` · for ${invoice.reference}` : ""}
+                  </p>
+                  <p className="text-[0.8125rem] text-muted">
                     Issued {formatDate(invoice.issueDate)}
                     {invoice.dueDate ? ` · due ${formatDate(invoice.dueDate)}` : ""}
                   </p>
                 </div>
-                <div className="flex items-center gap-4 text-end">
-                  <span className="text-[1rem] font-semibold text-ink tabular-nums">
+                <div className="flex flex-col items-end gap-2">
+                  <span className="text-[1rem] font-semibold whitespace-nowrap text-ink tabular-nums">
                     {formatMoney(invoice.totalCents, invoice.currency)}
                   </span>
                   {invoice.hasPdf && (
@@ -89,65 +78,48 @@ export function PortalInvoices({
                       href={ownInvoicePdfUrl(invoice.id)}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-[0.8125rem] font-medium text-brand-text underline-offset-4 hover:underline"
+                      className="inline-flex min-h-9 items-center gap-1.5 rounded-sm border border-line px-2.5 text-[0.8125rem] font-medium text-ink transition-colors hover:border-ink"
                     >
+                      <Download size={14} aria-hidden />
                       PDF
+                      <span className="sr-only"> of invoice {invoice.number ?? ""} (opens in a new tab)</span>
                     </a>
                   )}
                 </div>
               </div>
+
+              {invoice.lines.length > 0 && (
+                <details className="group mt-3">
+                  <summary className="inline-flex min-h-9 cursor-pointer items-center rounded-sm text-[0.8125rem] font-medium text-muted hover:text-ink">
+                    {invoice.lines.length} {invoice.lines.length === 1 ? "line" : "lines"}
+                  </summary>
+                  <ul className="mt-1 divide-y divide-line rounded-sm border border-line">
+                    {invoice.lines.map((line) => (
+                      <li key={line.id} className="flex items-start justify-between gap-3 px-3 py-2.5 text-[0.8125rem]">
+                        <div className="min-w-0">
+                          <InvoiceLineDescription line={line} />
+                          <p className="mt-0.5 text-muted">
+                            {line.quantity}
+                            {typeof line.unitCents === "number" ? ` × ${formatMoney(line.unitCents, invoice.currency)}` : " ×"}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-medium text-ink tabular-nums">{formatMoney(line.totalGrossCents, invoice.currency)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </li>
           ))}
         </ul>
       )}
 
-      <Pager
+      <LinkPager
         page={invoices.page}
         totalPages={invoices.totalPages}
-        hrefFor={(page) => hrefFor({ ipage: page > 1 ? String(page) : null })}
+        label="Invoices pages"
+        hrefFor={(page) => `${hrefFor({ ipage: page > 1 ? String(page) : null })}#invoices`}
       />
-    </section>
-  );
-}
-
-function Pager({
-  page,
-  totalPages,
-  hrefFor,
-}: {
-  page: number;
-  totalPages: number;
-  hrefFor: (page: number) => string;
-}) {
-  if (totalPages <= 1) return null;
-
-  const button =
-    "inline-flex h-10 items-center gap-1 rounded-sm border border-ink/20 px-4 text-[0.8125rem] font-semibold text-ink hover:border-ink hover:bg-surface-soft";
-  const disabled = "pointer-events-none opacity-40";
-
-  return (
-    <nav className="flex items-center justify-between gap-3 border-t border-line p-5 sm:px-6" aria-label="Invoices pagination">
-      <Link
-        href={hrefFor(Math.max(1, page - 1))}
-        aria-disabled={page <= 1}
-        tabIndex={page <= 1 ? -1 : undefined}
-        className={cn(button, page <= 1 && disabled)}
-      >
-        <ChevronLeft size={15} aria-hidden className="rtl:-scale-x-100" />
-        Previous
-      </Link>
-      <span className="text-[0.8125rem] text-muted">
-        Page {page} of {totalPages}
-      </span>
-      <Link
-        href={hrefFor(Math.min(totalPages, page + 1))}
-        aria-disabled={page >= totalPages}
-        tabIndex={page >= totalPages ? -1 : undefined}
-        className={cn(button, page >= totalPages && disabled)}
-      >
-        Next
-        <ChevronRight size={15} aria-hidden className="rtl:-scale-x-100" />
-      </Link>
-    </nav>
+    </PortalPanel>
   );
 }

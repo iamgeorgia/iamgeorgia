@@ -10,7 +10,7 @@ export async function WhyIamGeorgia() {
   return (
     <section className="py-16 sm:py-24 lg:py-32">
       <Container>
-        <div className="grid gap-14 lg:grid-cols-12 lg:gap-16">
+        <div className="grid grid-cols-1 gap-14 lg:grid-cols-12 lg:gap-16">
           {/* The intro pins while the numbered list scrolls past it. `self-start`
               is what makes this work: a stretched grid item is already the full
               row height, so `sticky` would have nothing left to travel through.

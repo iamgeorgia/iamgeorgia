@@ -2,6 +2,7 @@ import { prisma } from '../../db/index.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { ConflictError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { syncPayableInTx } from './ledger.service.js';
+import { syncIndexForReceivableInTx } from '../booking/index.service.js';
 
 /**
  * Reading payables, receivables and payments, and the three things Finance
@@ -268,6 +269,8 @@ export const adjustReceivableInTx = async (tx, id, { dueAt, waive, reason, notes
                 data: { dueAt, ...(dueAt && (!receivable.dueAt || dueAt > receivable.dueAt) ? { overdueAlertAt: null } : {}) }
             });
 
+            await syncIndexForReceivableInTx(tx, id);
+
             await recordAudit(tx, {
                 action: 'RECEIVABLE_DUE_DATE_CHANGED',
                 actor,
@@ -281,6 +284,8 @@ export const adjustReceivableInTx = async (tx, id, { dueAt, waive, reason, notes
 
         if (waive) {
             await tx.receivable.update({ where: { id }, data: { status: 'WAIVED', waivedAt: new Date() } });
+
+            await syncIndexForReceivableInTx(tx, id);
 
             await recordAudit(tx, {
                 action: 'RECEIVABLE_WAIVED',

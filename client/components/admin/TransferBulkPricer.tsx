@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, Check, Coins } from "lucide-react";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { describeError } from "@/lib/api/client";
 import { bulkPriceTransferRoutes } from "@/lib/api/transfers";
 import { categoryOptions, tierOptions } from "@/lib/admin/transfers";
@@ -28,9 +29,13 @@ import type { TransferRouteCategory, TransferRouteTier, TransferVehicle } from "
  *     Turning it on is a deliberate second action.
  *   * **It reports what it did.** Written and kept are both shown, so an
  *     operator can tell a no-op from a change.
+ *
+ * A write to the transfer catalogue, so `catalogue.write` on the server; the
+ * whole panel is an action, and a viewer without it is shown nothing here.
  */
 export function TransferBulkPricer({ vehicles }: { vehicles: TransferVehicle[] }) {
   const router = useRouter();
+  const can = useCan();
 
   const [open, setOpen] = useState(false);
   const [tier, setTier] = useState<TransferRouteTier | "">("");
@@ -53,6 +58,8 @@ export function TransferBulkPricer({ vehicles }: { vehicles: TransferVehicle[] }
     );
 
   const ready = Boolean((tier || category) && vehicleIds.length > 0 && amount.trim());
+
+  if (!can("catalogue.write")) return null;
 
   const apply = async () => {
     setSaving(true);

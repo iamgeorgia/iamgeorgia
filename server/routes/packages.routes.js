@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
 import { isTrade, optionalAuthenticate } from '../middleware/auth.js';
+import { actAsPartner } from '../lib/booking/onBehalf.js';
 import { accessWhere } from '../services/partner/access.service.js';
 import {
     packageOfferTokenSchema,
@@ -22,7 +23,7 @@ import { toPackageDetail, toPackageQuote, toPackageSummary } from '../serializer
  */
 export const packageRoutes = Router();
 
-packageRoutes.use(optionalAuthenticate);
+packageRoutes.use(optionalAuthenticate, actAsPartner);
 const PUBLIC_STATUSES = ['ACTIVE'];
 
 packageRoutes.get('/', validate({ query: publicPackageQuerySchema }), async (req, res) => {

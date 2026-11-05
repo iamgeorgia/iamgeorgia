@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { FormError, SubmitButton, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
 import { LocationField } from "@/components/geo/LocationField";
 import { updateHotel } from "@/lib/api/hotels";
@@ -37,6 +39,8 @@ export function HotelLocationEditor({ hotel }: { hotel: Hotel }) {
 
 function Editor({ hotel }: { hotel: Hotel }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [address, setAddress] = useState(hotel.address ?? "");
   const [postalCode, setPostalCode] = useState(hotel.postalCode ?? "");
@@ -75,7 +79,9 @@ function Editor({ hotel }: { hotel: Hotel }) {
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
+    // A disabled fieldset switches off the address boxes and the coordinate
+    // inputs together; the map wrapper below stops the pin being dragged.
+    <fieldset disabled={!canEdit} className="grid min-w-0 gap-6 lg:grid-cols-2">
       <div className="space-y-5">
         <TextInput
           id="hotel-address"
@@ -112,29 +118,39 @@ function Editor({ hotel }: { hotel: Hotel }) {
 
         <FormError message={error} />
 
-        <div className="flex items-center gap-3">
-          <SubmitButton busy={busy} saved={saved} onClick={() => void save()}>
-            {busy ? "Saving…" : saved ? "Saved" : "Save location"}
-          </SubmitButton>
-        </div>
+        {canEdit ? (
+          <div className="flex items-center gap-3">
+            <SubmitButton busy={busy} saved={saved} onClick={() => void save()}>
+              {busy ? "Saving…" : saved ? "Saved" : "Save location"}
+            </SubmitButton>
+          </div>
+        ) : (
+          <ReadOnlyNote needs="catalogue.write" what="Moving the pin or changing the address" />
+        )}
       </div>
 
-      <LocationField
-        label="On the map"
-        ids={{ search: "hotel-place", latitude: "hotel-latitude", longitude: "hotel-longitude" }}
-        value={location}
-        error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
-        hint="Search for the property, then drag the pin to the entrance if the pin is off."
-        onChange={(next, meta) => {
-          setLocation(next);
-          setSaved(false);
-
-          if (meta.source === "search" && next.place) {
-            if (!address.trim() && next.place.formattedAddress) setAddress(next.place.formattedAddress);
-            if (!postalCode.trim() && meta.postalCode) setPostalCode(meta.postalCode);
+      <div className={canEdit ? undefined : "pointer-events-none"} aria-disabled={!canEdit || undefined}>
+        <LocationField
+          label="On the map"
+          ids={{ search: "hotel-place", latitude: "hotel-latitude", longitude: "hotel-longitude" }}
+          value={location}
+          error={fieldErrors.place ?? fieldErrors.latitude ?? fieldErrors.longitude}
+          hint={
+            canEdit
+              ? "Search for the property, then drag the pin to the entrance if the pin is off."
+              : "Where the property is placed."
           }
-        }}
-      />
-    </div>
+          onChange={(next, meta) => {
+            setLocation(next);
+            setSaved(false);
+
+            if (meta.source === "search" && next.place) {
+              if (!address.trim() && next.place.formattedAddress) setAddress(next.place.formattedAddress);
+              if (!postalCode.trim() && meta.postalCode) setPostalCode(meta.postalCode);
+            }
+          }}
+        />
+      </div>
+    </fieldset>
   );
 }

@@ -208,9 +208,21 @@ describe('who reaches what, across the whole API', { skip: dbAvailable ? false :
         }
     });
 
+    /**
+     * The one /admin route that answers without a session. Google sends the
+     * browser here in a cross-site navigation, where the SameSite=Strict
+     * session cookie is withheld; what authorises it instead is the signed
+     * state bound to the administrator who started the flow and the HttpOnly
+     * cookie set beside it (services/mail/googleAccount.service.js). Every
+     * role "reaches" it the way an anonymous caller does — with a refusal
+     * page, not an account.
+     */
+    const SESSIONLESS_ADMIN_ROUTES = new Set(['GET /api/admin/mail/google/callback']);
+
     it('keeps every /admin route closed to drivers and partners', () => {
         for (const [key, byRole] of Object.entries(expected)) {
             if (!key.includes(' /api/admin/')) continue;
+            if (SESSIONLESS_ADMIN_ROUTES.has(key)) continue;
 
             for (const role of ['DRIVER', 'PARTNER_OWNER', 'PARTNER_ADMIN', 'PARTNER_AGENT', 'PARTNER_FINANCE']) {
                 assert.equal(byRole[role], 'FORBIDDEN', `${key} as ${role}`);

@@ -91,6 +91,7 @@ The values that matter most, and why:
 | `CLIENT_ORIGIN` | `http://localhost:3000` | The one origin allowed to make browser calls with a session cookie. Both the CORS allowlist **and** the cross-site write check read this. |
 | `APP_URL` | `http://localhost:3000` | Where the front end lives. Every invitation, activation and password-reset link in an email is built from this. |
 | `MAIL_TRANSPORT` | `log` | `log` prints emails — links included — to the terminal instead of sending them. This is how you get activation links locally. |
+| `GOOGLE_CLIENT_ID` and friends | unset | Only to try the Gmail API transport locally: create a development OAuth client with redirect `http://localhost:5000/api/admin/mail/google/callback`, set the four `GOOGLE_*`/`GMAIL_SENDER_EMAIL` values, and connect from Settings → Email. See docs/DEPLOYMENT.md §3.4c. |
 | `AUTH_TOKEN_PEPPER` | a placeholder | Mixed into every token hash. Fine as-is locally; must be 32 random bytes in production. |
 | `LOG_LEVEL` | `debug` | How chatty the server is. |
 

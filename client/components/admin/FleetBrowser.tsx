@@ -1,5 +1,7 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
+import { MediaImg } from "@/components/ui/MediaImg";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
@@ -64,7 +66,9 @@ export function FleetBrowser({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterDisclosure
+        count={["status"].filter((key) => { const value = searchParams.get(key); return value && value !== "all"; }).length}
+        lead={
         <label className="relative min-w-56 flex-1">
           <Search size={15} className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle" aria-hidden />
           <input
@@ -76,21 +80,24 @@ export function FleetBrowser({
             className="h-10 w-full rounded-sm border border-line bg-surface ps-9 pe-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
           />
         </label>
-
-        <select
-          value={searchParams.get("status") ?? ""}
-          onChange={(event) => setParam("status", event.target.value)}
-          aria-label="Filter by status"
-          className="h-10 rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-body focus:border-ink focus:outline-none"
-        >
-          <option value="">Any status</option>
-          {fleetStatusOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={searchParams.get("status") ?? ""}
+            onChange={(event) => setParam("status", event.target.value)}
+            aria-label="Filter by status"
+            className="h-10 rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-body focus:border-ink focus:outline-none"
+          >
+            <option value="">Any status</option>
+            {fleetStatusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </FilterDisclosure>
 
       <div className="mt-6 rounded-sm border border-line bg-surface">
         <DataTable
@@ -110,12 +117,12 @@ export function FleetBrowser({
               <Row key={vehicle.id}>
                 <Cell>
                   <div className="flex items-center gap-3">
-                    {thumb(vehicle) ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- API-served
-                      <img src={thumb(vehicle)} alt="" className="h-10 w-14 shrink-0 rounded-sm object-cover" />
-                    ) : (
-                      <span className="h-10 w-14 shrink-0 rounded-sm bg-surface-soft" aria-hidden />
-                    )}
+                    <MediaImg
+                      src={thumb(vehicle)}
+                      alt=""
+                      className="h-10 w-14 shrink-0 rounded-sm object-cover"
+                      fallback={<span className="h-10 w-14 shrink-0 rounded-sm bg-surface-soft" aria-hidden />}
+                    />
                     <div className="min-w-0">
                       <Link
                         href={path(`/admin/transfers/fleet/${vehicle.id}`)}

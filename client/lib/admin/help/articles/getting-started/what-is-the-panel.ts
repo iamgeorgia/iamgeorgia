@@ -11,7 +11,6 @@ export const article = {
   summary:
     "The back office for bookings, inventory and partners — where the platform's staff work, as opposed to what travellers and agencies see.",
   category: "getting-started",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["introduction", "overview", "back office", "b2b", "trade", "english"],
   related: ["gs-roles", "gs-sidebar-and-top-bar", "gs-quick-start-admin", "gs-quick-start-dispatcher"],
   blocks: [

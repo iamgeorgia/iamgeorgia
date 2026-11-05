@@ -11,6 +11,7 @@ import { PackageComponentsBuilder } from "@/components/admin/PackageComponentsBu
 import { ApiError } from "@/lib/api/client";
 import { getPackage } from "@/lib/api/packages";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Package parts" };
 
@@ -26,6 +27,7 @@ export const metadata: Metadata = { title: "Package parts" };
 export default async function AdminPackageComponentsPage({
   params,
 }: PageProps<"/[locale]/admin/packages/[slug]/components">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

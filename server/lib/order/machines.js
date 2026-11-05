@@ -18,6 +18,14 @@ export const orderMachine = defineMachine({
     name: 'order',
     terminal: ['CANCELLED', 'COMPLETED'],
     transitions: {
+        // The platform's wait (OD1): one yes for the whole order, after which
+        // the items are what they would have been — confirmed, or asked of
+        // their suppliers. A no cancels the lot at no charge.
+        PENDING_APPROVAL: {
+            PENDING_CONFIRMATION: [OPS, SYSTEM],
+            CONFIRMED: [OPS, SYSTEM],
+            CANCELLED: CANCELLERS
+        },
         PENDING_CONFIRMATION: {
             CONFIRMED: [OPS, SYSTEM],
             PARTIALLY_CANCELLED: CANCELLERS,
@@ -39,6 +47,11 @@ export const orderItemMachine = defineMachine({
     name: 'order item',
     terminal: ['DECLINED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'],
     transitions: {
+        AWAITING_APPROVAL: {
+            REQUESTED: [OPS, SYSTEM],
+            CONFIRMED: [OPS, SYSTEM],
+            CANCELLED: CANCELLERS
+        },
         REQUESTED: {
             CONFIRMED: [OPS, SYSTEM],
             DECLINED: [OPS],
@@ -53,7 +66,7 @@ export const orderItemMachine = defineMachine({
 });
 
 /** The item states that still owe the order something. */
-export const LIVE_ITEM_STATUSES = ['REQUESTED', 'CONFIRMED'];
+export const LIVE_ITEM_STATUSES = ['AWAITING_APPROVAL', 'REQUESTED', 'CONFIRMED'];
 
 /**
  * The order status its items imply.
@@ -64,6 +77,12 @@ export const LIVE_ITEM_STATUSES = ['REQUESTED', 'CONFIRMED'];
  */
 export const impliedOrderStatus = (items) => {
     const statuses = items.map((item) => item.status);
+
+    // The platform's wait comes before the supplier's: an order with any
+    // part still unapproved is unapproved as a whole.
+    if (statuses.some((status) => status === 'AWAITING_APPROVAL')) {
+        return 'PENDING_APPROVAL';
+    }
 
     if (statuses.some((status) => status === 'REQUESTED')) {
         return 'PENDING_CONFIRMATION';

@@ -14,7 +14,6 @@ export const article = {
   title: "Routes register and the bulk pricer",
   summary: "Finding a transfer route, reading its starting fare and status, and repricing a whole tier or category from one rule.",
   category: "transfers-catalogue",
-  roles: ["ADMIN"],
   routes: [{ pattern: "/admin/transfers/routes", section: "register" }],
   keywords: ["transfer routes", "reprice", "bulk", "unpriced", "not priced", "tier", "category", "per kilometre", "flat fare", "overwrite"],
   related: ["tc-route-create", "tc-route-editing", "tc-pricing-model", "tc-points", "rf-dangerous-actions"],

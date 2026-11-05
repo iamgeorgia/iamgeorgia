@@ -50,7 +50,7 @@ export async function SignatureTours() {
           />
         </Reveal>
 
-        <div className="mt-14 grid gap-10 lg:grid-cols-12 lg:gap-8">
+        <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-8">
           <Reveal className="lg:col-span-7">
             <TourCard tour={lead} variant="feature" />
           </Reveal>
@@ -85,7 +85,7 @@ export function SignatureToursFallback() {
         <Skeleton className="mt-5 h-10 w-2/3 max-w-lg" />
         <Skeleton className="mt-4 h-3 w-1/2 max-w-md" />
 
-        <div className="mt-14 grid gap-10 lg:grid-cols-12 lg:gap-8">
+        <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-8">
           <div className="flex flex-col gap-5 lg:col-span-7">
             <Skeleton className="aspect-4/3 w-full lg:aspect-16/10" />
             <Skeleton className="h-3 w-24" />

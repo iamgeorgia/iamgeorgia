@@ -329,7 +329,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
           content, not buried in the sidebar, because on a property page the
           first question is "can I have it on my dates". */}
       <Container className="pt-8">
-        <div id="stay-search" className="scroll-mt-36">
+        <div id="stay-search" className="scroll-mt-14">
           <StaySearchForm value={stay} action={`/hotels/${hotel.slug}`} />
         </div>
       </Container>
@@ -343,9 +343,9 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
           hasAmenities={facilities.length > 0 || languages.length > 0}
         />
 
-        <div className="mt-12 grid gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
+        <div className="mt-12 grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
           <div className="min-w-0 lg:col-span-8">
-            <section id="overview" className="scroll-mt-36">
+            <section id="overview" className="scroll-mt-14">
               <h2 className="type-h2">{t.hotels.about}</h2>
               <p className="type-body-lg mt-5 text-body">{hotel.summary}</p>
               <div className="mt-5 space-y-5">
@@ -372,7 +372,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
              * Facilities heading: they stand as their own block instead.
              */}
             {(facilities.length > 0 || languages.length > 0) && (
-              <section id="amenities" className="mt-16 scroll-mt-36 border-t border-line pt-12">
+              <section id="amenities" className="mt-16 scroll-mt-14 border-t border-line pt-12">
                 {facilities.length > 0 && (
                   <>
                     <h2 className="type-h2">{t.hotels.facilities}</h2>
@@ -406,7 +406,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
              * everyone, because they are what the traveller is deciding on.
              */}
             {api.kosher?.offersKosher && (
-              <section id="kosher" className="mt-16 scroll-mt-36 border-t border-line pt-12">
+              <section id="kosher" className="mt-16 scroll-mt-14 border-t border-line pt-12">
                 <KosherPanel
                   kosher={api.kosher}
                   nearby={api.nearby}
@@ -415,7 +415,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
               </section>
             )}
 
-            <section id="location" className="mt-16 scroll-mt-36 border-t border-line pt-12">
+            <section id="location" className="mt-16 scroll-mt-14 border-t border-line pt-12">
               <h2 className="type-h2">{t.hotels.location}</h2>
               <p className="type-body mt-4 flex items-center gap-2 text-body">
                 <MapPin size={16} className="shrink-0 text-brand-text" aria-hidden />
@@ -449,7 +449,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
             </section>
 
             {/* --- the bookable part ------------------------------------- */}
-            <section id="rooms" className="mt-16 scroll-mt-36 border-t border-line pt-12">
+            <section id="rooms" className="mt-16 scroll-mt-14 border-t border-line pt-12">
               <h2 className="type-h2">{t.booking.availability.heading}</h2>
 
               {stay ? (
@@ -496,7 +496,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
               )}
             </section>
 
-            <section id="reviews" className="mt-16 scroll-mt-36 border-t border-line pt-12">
+            <section id="reviews" className="mt-16 scroll-mt-14 border-t border-line pt-12">
               <h2 className="type-h2">{t.hotels.guestReviews}</h2>
               <div className="mt-8">
                 <HotelReviews
@@ -508,7 +508,7 @@ export default async function HotelDetailPage(props: PageProps<"/[locale]/hotels
               </div>
             </section>
 
-            <section id="policies" className="mt-16 scroll-mt-36 border-t border-line pt-12">
+            <section id="policies" className="mt-16 scroll-mt-14 border-t border-line pt-12">
               <h2 className="type-h2">{t.hotels.policies}</h2>
               <div className="mt-8">
                 <HotelPolicies policies={hotel.policies} />

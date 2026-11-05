@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { ImageOff, Search, Star } from "lucide-react";
@@ -16,6 +17,7 @@ import {
 } from "@/lib/admin/tours";
 import { formatMoney } from "@/lib/money";
 import { useLocalePath } from "@/lib/i18n/provider";
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import { cn } from "@/lib/utils";
 import type { TourSummary } from "@/types/tour";
 
@@ -83,19 +85,25 @@ export function ToursBrowser({
   const thumb = (tour: TourSummary) => {
     const url = tourCardImage(tour);
 
-    return url ? (
-      // eslint-disable-next-line @next/next/no-img-element -- editorial or API-served
-      <img src={url} alt="" className="size-10 shrink-0 rounded-sm object-cover" />
-    ) : (
-      <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-surface-soft text-subtle">
-        <ImageOff size={15} aria-hidden />
-      </span>
+    return (
+      <MediaImg
+        src={url}
+        alt=""
+        className="size-10 shrink-0 rounded-sm object-cover"
+        fallback={
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-surface-soft text-subtle">
+            <ImageOff size={15} aria-hidden />
+          </span>
+        }
+      />
     );
   };
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterDisclosure
+        count={["status", "category"].filter((key) => { const value = params.get(key); return value && value !== "all"; }).length}
+        lead={
         <div className="relative min-w-[16rem] flex-1">
           <Search
             size={15}
@@ -111,35 +119,38 @@ export function ToursBrowser({
             className={cn(field, "w-full ps-9")}
           />
         </div>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={params.get("status") ?? "all"}
+            onChange={(event) => apply({ status: event.target.value })}
+            aria-label="Filter by status"
+            className={field}
+          >
+            <option value="all">All statuses</option>
+            {TOUR_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {tourStatusLabels[value]}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={params.get("status") ?? "all"}
-          onChange={(event) => apply({ status: event.target.value })}
-          aria-label="Filter by status"
-          className={field}
-        >
-          <option value="all">All statuses</option>
-          {TOUR_STATUSES.map((value) => (
-            <option key={value} value={value}>
-              {tourStatusLabels[value]}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={params.get("category") ?? "all"}
-          onChange={(event) => apply({ category: event.target.value })}
-          aria-label="Filter by category"
-          className={field}
-        >
-          <option value="all">All categories</option>
-          {TOUR_CATEGORIES.map((value) => (
-            <option key={value} value={value}>
-              {categoryLabel(value)}
-            </option>
-          ))}
-        </select>
-      </div>
+          <select
+            value={params.get("category") ?? "all"}
+            onChange={(event) => apply({ category: event.target.value })}
+            aria-label="Filter by category"
+            className={field}
+          >
+            <option value="all">All categories</option>
+            {TOUR_CATEGORIES.map((value) => (
+              <option key={value} value={value}>
+                {categoryLabel(value)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </FilterDisclosure>
 
       <p className="mt-3 text-[0.8125rem] text-muted" aria-live="polite">
         {total === 0 ? "No tours match these filters." : `${total} tour${total === 1 ? "" : "s"}`}

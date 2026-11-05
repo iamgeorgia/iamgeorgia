@@ -359,6 +359,42 @@ describe('finance reminders', { skip: dbAvailable ? false : 'Postgres is not rea
         );
     });
 
+    it('sends a guest a receipt for their own booking, without a statement to open', async () => {
+        const { receivable } = await booked();
+        await prisma.receivable.update({
+            where: { id: receivable.id },
+            data: { debtorPartnerId: null, debtorEmail: 'guest@example.test', debtorName: 'A Guest' }
+        });
+
+        clearOutbox();
+        const res = await request(app)
+            .post('/api/admin/finance/payments')
+            .set('Cookie', cookies.ACCOUNTANT)
+            .set('Idempotency-Key', unique('pay'))
+            .send({
+                direction: 'IN',
+                method: 'CASH',
+                currency: 'GEL',
+                amountCents: 20_000,
+                paidAt: new Date().toISOString(),
+                allocations: [{ receivableId: receivable.id, amountCents: 20_000 }]
+            });
+        assert.equal(res.status, 201, JSON.stringify(res.body));
+
+        const [event] = await eventsFor('finance.payment.recorded', 'paymentId', res.body.payment.id);
+        const copy = await manualCopy(event);
+        assert.equal(await processEvent(copy), true);
+
+        assert.equal((await noticesFrom(copy.id, agencyOwner.id)).length, 0, 'not the agency\'s money');
+
+        const receipts = mailsTo('guest@example.test', 'paymentReceipt');
+        assert.equal(receipts.length, 1);
+        assert.equal(receipts[0].data.partnerName, 'A Guest');
+        assert.equal(receipts[0].data.amountCents, 20_000);
+        assert.equal(receipts[0].data.url, null);
+        assert.deepEqual(receipts[0].data.allocations, [{ reference: receivable.reference, amountCents: 20_000 }]);
+    });
+
     it('is safe to run from two places at once', async () => {
         const { instalment } = await dueIn(2 * DAY);
 

@@ -18,7 +18,6 @@ export const article = {
   title: "Invoices: proformas, VAT invoices and corrections",
   summary: "What is issued when, the invoice list and its filters, PDFs, sending, cancelling, retrying, and what partners see.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/invoices", "/admin/finance/invoices/[id]", "/admin/finance/invoices/sync-events"],
   keywords: [
     "invoice",

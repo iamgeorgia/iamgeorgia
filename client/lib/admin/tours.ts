@@ -1,3 +1,4 @@
+import { bookingFiltersFromParams } from "./bookingFilters";
 import type { AdminTourQuery } from "@/lib/api/tours";
 import type {
   ConfirmationMode,
@@ -69,6 +70,7 @@ export const unavailableReasonLabels: Record<TourUnavailableReason, string> = {
  * has yet to answer, with seats already claimed.
  */
 export const tourBookingStatusLabels: Record<TourBookingStatus, string> = {
+  PENDING_APPROVAL: "Awaiting approval",
   PENDING: "Awaiting confirmation",
   CONFIRMED: "Confirmed",
   CANCELLED: "Cancelled",
@@ -77,6 +79,7 @@ export const tourBookingStatusLabels: Record<TourBookingStatus, string> = {
 };
 
 export const TOUR_BOOKING_STATUSES: TourBookingStatus[] = [
+  "PENDING_APPROVAL",
   "PENDING",
   "CONFIRMED",
   "CANCELLED",
@@ -135,20 +138,13 @@ export function tourQueryFromParams(
 export function tourBookingQueryFromParams(
   params: Record<string, string | string[] | undefined>,
 ): TourBookingQuery {
-  const requested = params.status;
-  const asArray = Array.isArray(requested) ? requested : requested ? [requested] : [];
-  const valid = asArray.filter((value): value is TourBookingStatus =>
-    TOUR_BOOKING_STATUSES.includes(value as TourBookingStatus),
-  );
-  const page = Number.parseInt(read(params, "page") ?? "", 10);
+  // The shared keys are read the same way on every register.
+  const { status, ...shared } = bookingFiltersFromParams(params, { statuses: TOUR_BOOKING_STATUSES });
 
   return {
-    status: valid.length > 0 ? valid : undefined,
-    search: read(params, "search") || undefined,
-    from: read(params, "from") || undefined,
-    to: read(params, "to") || undefined,
+    ...shared,
+    status: status as TourBookingStatus[] | undefined,
     tourId: read(params, "tourId") || undefined,
-    page: Number.isFinite(page) && page > 0 ? page : 1,
     pageSize: 25,
   };
 }

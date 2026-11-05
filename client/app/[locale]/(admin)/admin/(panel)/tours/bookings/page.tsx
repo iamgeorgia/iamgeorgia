@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import { CalendarCheck, Clock, Compass } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
+import { CreateBookingButton } from "@/components/admin/CreateBookingButton";
 import { StatCard } from "@/components/admin/StatCard";
 import { TourBookingsBrowser } from "@/components/admin/TourBookingsBrowser";
 import { listAdminTourBookings } from "@/lib/api/tours";
+import { todayISO } from "@/lib/admin/dates";
 import { tourBookingQueryFromParams } from "@/lib/admin/tours";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Tour bookings" };
 
@@ -17,6 +20,7 @@ export const metadata: Metadata = { title: "Tour bookings" };
  * claimed already, and every hour it waits is capacity nobody else can buy.
  */
 export default async function AdminTourBookingsPage({ searchParams }: PageProps<"/[locale]/admin/tours/bookings">) {
+  await requireScreen();
   const query = tourBookingQueryFromParams(await searchParams);
 
   const [list, pending, confirmed] = await Promise.all([
@@ -30,6 +34,7 @@ export default async function AdminTourBookingsPage({ searchParams }: PageProps<
       <AdminPageHeader
         title="Tour bookings"
         description="Every departure sold, and the requests still waiting for an answer."
+        actions={<CreateBookingButton />}
       />
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -39,7 +44,7 @@ export default async function AdminTourBookingsPage({ searchParams }: PageProps<
       </div>
 
       <div className="mt-8">
-        <TourBookingsBrowser {...list} basePath="/admin/tours/bookings" />
+        <TourBookingsBrowser {...list} basePath="/admin/tours/bookings" today={todayISO()} showPartner showManager />
       </div>
     </AdminContainer>
   );

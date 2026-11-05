@@ -24,7 +24,7 @@ import { deleteFinanceForBookings } from './lib/finance-cleanup.js';
 import { quotesForJourney } from '../services/transfer/quote.service.js';
 import { confirmTransferBooking } from '../services/transfer/booking.service.js';
 
-const DEMO_SOURCE = 'demo';
+const DEMO_SOURCE = 'DEMO';
 const DEMO_EMAIL_DOMAIN = '@demo.iamgeorgia.test';
 
 /**

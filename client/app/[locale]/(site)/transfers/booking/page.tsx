@@ -142,7 +142,7 @@ export default async function TransferBookingPage(
         />
       </details>
 
-      <div className="mt-10 grid gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
+      <div className="mt-10 grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-12 xl:gap-16">
         <div className="min-w-0 lg:col-span-7">
           <TransferBookingForm
             offer={offer}

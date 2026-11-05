@@ -13,7 +13,6 @@ export const article = {
   title: "Payables: what we owe suppliers",
   summary: "Every supplier payable, its instalments, paying one, and setting an amount by hand.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/payables", "/admin/finance/payables/[id]"],
   keywords: [
     "supplier",

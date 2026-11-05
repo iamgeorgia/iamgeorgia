@@ -246,6 +246,32 @@ export const orderCheckoutDraftServerSnapshot = orderStore.serverSnapshot;
 export const subscribeOrderCheckoutDraft = orderStore.subscribe;
 
 /**
+ * The cart twin: the holds taken when the checkout opened.
+ *
+ * Kept in `sessionStorage` so a refresh resumes the same holds rather than
+ * taking a second set — with one room left, the second hold would fail
+ * against the first, which is still live for fifteen minutes. `itemIds`
+ * says which cart the holds belong to: a cart edited since (an item removed
+ * after a 409) no longer matches, and the checkout holds afresh.
+ */
+export interface CartCheckoutDraft {
+  itemIds: string[];
+  holds: Record<string, string | Record<string, string>>;
+  holdExpiresAt: string | null;
+  idempotencyKey: string;
+}
+
+const cartStore = createDraftStore<CartCheckoutDraft>("iag:checkout:cart");
+
+export type CartCheckoutDraftState = DraftState<CartCheckoutDraft>;
+
+export const saveCartCheckoutDraft = cartStore.save;
+export const clearCartCheckoutDraft = cartStore.clear;
+export const cartCheckoutDraftSnapshot = cartStore.snapshot;
+export const cartCheckoutDraftServerSnapshot = cartStore.serverSnapshot;
+export const subscribeCartCheckoutDraft = cartStore.subscribe;
+
+/**
  * An idempotency key for one confirmation attempt.
  *
  * `randomUUID` needs a secure context; a plain http:// origin on a LAN address

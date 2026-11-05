@@ -23,6 +23,8 @@ export const HELP_ROUTE_EXEMPTIONS: readonly string[] = [
   "/admin/help",
   "/admin/help/[category]",
   "/admin/help/[category]/[article]",
+  // Where a refused screen lands; it explains itself.
+  "/admin/denied",
 ];
 
 const segmentsOf = (path: string): string[] => path.split("/").filter(Boolean);

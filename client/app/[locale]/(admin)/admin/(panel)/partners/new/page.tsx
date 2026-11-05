@@ -7,10 +7,12 @@ import {
 } from "@/components/admin/AdminPage";
 import { PartnerRegistrationForm } from "@/components/admin/PartnerRegistrationForm";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Register a partner" };
 
 export default async function AdminPartnerRegistrationPage() {
+  await requireScreen();
   const { path } = await getI18n();
 
   return (

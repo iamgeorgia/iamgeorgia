@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import Link from "next/link";
 import { MapPin } from "lucide-react";
 
@@ -24,7 +24,7 @@ export function HotelCard({ hotel, className, eager }: HotelCardProps) {
         className="flex h-full flex-col focus-visible:outline-offset-8"
       >
         <div className="relative aspect-4/3 overflow-hidden rounded-sm bg-line">
-          <Image
+          <SafeImage
             src={hotel.image}
             alt={hotel.name}
             fill

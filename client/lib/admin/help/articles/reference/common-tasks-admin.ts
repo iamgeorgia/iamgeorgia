@@ -15,7 +15,6 @@ export const article = {
   title: "Common tasks for administrators",
   summary: "Step-by-step recipes for the jobs an administrator does most — from putting a hotel on sale to onboarding a transport supplier.",
   category: "reference",
-  roles: ["ADMIN"],
   keywords: ["how to", "recipe", "task", "cookbook", "steps", "publish", "cancel", "reprice", "onboard", "approve", "translate"],
   related: ["gs-quick-start-admin", "rf-common-tasks-dispatcher", "rf-dangerous-actions", "rf-troubleshooting"],
   blocks: [

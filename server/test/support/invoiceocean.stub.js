@@ -38,7 +38,10 @@ export const startInvoiceOceanStub = async ({ apiToken = 'stub-token' } = {}) =>
 
     const numberFor = (kind, id) => `${{ proforma: 'PRO', vat: 'FV', correction: 'KOR', advance: 'ADV', final: 'FIN' }[kind] ?? 'DOC'}/${id}/${new Date().getFullYear()}`;
 
-    const gross = (positions) => positions.reduce((sum, p) => sum + Number(p.total_price_gross ?? 0) * Number(p.quantity ?? 1), 0);
+    // `total_price_gross` is the position's total, not its unit price (the
+    // adapter sends it that way, as the provider documents it): multiplying by
+    // `quantity` doubled every two-night stay.
+    const gross = (positions) => positions.reduce((sum, p) => sum + Number(p.total_price_gross ?? 0), 0);
     const major = (n) => (Math.round(n * 100) / 100).toFixed(2);
 
     const readBody = (req) =>

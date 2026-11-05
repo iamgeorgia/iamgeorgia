@@ -19,7 +19,6 @@ export const article = {
   title: "A partner: review, invitations, history, delete",
   summary: "Reading a partner's page, approving, rejecting, suspending and reinstating, reissuing the invitation, and the one hard delete.",
   category: "partners",
-  roles: ["ADMIN"],
   routes: ["/admin/partners/[id]"],
   keywords: ["approve", "reject", "suspend", "reinstate", "invitation", "resend", "copy link", "history", "audit", "completeness", "bank details", "people", "delete partner"],
   related: ["pt-lifecycle", "pt-applications", "pt-registering", "pt-register", "gs-accounts", "rf-dangerous-actions"],

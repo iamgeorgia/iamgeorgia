@@ -107,13 +107,25 @@ describe('approval requests', { skip: dbAvailable ? false : 'Postgres is not rea
     const delivered = async (topic, approvalId) => {
         await drainOutbox({ limit: 100 });
 
-        const deadline = Date.now() + 15_000;
+        const started = Date.now();
 
         for (;;) {
-            const pending = await prisma.outboxEvent.count({ where: { topic, processedAt: null, payload: { path: ['approvalId'], equals: approvalId } } });
+            const event = await prisma.outboxEvent.findFirst({ where: { topic, processedAt: null, payload: { path: ['approvalId'], equals: approvalId } } });
 
-            if (pending === 0) return;
-            if (Date.now() > deadline) throw new Error(`outbox event ${topic} for ${approvalId} was not processed in time`);
+            if (!event) return;
+
+            // Whichever drain claims the event handles it, working through a
+            // batch of every file's events in order: another file's (the event
+            // then sits under its lease, a future `nextAttemptAt` with no
+            // error) or this one's. Under the full parallel run that took
+            // longer than the fifteen seconds once allowed here, and failed
+            // the test with nothing wrong; two minutes is the bound now, and
+            // the message says which of the two it was waiting on.
+            const leasedElsewhere = event.nextAttemptAt > new Date() && !event.lastError;
+
+            if (Date.now() - started > 120_000) {
+                throw new Error(`outbox event ${topic} for ${approvalId} was not processed in time (attempts ${event.attempts}, ${leasedElsewhere ? 'leased by another drain' : `due${event.lastError ? `, last error: ${event.lastError}` : ''}`})`);
+            }
 
             await new Promise((resolve) => setTimeout(resolve, 100));
             await drainOutbox({ limit: 100 });

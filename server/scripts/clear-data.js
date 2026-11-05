@@ -46,7 +46,7 @@ import {
  */
 
 const DEMO_EMAIL_DOMAIN = '@demo.iamgeorgia.test';
-const DEMO_SOURCE = 'demo';
+const DEMO_SOURCE = 'DEMO';
 const HOUSE_PROVIDER = 'iamgeorgia-fleet';
 /** `normalisePlate('DM-')` in services/transfer/fleet.service.js. */
 const DEMO_PLATE_PREFIX = 'DM';

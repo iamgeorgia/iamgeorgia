@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 
-import type { HelpRole } from "@/lib/admin/help/types";
 import { HelpSearch } from "./HelpSearch";
 
 /**
@@ -11,11 +10,12 @@ import { HelpSearch } from "./HelpSearch";
  * list on screen — the same behaviour as typing into a register's filter.
  */
 export function HelpHub({
-  role,
+  capabilities,
   categoryTitles,
   children,
 }: {
-  role: HelpRole;
+  /** What the reader holds; the search indexes only the articles these open. */
+  capabilities: readonly string[];
   categoryTitles: Record<string, string>;
   children: React.ReactNode;
 }) {
@@ -23,7 +23,7 @@ export function HelpHub({
 
   return (
     <div>
-      <HelpSearch role={role} categoryTitles={categoryTitles} onActiveChange={setSearching} />
+      <HelpSearch capabilities={capabilities} categoryTitles={categoryTitles} onActiveChange={setSearching} />
       <div hidden={searching}>{children}</div>
     </div>
   );

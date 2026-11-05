@@ -7,6 +7,7 @@ import {
   Flag,
   MapPin,
   Navigation,
+  ShieldQuestion,
   UserPlus,
   Users,
   type LucideIcon,
@@ -85,6 +86,7 @@ export function TransferLegStatusBadge({
 }
 
 const bookingTones: Record<TransferBookingStatus, { tone: Tone; icon: LucideIcon }> = {
+  PENDING_APPROVAL: { tone: "attention", icon: ShieldQuestion },
   PENDING: { tone: "attention", icon: Clock },
   CONFIRMED: { tone: "positive", icon: CheckCircle2 },
   COMPLETED: { tone: "neutral", icon: Circle },

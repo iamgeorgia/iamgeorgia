@@ -13,9 +13,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 
+import { AddToCartButton } from "@/components/booking/AddToCartButton";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { createTourHold } from "@/lib/api/tours";
+import type { CartItem } from "@/lib/booking/cart";
 import { bookingErrorKey } from "@/lib/booking/errors";
 import { newIdempotencyKey, saveTourCheckoutDraft } from "@/lib/booking/checkoutSession";
 import { formatInstant, formatNightDate, formatStayDate } from "@/lib/booking/stay";
@@ -23,7 +25,7 @@ import { fill } from "@/lib/i18n/fill";
 import { plural } from "@/lib/i18n/plural";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
-import type { TourStay } from "@/lib/tours/query";
+import { tourStayQueryString, type TourStay } from "@/lib/tours/query";
 import type {
   TourAvailability,
   TourOfferAvailable,
@@ -110,6 +112,25 @@ export function TourDepartures({ tour, stay, availability }: TourDeparturesProps
       router.refresh();
     }
   };
+
+  /**
+   * What the cart keeps for this departure: the signed offer and a snapshot
+   * of what was seen. No hold is taken — the cart holds at checkout.
+   */
+  const cartItemFor = (
+    option: TourOption,
+    offer: TourOfferAvailable,
+  ): Omit<CartItem, "id" | "addedAt"> => ({
+    payload: { type: "TOUR", offerToken: offer.token },
+    display: {
+      title: tour.title,
+      detail: option.name,
+      dates: { from: offer.date, to: offer.endDate !== offer.date ? offer.endDate : null },
+      priceCents: offer.quote.totals.totalCents,
+      currency: offer.quote.currency,
+      href: `/tours/${tour.slug}${tourStayQueryString(stay)}`,
+    },
+  });
 
   const party = [
     plural(locale, stay.adults, t.units.adult),
@@ -206,6 +227,7 @@ export function TourDepartures({ tour, stay, availability }: TourDeparturesProps
                           )
                         }
                         onReserve={() => reserve(option, offer)}
+                        cartItem={() => cartItemFor(option, offer)}
                       />
                     ) : (
                       <UnavailableRow offer={offer} />
@@ -237,6 +259,7 @@ interface AvailableRowProps {
   breakdownOpen: boolean;
   onToggleBreakdown: () => void;
   onReserve: () => void;
+  cartItem: () => Omit<CartItem, "id" | "addedAt">;
 }
 
 /** One departure that can be sold: the date, what it costs, and Reserve. */
@@ -250,6 +273,7 @@ function AvailableRow({
   breakdownOpen,
   onToggleBreakdown,
   onReserve,
+  cartItem,
 }: AvailableRowProps) {
   const { t, locale, intlLocale } = useI18n();
   const { quote } = offer;
@@ -355,9 +379,12 @@ function AvailableRow({
           </p>
         </div>
 
-        <Button fullWidth onClick={onReserve} disabled={busy}>
-          {pending ? t.tours.availability.holding : t.tours.availability.reserve}
-        </Button>
+        <div className="flex flex-col gap-2">
+          <Button fullWidth onClick={onReserve} disabled={busy}>
+            {pending ? t.tours.availability.holding : t.tours.availability.reserve}
+          </Button>
+          <AddToCartButton item={cartItem} fullWidth disabled={busy} />
+        </div>
       </div>
     </div>
   );

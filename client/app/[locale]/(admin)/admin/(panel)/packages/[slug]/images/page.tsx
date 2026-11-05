@@ -11,6 +11,7 @@ import { PackageGalleryManager } from "@/components/admin/PackageGalleryManager"
 import { ApiError } from "@/lib/api/client";
 import { getPackage } from "@/lib/api/packages";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Package images" };
 
@@ -24,6 +25,7 @@ export const metadata: Metadata = { title: "Package images" };
 export default async function AdminPackageImagesPage({
   params,
 }: PageProps<"/[locale]/admin/packages/[slug]/images">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

@@ -13,7 +13,6 @@ export const article = {
   title: "Hotel bookings register",
   summary: "Every hotel reservation on the platform, newest first — the tiles, the filters, and what the register can and cannot tell you.",
   category: "bookings",
-  roles: ["ADMIN"],
   routes: ["/admin/bookings"],
   keywords: ["hotel", "reservation", "stay", "BKG", "guest", "search", "filter", "arriving", "pending", "value on this page"],
   related: ["bk-hotel-booking-detail", "bk-statuses-glossary", "rf-search-filters", "gs-overview"],

@@ -6,7 +6,9 @@ import { useState } from "react";
 import { Loader2, Plus, X } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { CheckboxField, NumberInput, SelectInput, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   archiveTourOption,
   createTourOption,
@@ -65,6 +67,8 @@ export function TourOptionsManager({
   policies: CancellationPolicy[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write", "tours.write");
   const [error, setError] = useState<string | null>(null);
 
   const useAction = () => {
@@ -99,10 +103,24 @@ export function TourOptionsManager({
       )}
 
       {live.map((option) => (
-        <OptionCard key={option.id} tour={tour} option={option} policies={policies} useAction={useAction} />
+        <OptionCard
+          key={option.id}
+          tour={tour}
+          option={option}
+          policies={policies}
+          useAction={useAction}
+          canEdit={canEdit}
+        />
       ))}
 
-      <OptionForm tour={tour} policies={policies} useAction={useAction} />
+      {canEdit ? (
+        <OptionForm tour={tour} policies={policies} useAction={useAction} />
+      ) : (
+        <ReadOnlyNote
+          needs={["catalogue.write", "tours.write"]}
+          what="Editing options and price sheets"
+        />
+      )}
     </div>
   );
 }
@@ -114,11 +132,14 @@ function OptionCard({
   option,
   policies,
   useAction,
+  canEdit,
 }: {
   tour: Tour;
   option: TourOption;
   policies: CancellationPolicy[];
   useAction: ActionHook;
+  /** Whether the viewer may change options and price sheets; a reader keeps the Departures link only. */
+  canEdit: boolean;
 }) {
   const localePath = useLocalePath();
   const { busy, run } = useAction();
@@ -139,25 +160,29 @@ function OptionCard({
           >
             Departures
           </Link>
-          <button
-            type="button"
-            onClick={() => setEditing((open) => !open)}
-            className="text-[0.8125rem] font-medium text-ink hover:underline"
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              if (window.confirm(`Archive ${option.name}? Its bookings stay readable.`)) {
-                void run(() => archiveTourOption(tour.id, option.id));
-              }
-            }}
-            className="text-[0.8125rem] font-medium text-error-text hover:underline"
-          >
-            Archive
-          </button>
+          {canEdit && (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing((open) => !open)}
+                className="text-[0.8125rem] font-medium text-ink hover:underline"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`Archive ${option.name}? Its bookings stay readable.`)) {
+                    void run(() => archiveTourOption(tour.id, option.id));
+                  }
+                }}
+                className="text-[0.8125rem] font-medium text-error-text hover:underline"
+              >
+                Archive
+              </button>
+            </>
+          )}
         </div>
       }
       bodyClassName="p-0"
@@ -192,28 +217,30 @@ function OptionCard({
                   {season.priority > 0 && ` · priority ${season.priority}`} · {season.currency}
                 </p>
               </div>
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditingSeason(editingSeason?.id === season.id ? null : season)}
-                  className="text-[0.8125rem] font-medium text-ink hover:underline"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (window.confirm(`Delete the "${season.name}" price sheet?`)) {
-                      void run(() => deleteTourSeason(tour.id, option.id, season.id));
-                    }
-                  }}
-                  aria-label={`Delete ${season.name}`}
-                  className="text-subtle hover:text-error-text"
-                >
-                  <X size={15} aria-hidden />
-                </button>
-              </div>
+              {canEdit && (
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSeason(editingSeason?.id === season.id ? null : season)}
+                    className="text-[0.8125rem] font-medium text-ink hover:underline"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (window.confirm(`Delete the "${season.name}" price sheet?`)) {
+                        void run(() => deleteTourSeason(tour.id, option.id, season.id));
+                      }
+                    }}
+                    aria-label={`Delete ${season.name}`}
+                    className="text-subtle hover:text-error-text"
+                  >
+                    <X size={15} aria-hidden />
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Scrolls inside the panel on a narrow screen rather than widening the page. */}
@@ -274,18 +301,20 @@ function OptionCard({
         ))}
       </ul>
 
-      <div className="flex flex-wrap gap-2 border-t border-line px-5 py-3">
-        <button
-          type="button"
-          onClick={() => setAddingSeason((open) => !open)}
-          className={cn(button, "border border-ink/20 text-ink hover:border-ink hover:bg-surface-soft")}
-        >
-          <Plus size={14} aria-hidden />
-          Price sheet
-        </button>
-      </div>
+      {canEdit && (
+        <div className="flex flex-wrap gap-2 border-t border-line px-5 py-3">
+          <button
+            type="button"
+            onClick={() => setAddingSeason((open) => !open)}
+            className={cn(button, "border border-ink/20 text-ink hover:border-ink hover:bg-surface-soft")}
+          >
+            <Plus size={14} aria-hidden />
+            Price sheet
+          </button>
+        </div>
+      )}
 
-      {addingSeason && (
+      {canEdit && addingSeason && (
         <SeasonForm tour={tour} option={option} useAction={useAction} onDone={() => setAddingSeason(false)} />
       )}
     </AdminPanel>

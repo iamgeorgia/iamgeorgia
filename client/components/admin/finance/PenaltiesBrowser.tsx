@@ -146,7 +146,7 @@ export function PenaltiesBrowser({
       <Link
         href={path(href)}
         prefetch={false}
-        className="font-mono text-[0.8125rem] font-medium text-ink underline-offset-4 hover:underline"
+        className="font-mono text-[0.8125rem] font-medium whitespace-nowrap text-ink underline-offset-4 hover:underline"
       >
         {penalty.reference}
       </Link>

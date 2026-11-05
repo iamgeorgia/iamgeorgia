@@ -293,6 +293,19 @@ export const forgotPasswordLimiter = rateLimit({
     handler: handler('Too many attempts. Try again later.')
 });
 
+/**
+ * Connecting, disconnecting and test-sending the Gmail account, per
+ * administrator. A test send is a real email, and a connect is a round trip to
+ * Google; neither is something a person does more than a few times in a row.
+ */
+export const mailProviderLimiter = rateLimit({
+    ...base,
+    store: store('mail-provider'),
+    limit: config.mail.gmail.adminActionLimit,
+    keyGenerator: (req) => req.user?.id ?? ipKeyGenerator(req.ip),
+    handler: handler('Too many email settings actions. Try again later.')
+});
+
 /** Claiming an invitation. Low, because a legitimate invitee does it once. */
 export const registrationLimiter = rateLimit({
     ...base,

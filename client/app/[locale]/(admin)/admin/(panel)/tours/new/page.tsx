@@ -5,6 +5,7 @@ import { NewTourForm } from "@/components/admin/NewTourForm";
 import { getDestinationTree } from "@/lib/api/hotels";
 import { listPartners } from "@/lib/api/partners";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add tour" };
 
@@ -14,6 +15,7 @@ export const metadata: Metadata = { title: "Add tour" };
  * publish checklist walks the operator through the rest.
  */
 export default async function NewTourPage() {
+  await requireScreen();
   const { path } = await getI18n();
 
   const [tree, suppliers] = await Promise.all([

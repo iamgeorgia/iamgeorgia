@@ -16,7 +16,6 @@ export const article = {
   title: "Receivables: what buyers owe us",
   summary: "What each agency and guest owes, moving a due date, refunds and write-offs.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/receivables", "/admin/finance/receivables/[id]"],
   keywords: [
     "receivable",

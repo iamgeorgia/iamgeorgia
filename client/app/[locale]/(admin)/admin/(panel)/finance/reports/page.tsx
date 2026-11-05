@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { ReportAgeing, ReportMargin, ReportSummary } from "@/components/admin/finance/ReportTables";
@@ -7,9 +6,7 @@ import { ReportCommission } from "@/components/admin/finance/CommissionTables";
 import { ReportsView, type ReportKind } from "@/components/admin/finance/ReportsView";
 import { getAgeingReport, getFinanceSummary, getMarginReport, reportCsvUrl } from "@/lib/api/finance";
 import { commissionCsvUrl, getCommissionReport } from "@/lib/api/finance-controls";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 import type { AgeingReport, MarginReport } from "@/types/finance";
 
@@ -80,11 +77,8 @@ function reportQueryFromParams(params: Params) {
 export default async function AdminFinanceReportsPage({
   searchParams,
 }: PageProps<"/[locale]/admin/finance/reports">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.reports.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const query = reportQueryFromParams(await searchParams);
   const canReadCommission = can(session, "finance.commission.read");

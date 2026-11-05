@@ -18,6 +18,7 @@
  * compute fares from coordinates; it now asks and is told. A price the browser
  * computes is a price the browser can change.
  */
+import type { BookingApproval, BookingDesk, BookingPayment, BookingSource } from "./booking";
 import type { PlaceRef, PlacedLocation } from "./geo";
 
 export type TransferPointKind = "AIRPORT" | "CITY" | "RESORT" | "HOTEL" | "LANDMARK" | "STATION";
@@ -46,6 +47,7 @@ export type TransferLegDirection = "OUTBOUND" | "RETURN";
 export type TransferExtraBasis = "FIXED" | "PER_PASSENGER" | "PER_HOUR" | "PERCENT";
 
 export type TransferBookingStatus =
+  | "PENDING_APPROVAL"
   | "PENDING"
   | "CONFIRMED"
   | "CANCELLED"
@@ -301,6 +303,8 @@ export interface TransferBookingLeg {
   durationMinutes: number;
   sellCents: number;
   netCents?: number;
+  /** The flight this leg meets or catches; null when none was given. */
+  flightNumber?: string | null;
   status: TransferLegStatus;
   /**
    * Who is coming. Operations get the full assignment; a partner or a
@@ -363,12 +367,17 @@ export interface TransferBookingSummary {
   createdAt: string;
   /** One per leg, in leg order. */
   legStatuses: TransferLegStatus[];
+  /** The platform's yes: null on a booking that never needed one. */
+  approval: BookingApproval | null;
+  payment: BookingPayment;
 
   // staff only
   netTotalCents?: number;
   markupBps?: number;
   marginCents?: number;
   partner?: { id: string; reference: string; name: string } | null;
+  /** staff with `partners.read` only: the buyer and the desk's own fields. */
+  desk?: BookingDesk;
 }
 
 export interface TransferCancellationQuote {
@@ -408,6 +417,7 @@ export interface TransferBooking extends TransferBookingSummary {
   legs: TransferBookingLeg[];
   extras: TransferQuoteExtraLine[];
   confirmedAt: string | null;
+  source?: BookingSource;
 }
 
 /**
@@ -425,6 +435,8 @@ export interface ConfirmTransferInput {
     phone?: string;
   };
   flightNumber?: string;
+  /** The flight per leg; `flightNumber` alone is the outbound's. */
+  flights?: { outbound?: string | null; return?: string | null };
   pickupAddress?: string;
   dropoffAddress?: string;
   pickupPlace?: PlacedLocation;

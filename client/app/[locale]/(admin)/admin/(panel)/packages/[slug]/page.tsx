@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import {
@@ -33,6 +34,7 @@ import {
 import { formatBps, formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
 import type { PackageComponent } from "@/types/package";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Package" };
 
@@ -86,6 +88,7 @@ const adjustmentSummary = (pkg: {
 export default async function AdminPackagePage({
   params,
 }: PageProps<"/[locale]/admin/packages/[slug]">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 
@@ -169,7 +172,7 @@ export default async function AdminPackagePage({
         }
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 flex flex-col gap-6 lg:col-span-2">
           <nav aria-label="Package sections" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {subScreens.map((screen) => (
@@ -281,10 +284,7 @@ export default async function AdminPackagePage({
         </div>
 
         <div className="flex flex-col gap-6">
-          {cover && (
-            // eslint-disable-next-line @next/next/no-img-element -- editorial or API-served
-            <img src={cover} alt={pkg.name} className="aspect-4/3 w-full rounded-sm object-cover" />
-          )}
+          {cover && <MediaImg src={cover} alt={pkg.name} className="aspect-4/3 w-full rounded-sm object-cover" />}
 
           <AdminPanel
             title="Publishing"

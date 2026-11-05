@@ -1,16 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ChevronRight, Plus } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader, AdminPanel } from "@/components/admin/AdminPage";
 import { Cell, DataTable, EmptyRow, Row, type Column } from "@/components/admin/DataTable";
 import { Badge } from "@/components/ui/Badge";
 import { listRoles } from "@/lib/api/roles";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import type { Role } from "@/types/rbac";
 
 export const metadata: Metadata = { title: "Roles" };
@@ -29,11 +26,8 @@ const COLUMNS: Column[] = [
  * home rather than shown a screen of refusals.
  */
 export default async function AdminRolesPage() {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "roles.manage")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { path } = await getI18n();
   const [platform, partner] = await Promise.all([listRoles("PLATFORM"), listRoles("PARTNER")]);

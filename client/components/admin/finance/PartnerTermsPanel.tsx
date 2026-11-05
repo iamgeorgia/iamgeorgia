@@ -4,11 +4,11 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AdminDefinitionList, AdminPanel } from "@/components/admin/AdminPage";
-import { FormError, SubmitButton, TextArea, labelClass } from "@/components/admin/FormControls";
+import { FormError, SelectInput, SubmitButton, TextArea, labelClass } from "@/components/admin/FormControls";
 import { ApiError, describeError } from "@/lib/api/client";
 import { savePartnerTerms } from "@/lib/api/finance";
 import { cn } from "@/lib/utils";
-import type { PartnerTerms, ReceivableDueAnchor } from "@/types/finance";
+import type { PartnerBookingApproval, PartnerTerms, ReceivableDueAnchor } from "@/types/finance";
 
 /**
  * How long a partner has to pay us (owner decision D5): a number of days,
@@ -26,6 +26,16 @@ const anchorLabels: Record<ReceivableDueAnchor, string> = {
   ARRIVAL: "arrival",
 };
 
+const approvalLabels: Record<PartnerBookingApproval, string> = {
+  REQUIRED: "Waits for our approval",
+  AUTO: "Confirms at once",
+};
+
+const approvalHints: Record<PartnerBookingApproval, string> = {
+  REQUIRED: "Each booking sits in the approval queue until an operator says yes. The default.",
+  AUTO: "Bookings confirm the moment they are made and never appear in the approval queue.",
+};
+
 const control =
   "h-10 rounded-sm border bg-surface px-3 text-[0.875rem] text-ink transition-colors focus:border-ink focus:outline-none disabled:opacity-60";
 
@@ -34,6 +44,7 @@ export function PartnerTermsPanel({ terms, canEdit }: { terms: PartnerTerms; can
   const [days, setDays] = useState(String(terms.paymentDueDays));
   const [anchor, setAnchor] = useState<ReceivableDueAnchor>(terms.paymentDueAnchor);
   const [note, setNote] = useState(terms.paymentTermsNote ?? "");
+  const [approval, setApproval] = useState<PartnerBookingApproval>(terms.bookingApproval ?? "REQUIRED");
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,6 +73,7 @@ export function PartnerTermsPanel({ terms, canEdit }: { terms: PartnerTerms; can
         paymentDueDays: Number(value),
         paymentDueAnchor: anchor,
         paymentTermsNote: note.trim() || null,
+        bookingApproval: approval,
       });
       setSaved(true);
       router.refresh();
@@ -123,6 +135,19 @@ export function PartnerTermsPanel({ terms, canEdit }: { terms: PartnerTerms; can
             <p className="mt-1.5 text-[0.75rem] leading-relaxed text-subtle">{explanation}</p>
           </fieldset>
 
+          <SelectInput
+            label="Booking approval"
+            value={approval}
+            onChange={(event) => {
+              setApproval(event.target.value as PartnerBookingApproval);
+              touched();
+            }}
+            disabled={busy}
+            error={fieldErrors.bookingApproval}
+            hint={approvalHints[approval]}
+            options={(["REQUIRED", "AUTO"] as const).map((value) => ({ value, label: approvalLabels[value] }))}
+          />
+
           <TextArea
             label="Note"
             value={note}
@@ -153,6 +178,7 @@ export function PartnerTermsPanel({ terms, canEdit }: { terms: PartnerTerms; can
                 label: "Days to pay",
                 value: `${terms.paymentDueDays} ${terms.paymentDueDays === 1 ? "day" : "days"} from ${anchorLabels[terms.paymentDueAnchor]}`,
               },
+              { label: "Booking approval", value: approvalLabels[terms.bookingApproval ?? "REQUIRED"] },
               { label: "Note", value: terms.paymentTermsNote ?? "—" },
             ]}
           />

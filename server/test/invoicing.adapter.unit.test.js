@@ -68,7 +68,7 @@ describe('invoiceocean adapter: pure parts', () => {
             buyer_street: '12 Rustaveli Ave',
             buyer_city: 'Tbilisi',
             buyer_country: 'GE',
-            positions: [{ name: 'Transfer Tbilisi Airport → Tbilisi, TRF-000123', quantity: 1, tax: '18', total_price_gross: '480.00' }]
+            positions: [{ name: 'Transfer Tbilisi Airport → Tbilisi, TRF-000123', description: '', quantity: 1, tax: '18', total_price_gross: '480.00' }]
         });
     });
 
@@ -202,6 +202,7 @@ describe('invoiceocean adapter: over HTTP', () => {
 
         await adapter.sendByEmail(created.externalId, { to: 'x@y.z' });
         assert.equal(stub.requests.at(-1).body.email_to, 'x@y.z');
+        assert.equal(stub.requests.at(-1).body.email_pdf, true, 'the PDF rides along, not only a link');
 
         // Cancelling is an update of the `cancelled` flag, not a change_status call (which refuses it).
         const cancelled = await adapter.changeStatus(created.externalId, 'cancelled');

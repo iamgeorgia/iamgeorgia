@@ -1,4 +1,5 @@
 import { apiFetch, cachedFor, serverFetch, type RequestOptions } from "./client";
+import { actAsInit, type ActAsOptions } from "./manualBookings";
 import { toQueryString, type QueryValue } from "./query";
 import type { HotelAvailability, Offer, SearchResponse, StayQuery } from "@/types/booking";
 import type {
@@ -47,6 +48,24 @@ export const searchHotels = (query: SearchQuery) =>
 
 export const getHotelAvailability = (slug: string, query: StayQuery & { locale?: string }) =>
   serverFetch<HotelAvailability>(`/api/search/hotels/${slug}${toQueryString(query)}`);
+
+/**
+ * The same two searches from the browser, for the desk. `asPartnerId` prices
+ * the offers for that partner (`X-Act-As-Partner`); without it the viewer
+ * searches as themselves.
+ */
+export const searchHotelsClient = (query: SearchQuery, options: ActAsOptions = {}) =>
+  apiFetch<SearchResponse>(`/api/search${toQueryString(query)}`, actAsInit(options));
+
+export const getHotelAvailabilityClient = (
+  slug: string,
+  query: StayQuery & { locale?: string },
+  options: ActAsOptions = {},
+) => apiFetch<HotelAvailability>(`/api/search/hotels/${slug}${toQueryString(query)}`, actAsInit(options));
+
+/** The public catalogue from the browser: what this buyer may book, by name. */
+export const listPublicHotelsClient = (query: Record<string, QueryValue> = {}, options: ActAsOptions = {}) =>
+  apiFetch<Paginated<HotelSummary>>(`/api/hotels${toQueryString(query)}`, actAsInit(options));
 
 /**
  * Re-prices an offer before checkout.

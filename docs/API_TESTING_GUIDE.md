@@ -2104,3 +2104,521 @@ Include all of these; without them a report usually cannot be acted on.
 - Any partner reading another partner's data
 - A `500` on any request — those are always bugs
 - A `CONTRACT` or `INVOICE` media record coming back with a plain `url`
+
+## Part 13 — Booking approval
+
+Owner decision OD1 (2026-10-20): a booking made without an online payment —
+which, there being no card step, is every booking — waits for an operator's
+**yes** before it is confirmed. It is written `PENDING_APPROVAL` with its
+inventory claimed (rooms, seats), owes nothing, and nobody outside the
+platform is told of it. Full contract in `server/API.md` → "Booking
+approval". Postman folder *06r · Admin · Booking approvals*.
+
+**The switch.** `BOOKING_APPROVAL_ENABLED=true` on the server. Off, every
+booking confirms at once as before and `approval` is `null` on it. A partner
+whose `bookingApproval` an admin has set to `AUTO` (`PATCH
+/api/admin/finance/partners/:id/terms`) keeps instant confirmation; everyone
+else, guests included, is `REQUIRED` — the demo agency is.
+
+**Who:** the queue and the two decisions need `bookings.approve` —
+`SUPER_ADMIN`, `ADMIN`, `TOUR_OPERATOR`. `MANAGEMENT`, `ACCOUNTANT`,
+`FINANCE_OPERATOR`, `DISPATCHER` and every partner role get `403`.
+
+### 13.1 What waiting looks like
+
+Book anything as the demo agency owner with the flag on and read the body:
+
+```jsonc
+"status": "PENDING_APPROVAL",
+"approval": { "state": "PENDING", "requestedAt": "…", "deadlineAt": "…", "overdue": false,
+              "approvedAt": null, "approvedBy": null, "rejectedAt": null, "rejectedBy": null, "reason": null },
+"payment":  { "status": "NONE", "via": "BOOKING", "receivableId": null, "dueAt": null,
+              "amountCents": …, "paidCents": 0, "outstandingCents": … }
+```
+
+| Product | While it waits | Check |
+| --- | --- | --- |
+| Hotel | rooms claimed; no payable, no receivable; the property not told | `GET /api/admin/finance/receivables?q=BKG-…` is empty; the room's availability for those dates is one less |
+| Transfer | legs exist but are **off the dispatch board** | `GET /api/admin/transfers/dispatch/board?from=…` does not list the leg |
+| Tour / service `ON_REQUEST` | seats claimed, operator **not yet asked** | `requestDeadlineAt` is `null` |
+| Order | `PENDING_APPROVAL`, every item `AWAITING_APPROVAL`, every child `PENDING_APPROVAL` | the children read `PENDING_APPROVAL` on their own registers |
+
+`cancellation-quote` on a waiting booking answers `chargeCents: 0`, and
+cancelling it through the ordinary route leaves `approval.state:
+"WITHDRAWN"`. `deadlineAt` is `BOOKING_APPROVAL_SLA_HOURS` (24) after the
+request; past it the row reads `overdue: true` and operations are told once
+(`BOOKING_APPROVAL_OVERDUE`) — nothing is rejected at the deadline. A booking
+still waiting when its service date has passed is rejected by the sweeper as
+the system (`BOOKING_APPROVAL_EXPIRED` in the audit log).
+
+### 13.2 The queue and the decisions
+
+```
+GET  /api/admin/booking-approvals?product=HOTEL&partnerId=…&overdue=true&search=BKG-…&page&pageSize
+POST /api/admin/booking-approvals/HOTEL/BKG-000123/approve   { "note": "…" }        (note optional)
+POST /api/admin/booking-approvals/TRANSFER/TRF-000045/reject { "reason": "…" }      (reason required)
+```
+
+`product` is `HOTEL | TRANSFER | TOUR | SERVICE | ORDER` — told in the path,
+never guessed from the prefix. Rows are earliest deadline first and leave
+out the children of an order, which is decided as one.
+
+| Request | Expected |
+| --- | --- |
+| `GET /api/admin/booking-approvals` as the admin | `200`; every row `status: PENDING_APPROVAL`, `deadlineAt` ascending |
+| `?product=BOAT` | `400` |
+| `?overdue=true` | `200`; every row `overdue: true` |
+| `POST …/HOTEL/<ref>/approve` on a waiting hotel | `200` — the hotel detail plus `product: "HOTEL"`: `status: CONFIRMED`, `approval.state: APPROVED` with `approvedBy` (the operator's name, snapshotted), `payment.status` leaves `NONE` and `payment.receivableId` is set — the payable and the receivable open **here**, and the proforma issues from the receivable; the property is told; the guest gets `hotelBookingConfirmed` |
+| …again | `409 NOT_PENDING_APPROVAL` |
+| `POST …/TRANSFER/<ref>/reject` without a body | `400` |
+| …with `{ reason }` | `200`; `status: CANCELLED`, `cancellation.chargeCents: 0`, `approval.state: REJECTED` carrying the reason and `rejectedBy`; the buyer gets `bookingRejected` with the reason; the driver never heard of it |
+| `POST …/HOTEL/BKG-000000/reject` | `404` |
+| `POST …/<product>/<child of an order>/approve` | `409 PART_OF_ORDER` — decide the order |
+| Approve a partner over its credit limit | `422 CREDIT_LIMIT_EXCEEDED`; it keeps waiting. The limit is checked at the yes because nothing counted against it while the booking waited |
+| Two operators approving at once | one `200`, the other `409 STATUS_CHANGED` |
+| Approve an order | one yes for the whole order: items become `CONFIRMED` or `REQUESTED`, the order `CONFIRMED` / `PENDING_CONFIRMATION`, the receivable opens |
+| Reject an order | the order and every child `CANCELLED` at no charge; one `bookingRejected`, no `orderCancelled` |
+| Approve a waiting `ON_REQUEST` tour | `PENDING` with `requestedAt` / `requestDeadlineAt` set **now**; the operator is asked only then; the existing confirm / decline follows |
+| `confirmNow: true` on a manual booking (Part 15) | confirmed at once, no queue — `bookings.approve` |
+
+**Who is told.** On arrival: holders of `bookings.approve` in-app
+(`BOOKING_AWAITING_APPROVAL`, minus whoever booked — so a booking that waits
+is *not* also announced as `BOOKING_NEW`), the buyer by
+`bookingAwaitingApproval`, the desk mailbox by `bookingApprovalQueue`. On a
+yes: the partner's `partner.bookings.read` holders (`BOOKING_APPROVED`), then
+the confirmation the buyer would have had. The badge is
+`pendingBookingApprovals` on `GET /api/admin/badges` (null for a role that
+cannot approve). Every product register takes `approval=PENDING|OVERDUE`.
+
+**`source`** on every booking is now read off the session — `PARTNER`,
+`ADMIN` or `WEB` — and the `source` a client sends is ignored. Send
+`"source": "admin"` from an anonymous session and expect `WEB` back.
+
+## Part 14 — Notifications: tabs and filters
+
+Every panel's bell (`/api/admin/notifications`, `/api/partner/notifications`,
+`/api/driver/notifications`) reads the same `Notification` rows, always scoped
+to the session. New since Part 8: the **tabs**. Full contract in
+`server/API.md` → "Ratings and notifications". Postman folder *06s · Admin ·
+Notifications — tabs & filters* (the basic reads and marks stay in *06p*).
+
+```
+GET  …/notifications?category=APPROVAL&kind=BOOKING_APPROVED&kind=BOOKING_REJECTED&unread=true&sort=unreadFirst&page&pageSize
+GET  …/notifications/unread-count          → { unreadCount, byCategory: { BOOKING, DISPATCH, FINANCE, APPROVAL, DEADLINE, SYSTEM } }
+POST …/notifications/read-all  { "category": "APPROVAL" }   → { count }   (no body: everything)
+```
+
+Categories are the tabs, derived from the kind when the row is written:
+`BOOKING` (new and amended bookings, overdue supplier requests), `DISPATCH`
+(every `TRANSFER_*` kind), `FINANCE` (payments, invoices, credit warnings),
+`APPROVAL` (finance approvals and booking approvals), `DEADLINE` (payable and
+receivable due and overdue, the deadline reminders of Part 17), `SYSTEM`.
+
+| Request | Expected |
+| --- | --- |
+| `GET …?category=APPROVAL` | `200`; every row `category: APPROVAL`; the envelope carries `unreadCount` **and** `unreadByCategory` |
+| `?kind=BOOKING_AWAITING_APPROVAL&kind=BOOKING_APPROVED` | `200`; only those kinds. An unknown kind spelt correctly matches nothing — not an error |
+| `?kind=booking-new` | `400` — kinds are upper case and underscores |
+| `?category=GOSSIP`, `?sort=loudest` | `400` |
+| `?unread=true` | every `readAt` null |
+| `?sort=unreadFirst` | every unread row before the first read one |
+| `?sort=oldest` | `createdAt` ascending |
+| `POST …/read-all { "category": "APPROVAL" }` | `200 { count }`; `GET …/unread-count` now has `byCategory.APPROVAL: 0` and the other tabs unchanged |
+| `POST …/read-all { "category": "GOSSIP" }` | `400` |
+
+**`href`.** Every row carries the path the notice leads to in the panel it
+was read from — decided by the server, never by the client — and `null` when
+it is only news. Read the same booking notice as the admin and as the partner
+and expect `/admin/bookings/BKG-…` from one bell and `/portal/bookings/BKG-…`
+from the other. A row whose `href` points at a thing the viewer cannot open
+is a bug.
+
+**Once per fact.** A notice written with a `dedupeKey` is unique per
+recipient: retry a handler, run two sweepers, and the second copy is dropped
+by the index. Approve a booking twice (the second is `409`) and expect
+exactly one `BOOKING_APPROVED` per partner user.
+
+## Part 15 — Manual bookings: the desk
+
+A booking made at the desk — by phone, by email, through another agency, or
+face to face — for a partner or for a customer with no account. The same
+products, the same confirmation bodies, the same ledger, the same approval
+step: the booking is made **as the buyer**, so a partner's own prices,
+product access, commission and credit limit apply, and `bookedBy` stays the
+member of staff. Full contract in `server/API.md` → "Manual bookings — the
+desk". Postman folder *06t · Admin · Manual bookings — the desk*.
+
+**Who:** `bookings.write` to create (`SUPER_ADMIN`, `ADMIN`,
+`TOUR_OPERATOR`); `bookings.price.override` to change the price
+(`SUPER_ADMIN`, `ADMIN` — a `TOUR_OPERATOR` sending `priceAdjustment` gets
+`403` with `details.fields: ["priceAdjustment"]`); `bookings.approve` to
+confirm at once. Customers are read with `bookings.read` and written with
+`bookings.write`. Every partner role gets `403` on all of it.
+
+### 15.1 Customers
+
+```
+GET   /api/admin/customers?q=&kind=INDIVIDUAL|COMPANY&page&pageSize
+POST  /api/admin/customers   { "kind": "COMPANY", "name": "…", "contactName": "…", "email": "…", "phone": "…",
+                               "billingAddress": "…", "city": "…", "country": "GE", "taxId": "…", "notes": "…" }   → 201
+GET   /api/admin/customers/:id          → the customer plus `bookings` across every product
+PATCH /api/admin/customers/:id          → 200; an empty body is 400
+```
+
+`name` is the person, or the legal name when `kind` is `COMPANY`. A customer
+who owes money is the receivable's `debtorCustomerId` (`debtor.customer` on
+the finance serializers) and gets its own client record at the invoicing
+provider, filed under `customer:<id>`.
+
+> **Known defect (2026-10-20).** `PATCH /api/admin/customers/:id` with `{}`
+> answers `200` instead of `400`, and **resets `kind` to `INDIVIDUAL`**: the
+> field's default survives `partial()`, so the empty body parses as
+> `{ kind: "INDIVIDUAL" }` and passes the "Nothing to change" check. The
+> Postman request *Customers — nothing to change (400)* fails until this is
+> fixed, and the one after it puts the kind back.
+
+### 15.2 Searching as the buyer
+
+An offer token is priced for the viewer it was issued to, so a booking for a
+partner is searched **as that partner**: send `X-Act-As-Partner: <partnerId>`
+on `/api/search/*`, `/api/transfers/quotes`, `/api/tours/*` and
+`/api/packages/*` and the desk is that partner for the request.
+
+| Request | Expected |
+| --- | --- |
+| `GET /api/search?…` as the admin with the header naming the demo agency | `200`; the agency's own prices (compare `totalCents` with the same search anonymously) |
+| …naming a partner that does not exist | `404` |
+| …naming the suspended demo agency | `422 PARTNER_INACTIVE` |
+| …from a partner session, or from `FINANCE_OPERATOR` (no `bookings.write`) | `403 ACT_AS_FORBIDDEN` |
+| …without the header | the member of staff's own view: trade inventory at the default markup — what a customer with no account is booked at, which is the desk's prerogative and audited with the booking |
+
+Note that the net side (`netCents`, `markupBps`, `marginCents`) stays visible
+while acting as a partner: the viewer is still staff. It must never reach the
+partner's own session.
+
+### 15.3 The booking
+
+```
+POST /api/admin/bookings/manual · /api/admin/transfers/bookings/manual · /api/admin/tours/bookings/manual
+     /api/admin/services/bookings/manual · /api/admin/orders/manual · /api/admin/orders/custom/manual
+{
+  "buyer":   { "kind": "PARTNER", "partnerId": "…" }
+           | { "kind": "CUSTOMER", "customerId": "…" }
+           | { "kind": "CUSTOMER", "customer": { "kind": "INDIVIDUAL", "name": "…", "email": "…" } },
+  "channel": "PHONE" | "EMAIL" | "EXTERNAL_AGENCY" | "DIRECT",
+  "confirmNow": true,                                            // optional — bookings.approve
+  "priceAdjustment": { "cents": -500, "reason": "…" },           // optional — bookings.price.override
+  "assignedManagerUserId": "…", "internalNotes": "…",            // optional
+  "booking": { …the product's ordinary confirmation body… }      // offer or hold token, lead guest, …
+}
+Idempotency-Key: …                                               → 201 the product's detail; 200 on replay
+```
+
+| Request | Expected |
+| --- | --- |
+| Hotel for the partner, `channel: PHONE`, no `confirmNow`, with the flag on | `201 PENDING_APPROVAL`; `source: PHONE`; `partner.id` is the agency; `totalCents` is what the agency was quoted; `desk: { source, customer: null, assignedManager, internalNotes, priceAdjustment: null }` |
+| The same again, same key | `200`, same reference |
+| `buyer.partnerId` = the suspended agency | `422 PARTNER_INACTIVE`, before anything is priced or held |
+| `buyer` with both `customerId` and `customer` | `400` |
+| `channel: "CARRIER_PIGEON"` | `400` |
+| `priceAdjustment: { cents: 0 }` | `400` — a signed figure, never 0, always with a reason |
+| Transfer for a customer, `channel: EMAIL`, `confirmNow: true`, `priceAdjustment: -500` | `201 CONFIRMED` even with approval on; `payment.receivableId` set (the receivable opened here, owed by the customer); `totalCents` = the quoted fare − 500; `desk.priceAdjustment: { cents: -500, reason }`; audit `BOOKING_PRICE_ADJUSTED` with both figures. **Known gap (2026-10-20):** the transfer detail and the transfer register rows carry no top-level `source` (`API.md` says every booking does; hotels, tours, services, orders and the cross-product index do) — read it off `desk.source` for now |
+| `buyer: { kind: CUSTOMER, customer: { … } }` with a booking that is then refused (sold out, price moved) | the `409`, **and** the customer exists in `GET /api/admin/customers` — created first, outside the booking's transaction, to try again with |
+| Tour for the partner, `channel: EXTERNAL_AGENCY` | `201`; an `ON_REQUEST` option waits for approval first and is only then put to the operator |
+| Service for the customer, `channel: DIRECT` | `201`, `source: DIRECT` |
+| Package order for the partner (`booking` = the `POST /api/orders` body) | `201 ORD-…`; one yes approves the whole order |
+| The cart at the desk: `POST /api/admin/orders/custom/manual` with `booking` = the `POST /api/orders/custom` body and `priceAdjustment: -1000` | `201`; `kind: CUSTOM`; the adjustment is spread over the standalone items (`adjustmentSource: MANUAL`, `adjustmentCents` summing to −1000) and audited once on the order. An order's `desk` block has **no** `priceAdjustment` key — the adjustment lives on the items (`API.md` lists the key for orders too; the serializer leaves it out on purpose). Works whether or not `CART_ENABLED` is on |
+| As `TOUR_OPERATOR` with `priceAdjustment` | `403`, `details.reason: CAPABILITY_REQUIRED`, `details.fields: ["priceAdjustment"]` |
+| As `TOUR_OPERATOR` with `confirmNow` | allowed — it holds `bookings.approve` |
+| `GET /api/partner/bookings/all?search=<the phone booking>` as the agency | `200`; `source: PHONE` visible, no `desk` block, no `internalNotes` anywhere in the body |
+
+**Price (OD3).** `priceAdjustment` is a signed figure *on top of* the
+catalogue price, never a replacement of it: the row keeps `sellTotalCents`,
+rooms and nights still add up, the cancellation schedule still reads the
+catalogue sell, and the buyer's `totalCents`, the receivable and a
+cancellation refund are the catalogue price plus the adjustment. Cancel an
+adjusted booking inside its free window and expect the refund to include
+the adjustment.
+
+### 15.4 The desk block, after the fact
+
+```
+PATCH /api/admin/bookings/:reference/desk            { "assignedManagerUserId": "…" | null, "internalNotes": "…" | null }
+PATCH /api/admin/transfers/bookings/:reference/desk · /api/admin/tours/bookings/… · /api/admin/services/bookings/… · /api/admin/orders/…
+```
+
+| Request | Expected |
+| --- | --- |
+| `{ internalNotes, assignedManagerUserId: null }` | `200`; `desk.internalNotes` changed, `desk.assignedManager: null`; audit `BOOKING_NOTES_CHANGED` / `BOOKING_MANAGER_ASSIGNED` |
+| `assignedManagerUserId` = a partner user, a deactivated user, or nonsense | `422 NOT_STAFF` |
+| `{}` | `400` |
+| Unknown reference | `404` |
+
+Staff who may see the buyer (`partners.read`) get `desk` on every booking
+and order; a partner or a guest never does. `GET /api/admin/customers/:id`
+lists what was booked for the customer across every product, and the
+register (Part 16) finds it by `customerId`, `managerId` and `source[]`.
+
+## Part 16 — The register of every booking, and the shared filters
+
+One list across hotels, transfers, tours, services and orders, read from the
+**booking index** (`booking_index`): a projection the services keep in step
+in the same transaction as every status, money and desk change, rebuilt by a
+daily reconcile and by `node scripts/backfill-booking-index.js`. Full
+contract in `server/API.md` → "The register of every booking". Postman folder
+*06u · Admin · Booking register & filters*.
+
+```
+GET /api/admin/bookings/all     (bookings.read)
+GET /api/partner/bookings/all   (the partner's own; an approved company)
+    ?product[]&status[]&paymentStatus[]&invoiceStatus[]&partnerId&customerId&managerId&destinationId
+    &source[]&approval=PENDING|OVERDUE&from&to&createdFrom&createdTo&search&sort&children&page&pageSize
+```
+
+Rows: `{ product, id, reference, status, kind, title, leadName, leadEmail,
+partnerId, customerId, assignedManagerUserId, order, destinationId,
+startDate, endDate, startAt, currency, totalCents, payment: { status,
+receivableId, dueAt, paidCents }, approval, source, href, createdAt,
+confirmedAt, cancelledAt }`. Children of an order are folded under their
+order (`order: null` on every row) unless `children=true`, when a child row
+carries `order: { reference }`.
+
+| Request | Expected |
+| --- | --- |
+| `GET /api/admin/bookings/all` | `200`; newest first; every row `order: null` |
+| `?search=BKG-000123` | finds it — one trigram-indexed match over reference, names, email, title, partner and customer. A booking made a moment ago is already there: the index is written in the booking's own transaction |
+| `?product=HOTEL&product=TRANSFER&status=CONFIRMED&status=PENDING_APPROVAL` | only those products in those statuses |
+| `?paymentStatus=UNPAID&paymentStatus=OVERDUE` | every `payment.status` one of the two — read through the booking's receivable, or its order's |
+| `?paymentStatus=NONE` | bookings with no receivable of their own and none on their order: waiting for approval, or on request |
+| `?source=PHONE&source=EMAIL&source=EXTERNAL_AGENCY&source=DIRECT` | the desk's bookings |
+| `?createdFrom=<today>&createdTo=<today>` | made today (calendar days, inclusive) |
+| `?partnerId=` / `?customerId=` / `?managerId=` | every row that partner's / customer's / assigned to that manager |
+| `?approval=PENDING` | every row `PENDING_APPROVAL` with `approval.state: PENDING` |
+| `?sort=total:desc` · `date:asc` · `due:asc` · `created:asc` | ordered so; `due:asc` puts rows without a receivable last |
+| `?status=BOGUS`, `?sort=sideways`, `?createdFrom=20-10-2026`, `?colour=red` | `400` — the schema is strict |
+| `GET /api/partner/bookings/all` as the agency owner | `200`; every row `partnerId` = the session's. **Known defect (2026-10-20):** `href` is the admin path (`/admin/bookings/BKG-…`) on the partner route too — `API.md` says it leads into the portal; the deadline rows (Part 17) get it right |
+| `GET /api/partner/bookings/all?partnerId=<another partner>` | `200` and **still only its own rows** — the scope comes from the session, never the query |
+| `GET /api/admin/bookings/all` as a partner | `403` |
+
+**The same filters on every product register.** `GET /api/admin/bookings`,
+`/api/admin/transfers/bookings`, `/api/admin/tours/bookings`,
+`/api/admin/services/bookings`, `/api/admin/orders` and the partner lists all
+take, beside their own fields, `paymentStatus[]` (`NONE UNPAID PARTIAL
+OVERDUE PAID WAIVED VOID`), `invoiceStatus[]` (`DRAFT ISSUED SENT PAID
+PARTIAL CANCELLED ERROR`), `paymentMethod` (`BANK_TRANSFER CASH CARD OTHER` —
+bookings settled by a payment of that method), `createdFrom` / `createdTo`,
+`customerId`, `managerId`, `destinationId`, `source[]`, `approval` and `sort`
+(`created:desc|asc`, `date:asc|desc`, `due:asc|desc`, `total:desc|asc`; each
+list keeps its own default). The transfer register now also takes
+`partnerId`. `GET /api/admin/bookings?paymentStatus=LATE` is `400`.
+
+**Worth attacking:** cancel a booking, record a payment, assign a manager —
+and read the row back from `/all` at once. A row that lags the product
+register, or a child that appears beside its order without `children=true`,
+is a bug in the projection.
+
+## Part 17 — Deadlines and reminders
+
+Three deadlines per booking, projected into `booking_deadlines` beside the
+booking index and rebuilt with it: **PAYMENT** (the receivable's `dueAt`),
+**FREE_CANCELLATION** (the last free moment of the frozen cancellation
+schedule; the earliest room's, for a hotel) and **CONFIRMATION** (the
+platform's approval deadline — `meta.awaiting: "PLATFORM"` — or the
+supplier's answer deadline — `"SUPPLIER"`). Status `OPEN | MET | MISSED |
+CANCELLED`; `source` `SYSTEM | MANUAL`. Full contract in `server/API.md` →
+"Deadlines and reminders". Postman folder *06v · Admin · Deadlines &
+reminders*.
+
+**Who:** the calendar is read with `bookings.read` or
+`finance.receivables.read` (the latter sees PAYMENT rows only). Moving one
+is decided by its kind — see 17.2. The schedule is read with either and
+written with `settings.reminders.write` (`SUPER_ADMIN`, `ADMIN`). A partner
+reads its own under `/api/partner/deadlines`.
+
+### 17.1 The calendar
+
+```
+GET /api/admin/deadlines?kind[]&status[]&product[]&partnerId&managerId&customerId&from&to&sort=soonest|latest&page&pageSize
+GET /api/admin/deadlines/:id          → with history: [{ fromAt, toAt, source, reason, changedBy, at }]
+GET /api/partner/deadlines            → the partner's own, same query and shape, href into the portal
+```
+
+Rows: `{ id, kind, status, source, product, bookingId, reference, title,
+leadName, partnerId, customerId, assignedManagerUserId, receivableId, dueAt,
+timezone, overdue, daysLeft, meta, completedAt, href }`. `from` / `to` are
+instants (`2026-11-01T00:00:00.000Z`), not calendar days; `daysLeft` counts
+calendar days in the deadline's own timezone.
+
+| Do this | Expect |
+| --- | --- |
+| Confirm a hotel booking for the agency | a PAYMENT row (the receivable's `dueAt`) and a FREE_CANCELLATION row (the earliest room's last free moment) |
+| Book with approval on | a CONFIRMATION row, `meta.awaiting: PLATFORM`; approve it → `MET`, and the PAYMENT and FREE_CANCELLATION rows appear |
+| Book an `ON_REQUEST` tour (approved, or with the flag off) | a CONFIRMATION row, `meta.awaiting: SUPPLIER` |
+| Book a package | PAYMENT on the order only — a child of an order carries no PAYMENT row and no approval row of its own while the order waits as one |
+| Pay the receivable in full | the PAYMENT row `MET` |
+| Cancel the booking | every open row `CANCELLED` |
+| `?kind=BEDTIME` | `400` |
+| `?sort=latest` | `dueAt` descending |
+| `GET /api/partner/deadlines` as the agency | only its own, `href` into `/portal/…`; `GET /api/admin/deadlines` as a partner is `403` |
+
+### 17.2 Moving one — the truth moves first
+
+```
+PATCH /api/admin/deadlines/:id   { "dueAt": "2026-12-01T10:00:00.000Z", "reason": "…" }
+```
+
+| Kind | What moves | Who |
+| --- | --- | --- |
+| PAYMENT | the receivable's `dueAt` — through Finance | `finance.adjustments.execute`, which **no seeded role holds** (it is withheld even from the super admin), so the answer is `403 APPROVAL_REQUIRED` with `details.kind: RECEIVABLE_DUE_DATE` and the `receivableId` to open an approval request on (Part 8b) |
+| FREE_CANCELLATION | the frozen schedule's free window on every live room, so what cancelling costs follows the date | `bookings.deadlines.write` (`SUPER_ADMIN`, `ADMIN`, `TOUR_OPERATOR`) |
+| CONFIRMATION | the approval or request stamp the sweepers read | `bookings.deadlines.write` |
+
+| Request | Expected |
+| --- | --- |
+| Move an open FREE_CANCELLATION row a day earlier | `200`; `source: MANUAL`, `dueAt` as sent, one more `history` entry carrying the reason; audit `BOOKING_DEADLINE_CHANGED`; `GET /api/bookings/<ref>/cancellation-quote` after the new moment charges what the schedule says it charges after the free window |
+| Without `reason` | `400` |
+| A PAYMENT row, as anyone seeded | `403 APPROVAL_REQUIRED` (above) |
+| A row that is `MET`, `MISSED` or `CANCELLED` | `409 DEADLINE_CLOSED` |
+| Unknown id | `404` |
+| A FREE_CANCELLATION row as `ACCOUNTANT` | `403 CAPABILITY_REQUIRED` naming `bookings.deadlines.write` |
+
+### 17.3 The reminder schedule
+
+```
+GET /api/admin/settings/reminder-policies?partnerId=…
+PUT /api/admin/settings/reminder-policies
+    { "kind": "PAYMENT", "partnerId": "…", "offsetsDays": [7, 3, 1, 0], "channels": ["IN_APP", "EMAIL"],
+      "recipients": ["STAFF", "PARTNER", "GUEST"], "enabled": true, "remove": false }
+```
+
+One platform row per kind (`scope: "PLATFORM"`: `rp_platform_payment`,
+`rp_platform_cancellation`, `rp_platform_confirmation`) and partner
+overrides; `?partnerId=` lists both. A partner's own row is used instead of
+the platform's for its bookings.
+
+| Request | Expected |
+| --- | --- |
+| `GET` as the admin | three `PLATFORM` rows, one per kind |
+| `PUT` with `partnerId` = the agency, `offsetsDays: [5, 1]`, `recipients: ["PARTNER"]` | `200`; a `PARTNER` row; audit `REMINDER_POLICY_UPDATED` |
+| `PUT` with `offsetsDays: [400]` | `400` — 0–365 days, 1–10 of them |
+| `PUT { kind: PAYMENT, remove: true }` (the platform row) | `422 PLATFORM_POLICY` — switched off with `enabled: false`, never removed |
+| `PUT { kind, partnerId, remove: true }` | `200 { removed: true }`; the partner falls back to the platform row |
+| `PUT` as `TOUR_OPERATOR` or any partner | `403` |
+
+**Reminders.** `sweepDeadlineReminders` (`DEADLINE_SWEEP_INTERVAL_MS`, behind
+`DEADLINE_REMINDERS_ENABLED`) claims each (deadline, offset) once per the
+policy that applies, counting calendar days in the deadline's own timezone,
+collapses several offsets claimed together to the smallest, and writes one
+`booking.deadline.upcoming` event. The handler re-reads the row and says
+nothing once it is met or closed; otherwise STAFF are told in-app
+(`finance.receivables.read` holders for money, `bookings.write` holders for
+the rest), the partner's `partner.bookings.read` holders in-app and its
+contact by `deadlineReminder` email, a guest or desk customer by email — each
+per the policy's channels and recipients, deduped per recipient
+(`deadline:<id>:<offset>`). Rows past their moment are marked `MISSED` by
+the same sweep. Kinds `DEADLINE_PAYMENT_UPCOMING`,
+`DEADLINE_CANCELLATION_UPCOMING`, `DEADLINE_CONFIRMATION_UPCOMING`, category
+`DEADLINE`. To see one: set a partner override with `offsetsDays: [120]`,
+confirm a booking for that partner 120 days out, start the API with
+`DEADLINE_REMINDERS_ENABLED=true`, and read the partner's bell.
+
+## Part 18 — Invoice lines
+
+Owner decision OD4: a document is built one line per hotel room and one per
+transfer leg, each with a one-line `description` and a structured `detail`
+the provider prints under the line. Full contract in `server/API.md` →
+"Finance" → "Invoices" → "Lines". Postman folder *06w · Admin · Invoice
+lines*; the rest of invoicing is Part 8c.
+
+Every line on `GET /api/admin/invoices/:id` and
+`GET /api/partner/finance/invoices/:id`:
+
+```jsonc
+{ "description": "Hotel Vera · Deluxe Double, Breakfast Included · 01.12.2026 – 05.12.2026 (4 nights) · BKG-1",
+  "quantity": 4, "unitCents": 25000, "netCents": …, "taxBps": …, "grossCents": 100000,
+  "kind": "HOTEL_ROOM",
+  "detail": { "hotel": { "name", "city", "country" }, "room", "checkIn": { "date", "from" }, "checkOut": { "date", "until" },
+              "nights": 4, "pax": [{ "lastName", "firstName", "title", "type", "age", "text": "BERIDZE / NINO MRS." }], "text": "…" } }
+```
+
+`kind` is `HOTEL_ROOM | TRANSFER_LEG | TOUR | SERVICE | EXTRA | ADJUSTMENT |
+CANCELLATION_CHARGE | MANUAL`. A transfer leg reads `Arrival transfer Tbilisi
+Airport → Tbilisi, 02.12.2026 01:30 · TRF-1` in the airport's own time with
+`detail { label: ARRIVAL | DEPARTURE | RETURN | TRANSFER, from, to, date,
+time, flightNumber, vehicle, passengers, text }`; tours and services are one
+line each with the party and names; an order is one line per item carrying
+its child's detail.
+
+| Do this | Expect |
+| --- | --- |
+| Confirm (or approve) a two-room hotel booking for the agency with `INVOICEOCEAN_ENABLED=true`, read the proforma | two `HOTEL_ROOM` lines, `quantity` = nights, `unitCents` the nightly gross, `detail.nights` = `quantity`, the lines' `grossCents` summing to the receivable |
+| A return transfer | two `TRANSFER_LEG` lines, `detail.label` `ARRIVAL` then `DEPARTURE` (or `RETURN`), the time in the airport's own timezone |
+| A desk booking with `priceAdjustment: -500` | the product lines **plus** one `ADJUSTMENT` line of −500 |
+| A booking cancelled with a 50% charge, then invoiced | one `CANCELLATION_CHARGE` line |
+| A guest without a `title`, a leg without a flight | printed without one — nothing is invented |
+| A document issued before the lines shipped | `kind: null`, `unitCents: null`, `detail: null` on its rows; lines are written once with the document and never rewritten |
+
+Lines always add up to what is owed: weights (a room's subtotal, a leg's
+fare) split the receivable by largest remainder. A document whose lines do
+not sum to its `totalCents` is a bug.
+
+## Part 19 — The cart: `/orders/custom`
+
+Owner decision OD2: hotels, transfers, tours, services and whole packages go
+into one cart and are booked as **one order of `kind: CUSTOM`** — one
+transaction, one approval, one receivable, one proforma. Full contract in
+`server/API.md` → "Orders" → "The cart". Postman folder *04g · The cart —
+/orders/custom*; the desk's version is `POST /api/admin/orders/custom/manual`
+(Part 15).
+
+**The switch.** `CART_ENABLED=true` on the server. Off, every
+`/api/orders/custom/*` route answers `404 { reason: "CART_DISABLED" }` — the
+routes are not there, so nothing on the public site can reach them by
+accident. The desk's `…/custom/manual` works in both states. Test both: the
+Postman folder records the state on its first request and skips the rest
+while the cart is closed.
+
+```
+POST   /api/orders/custom/quote   { "items": [ … ], "leadGuest"? }      → 200 { available, currency, startDate, endDate, items, priceChanged, drifted, totals }
+POST   /api/orders/custom/holds   { "items": [ … ] }                    → 201 { holds: { "0": "<hotel hold>", "3": { "0": "…", "2": "…" } }, expiresAt }
+DELETE /api/orders/custom/holds   { "holds": { … } }                    → 204, always
+POST   /api/orders/custom         { "items": [ … ], "leadGuest", "name"?, "travellers"?, "requests"?, "specialRequests"? }
+                                  Idempotency-Key: …                    → 201 the order detail; 200 on replay
+```
+
+`items` (1–20), each `{ type, label?, … }`:
+
+| `type` | Carries |
+| --- | --- |
+| `HOTEL_STAY` | `offerToken`, `holdToken?`, `travellers?`, `requests?`, `specialRequests?` |
+| `TOUR` | `offerToken`, `holdToken?`, `travellers?`, `specialRequests?` |
+| `TRANSFER` | `quoteToken`, `flightNumber?`, `flights?`, `pickupAddress?`, `dropoffAddress?`, `pickupPlace?`, `dropoffPlace?`, `preferredDriverId?`, `preferredFleetVehicleId?` |
+| `SERVICE` | `serviceId`, `date`, `time?`, `days?`, `quantity?`, `pax?`, `quotedSellCents?` |
+| `PACKAGE` | `packageToken`, `holdTokens?`, `travellers?`, `requests?`, `flightNumber?`, `pickupAddress?`, `pickupPlace?`, `preferredDriverId?`, `preferredFleetVehicleId?` |
+
+As everywhere: no amount. Per-item travellers and requests fall back to the
+order's.
+
+| Request | Expected |
+| --- | --- |
+| `POST /quote` with a hotel stay and a transfer, anonymously | `200`; `available: true`; two items in that order with `quotedCents` equal to the two searches, `adjustmentCents: 0`, `groupKey: null`; `items[].lineTotalCents` summing to `totals.sellTotalCents` (`totals` is `{ componentsSellCents, adjustmentCents, manualAdjustmentCents, sellTotalCents }`); no net figure anywhere |
+| …the same, read closely | **Known defect (2026-10-20):** `totals.componentsNetCents` — the supplier net, which is the platform margin — is in the anonymous quote. Report it as a security finding; the Postman request *Quote the cart* fails on it until it is fixed |
+| `POST /quote` with a `PACKAGE` item | the package is **flattened**: one item per component, all sharing a `groupKey`, each keeping `packageId` and `packageSlotIndex`, with the package's discount allocated over them exactly as the package quote allocates it (`adjustmentSource: PACKAGE`) — the package costs in the cart what it costs on its own, and nothing is counted twice |
+| A GEL hotel and a USD transfer | `{ available: false, reason: "MIXED_CURRENCY" }` on the quote; `422 MIXED_CURRENCY { currencies }` on the confirm |
+| `{ "items": [] }` | `400`; `422 EMPTY` is the confirm's answer to a cart that empties itself |
+| An item with `totalCents` | `400` |
+| `POST /holds` | `201`; a hold for the hotel item (`holds["0"]`), none for the transfer; a package's holds nested per slot as `/api/orders/holds` gives them |
+| `POST /custom` with the hold | `201 ORD-…`; `kind: CUSTOM`, `package.id: null`, `packageSnapshot.kind: CUSTOM`; items numbered in lock order (hotels, tours, transfers, services), each with `packageId`, `packageSlotIndex`, `groupKey`, `adjustmentSource`; the order spans the earliest and latest item; `totalCents` equals the quote |
+| …with approval on | `PENDING_APPROVAL`, every item `AWAITING_APPROVAL`, `payment.status: NONE`; the admin decides it as `ORDER` (Part 13) |
+| …again, same key | `200`, same reference. Without a key, a hash of the items and the lead stands in for one |
+| A room sold out between quote and confirm | `409 UNAVAILABLE { items: [{ index, type, reason }] }` naming every item in the way, nothing written |
+| A price moved | `409 PRICE_CHANGED { items: [{ index, type, quotedCents, currentCents }] }` |
+| `POST /api/bookings/<child>/cancel` | `409 PART_OF_ORDER` — the order is the only door |
+| `POST /api/orders/ORD-…/items/<standalone>/cancel` as the buyer | `200` — a standalone item is optional |
+| …a package's required component inside the cart | `409 REQUIRED_COMPONENT` to a buyer, as inside a package order |
+| `POST /api/orders/ORD-…/cancel` while it waits | `200`, `CANCELLED`, `approval.state: WITHDRAWN`, `cancellation.chargeCents: 0` |
+| `DELETE /holds` with spent or unknown tokens | `204` |
+
+**Atomicity, again.** Twenty concurrent confirmations of one cart with one
+key must produce one order; a refusal on the last item must leave the
+hotel's counters, `booking_holds` and `outbox_events` exactly as they were.

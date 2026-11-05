@@ -249,11 +249,18 @@ export interface SupplierTerms {
 
 export type SupplierTermsKind = "hotels" | "transfer-providers" | "tours" | "services";
 
+/**
+ * Whether a partner's bookings wait for an operator (`REQUIRED`, the default
+ * under owner decision OD1) or confirm the moment they are made (`AUTO`).
+ */
+export type PartnerBookingApproval = "AUTO" | "REQUIRED";
+
 export interface PartnerTerms {
   id: string;
   paymentDueDays: number;
   paymentDueAnchor: ReceivableDueAnchor;
   paymentTermsNote: string | null;
+  bookingApproval: PartnerBookingApproval;
 }
 
 export interface FinanceSummary {

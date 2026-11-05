@@ -269,15 +269,19 @@ function NavGroup({
 }) {
   const headingId = useId();
 
+  // The run holding the overview has no title: a heading over one link would
+  // be a label for its own sake. It is still a named list for a screen reader.
   return (
-    <div className="mb-6 last:mb-0">
-      <h2
-        id={headingId}
-        className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-[0.16em] text-on-dark/40 uppercase"
-      >
-        {title}
-      </h2>
-      <ul aria-labelledby={headingId} className="space-y-0.5">
+    <div className={cn(title ? "mb-6" : "mb-4", "last:mb-0")}>
+      {title ? (
+        <h2
+          id={headingId}
+          className="px-3 pb-2 text-[0.6875rem] font-semibold tracking-[0.16em] text-on-dark/40 uppercase"
+        >
+          {title}
+        </h2>
+      ) : null}
+      <ul aria-labelledby={title ? headingId : undefined} aria-label={title ? undefined : "Overview"} className="space-y-0.5">
         {entries.map((entry) =>
           isAdminNavSection(entry) ? (
             <NavSection

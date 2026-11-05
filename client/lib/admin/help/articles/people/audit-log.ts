@@ -12,7 +12,6 @@ export const article = {
   title: "The audit log",
   summary: "Every change made on the platform, every sign-in and every look at bank details — who, what and when.",
   category: "people",
-  roles: ["ADMIN"],
   routes: ["/admin/audit"],
   keywords: [
     "audit",

@@ -68,7 +68,7 @@ export const readPackageOfferToken = (token) => {
     }
 
     if (Date.now() - decoded.iat > config.package.offerTokenTtlMs) {
-        throw new GoneError('That package offer has expired. Quote it again for current prices.');
+        throw new GoneError('That package offer has expired. Quote it again for current prices.', { reason: 'OFFER_EXPIRED' });
     }
 
     return {

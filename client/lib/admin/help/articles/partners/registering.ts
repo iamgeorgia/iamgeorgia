@@ -14,7 +14,6 @@ export const article = {
   title: "Registering a partner",
   summary: "Sending a registration link, creating the account yourself, or creating and approving in one go — and what the success screen gives you.",
   category: "partners",
-  roles: ["ADMIN"],
   routes: ["/admin/partners/new"],
   keywords: ["new partner", "add partner", "invite", "registration link", "password link", "copy link", "bank details", "IBAN", "main contact", "internal note"],
   related: ["pt-register", "pt-detail-review", "pt-lifecycle", "gs-accounts"],

@@ -304,6 +304,8 @@ export const sweepExpiredHolds = async ({ limit = 200 } = {}) => {
  * eventually drifts. This recomputes both from source and reports every
  * disagreement; `apply` then repairs them. Intended as a nightly job, and used
  * by the test suite to assert that the booking path leaves no drift at all.
+ * A booking waiting for the platform's approval (OD1) holds its rooms like a
+ * confirmed one, so it is counted with them.
  */
 export const reconcileInventory = async ({ apply = false, roomTypeIds = null } = {}) => {
     const drift = await prisma.$queryRaw`
@@ -327,7 +329,7 @@ export const reconcileInventory = async ({ apply = false, roomTypeIds = null } =
                          JOIN hotel_bookings b ON b.id = br.booking_id
                         WHERE br.room_type_id = inv.room_type_id
                           AND br.status = 'CONFIRMED'
-                          AND b.status IN ('PENDING', 'CONFIRMED', 'COMPLETED')
+                          AND b.status IN ('PENDING_APPROVAL', 'PENDING', 'CONFIRMED', 'COMPLETED')
                           AND inv.date >= b.check_in AND inv.date < b.check_out
                    ), 0) AS expected_booked
               FROM room_inventory inv

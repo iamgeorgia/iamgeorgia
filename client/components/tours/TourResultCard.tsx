@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import Link from "next/link";
 import { Clock, MapPin, ShieldCheck, Users } from "lucide-react";
 
@@ -37,7 +37,7 @@ export async function TourResultCard({ result, stay }: TourResultCardProps) {
     <article className="grid gap-5 border border-line bg-surface p-4 sm:grid-cols-[16rem_1fr] sm:p-5 lg:grid-cols-[18rem_1fr_14rem]">
       <Link href={href} className="relative block aspect-4/3 overflow-hidden rounded-sm bg-line">
         {image && (
-          <Image
+          <SafeImage
             src={image}
             alt={result.title}
             fill

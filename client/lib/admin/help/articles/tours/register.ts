@@ -12,7 +12,6 @@ export const article = {
   title: "Tours register",
   summary: "Finding a tour, reading its row, and what the From price on this screen actually is.",
   category: "tours",
-  roles: ["ADMIN"],
   routes: ["/admin/tours"],
   keywords: ["tour list", "find a tour", "search tours", "filter", "category", "status", "from price", "public", "b2c"],
   related: ["tr-create", "tr-hub", "rf-search-filters", "pb-statuses"],

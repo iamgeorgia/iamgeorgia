@@ -11,12 +11,11 @@ export const article = {
   title: "The Overview",
   summary: "What each tile and panel on the landing screen means, and which figures are not quite what they look like.",
   category: "getting-started",
-  roles: ["ADMIN"],
   routes: ["/admin"],
   keywords: ["dashboard", "home", "landing", "stat", "tile", "active bookings", "arriving", "revenue", "good morning"],
   related: ["bk-hotel-bookings-register", "pt-applications", "gs-sidebar-and-top-bar"],
   blocks: [
-    { type: "where", path: ["Sidebar", "Operations", "Overview"] },
+    { type: "where", path: ["Sidebar", "Overview"] },
     {
       type: "paragraph",
       text: "The Overview is a reading screen: what is live, what is arriving, and what needs a decision. Nothing on it can be changed; every panel links to the register where the work is done. A dispatcher never sees it — their day starts on the dispatch board.",

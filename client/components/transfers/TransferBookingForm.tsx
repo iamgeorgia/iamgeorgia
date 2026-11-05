@@ -5,16 +5,18 @@ import { AnimatePresence, m } from "framer-motion";
 import { AlertCircle, Info } from "lucide-react";
 import { useState } from "react";
 
+import { AddToCartButton } from "@/components/booking/AddToCartButton";
 import { GoogleMapsProvider } from "@/components/geo/GoogleMapsProvider";
 import { PlaceSearch, type PlaceSelection } from "@/components/geo/PlaceSearch";
 import { DriverChoice } from "@/components/transfers/DriverChoice";
 import { Button } from "@/components/ui/Button";
+import type { CartItem } from "@/lib/booking/cart";
 import { creditLimitFigures } from "@/lib/booking/errors";
 import { fill } from "@/lib/i18n/fill";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { ApiError } from "@/lib/api/client";
 import { confirmTransferBooking } from "@/lib/api/transfers";
-import { type TransferQuery } from "@/lib/transfers/query";
+import { serializeTransferQuery, type TransferQuery } from "@/lib/transfers/query";
 import { cn } from "@/lib/utils";
 import type { DriverChoiceValue } from "@/types/driver";
 import type { PlacedLocation } from "@/types/geo";
@@ -230,6 +232,39 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
 
       setSubmitError(t.transfers.booking.submitFailed);
     }
+  };
+
+  /**
+   * The same leg for the cart, with whatever the traveller has typed so far:
+   * the flight, the doors, the driver. No passenger details — the cart's own
+   * checkout asks for the lead once, for every item.
+   */
+  const cartItem = (): Omit<CartItem, "id" | "addedAt"> => {
+    const flight = values.flightNumber.trim();
+
+    return {
+      payload: {
+        type: "TRANSFER",
+        quoteToken: offer.token,
+        // The server takes 2–16 characters; anything else is better left
+        // out here than refused at checkout for a field that is optional.
+        flightNumber: flight.length >= 2 && flight.length <= 16 ? flight : undefined,
+        pickupAddress: values.pickupNote.trim() || pickupPlace?.place?.formattedAddress || undefined,
+        dropoffAddress: dropoffPlace?.place?.formattedAddress ?? undefined,
+        pickupPlace: pickupPlace ?? undefined,
+        dropoffPlace: dropoffPlace ?? undefined,
+        preferredDriverId: driverChoice?.driverId,
+        preferredFleetVehicleId: driverChoice?.fleetVehicleId,
+      },
+      display: {
+        title: from && to ? `${from.name} → ${to.name}` : offer.vehicle.name,
+        detail: `${offer.vehicle.name} · ${query.time}`,
+        dates: { from: query.date, to: query.type === "return" ? query.returnDate : null },
+        priceCents: offer.quote.totals.totalCents,
+        currency: offer.quote.currency,
+        href: `/transfers/booking?${serializeTransferQuery(query, { offer: offer.vehicle.slug })}`,
+      },
+    };
   };
 
   const fieldClass =
@@ -474,6 +509,7 @@ export function TransferBookingForm({ offer, query, from, to, canChooseDriver = 
       <Button type="submit" size="lg" fullWidth className="mt-6" disabled={submitting}>
         {submitting ? t.transfers.booking.submitting : t.transfers.booking.submit}
       </Button>
+      <AddToCartButton item={cartItem} size="lg" fullWidth className="mt-3" disabled={submitting} />
     </form>
   );
 }

@@ -12,7 +12,6 @@ export const article = {
   title: "Hotels register",
   summary: "Every property in one list: how to find one, what the kosher badges and the From price mean, and where to start a new one.",
   category: "hotels",
-  roles: ["ADMIN"],
   routes: ["/admin/hotels"],
   keywords: ["properties", "property list", "search hotel", "status filter", "property type", "kosher badge", "from price", "on sale", "drafts"],
   related: ["ht-create", "ht-hub", "pb-statuses", "rf-search-filters"],

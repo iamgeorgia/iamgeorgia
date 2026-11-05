@@ -3,13 +3,18 @@ import { toQueryString, type QueryValue } from "./query";
 import type { Paginated } from "@/types/partner";
 import type {
   AmendOrderInput,
+  ConfirmCustomOrderInput,
   ConfirmOrderInput,
+  CustomOrderHold,
+  CustomOrderItemInput,
+  CustomOrderQuote,
   Order,
   OrderCancellationQuote,
   OrderCancellationResult,
   OrderHold,
   OrderQuery,
   OrderSummary,
+  QuoteCustomOrderInput,
 } from "@/types/order";
 
 /**
@@ -135,3 +140,47 @@ export const cancelOrderItemAsAdmin = (reference: string, slotIndex: number, rea
     `/api/admin/orders/${reference}/items/${slotIndex}/cancel`,
     { method: "POST", body: reason ? { reason } : {} },
   );
+
+// --- the cart: several products as one CUSTOM order -------------------------
+//
+// Behind the server's `CART_ENABLED`: off, every route below answers 404 with
+// `details.reason === "CART_DISABLED"`. The client has its own switch
+// (`NEXT_PUBLIC_CART_ENABLED`, see lib/booking/cartFlag.ts) so the buttons
+// never appear against a server that will refuse them.
+
+/**
+ * What the cart page shows before checkout: whether every item is still
+ * there, and at what price today. Nothing is written, and a moved price comes
+ * back as a figure rather than a refusal.
+ */
+export const quoteCustomOrder = (body: QuoteCustomOrderInput) =>
+  apiFetch<CustomOrderQuote>("/api/orders/custom/quote", { method: "POST", body, timeoutMs: 30_000 });
+
+/** Holds every hotel room and tour seat in the cart for the checkout countdown. */
+export const createCustomOrderHolds = (items: CustomOrderItemInput[]) =>
+  apiFetch<CustomOrderHold>("/api/orders/custom/holds", {
+    method: "POST",
+    body: { items },
+    timeoutMs: 30_000,
+  });
+
+/** Abandoning checkout. Takes the map as the holds call returned it; always succeeds. */
+export const releaseCustomOrderHolds = (holds: CustomOrderHold["holds"]) =>
+  apiFetch<void>("/api/orders/custom/holds", { method: "DELETE", body: { holds } });
+
+/**
+ * Books the cart as one CUSTOM order: one transaction, one approval, one
+ * receivable. The idempotency key is what makes a double-clicked button
+ * return the first order rather than take a second set of rooms and seats.
+ */
+export const confirmCustomOrder = (body: ConfirmCustomOrderInput) => {
+  const { idempotencyKey, ...payload } = body;
+
+  return apiFetch<Order>("/api/orders/custom", {
+    method: "POST",
+    body: payload,
+    headers: idempotencyKey ? { "idempotency-key": idempotencyKey } : undefined,
+    // Up to twenty products are prepared and committed in one transaction.
+    timeoutMs: 45_000,
+  });
+};

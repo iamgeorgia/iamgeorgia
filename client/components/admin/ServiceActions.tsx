@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Archive, CheckCircle2, EyeOff, Loader2 } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import { archiveService, publishService, unpublishService } from "@/lib/api/services";
 import { cn } from "@/lib/utils";
@@ -21,6 +23,7 @@ import type { ServiceWithChecklist } from "@/types/service";
  */
 export function ServiceActions({ service }: { service: ServiceWithChecklist }) {
   const router = useRouter();
+  const can = useCan();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -49,6 +52,12 @@ export function ServiceActions({ service }: { service: ServiceWithChecklist }) {
       setBusy(null);
     }
   };
+
+  // Every transition here is a write behind `catalogue.write`; a viewer
+  // without it gets the checklist above and this line.
+  if (!can("catalogue.write")) {
+    return <ReadOnlyNote needs="catalogue.write" what="Publishing or changing this service" />;
+  }
 
   const base =
     "inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm px-4 text-[0.8125rem] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50";

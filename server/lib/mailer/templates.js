@@ -33,6 +33,12 @@ export const adminReceivableUrl = (id) => link(`/admin/finance/receivables/${enc
 export const portalFinanceUrl = () => link('/portal/finance');
 export const adminApprovalUrl = (id) => link(`/admin/finance/approvals/${encodeURIComponent(id)}`);
 export const adminInvoiceUrl = (id) => link(`/admin/finance/invoices/${encodeURIComponent(id)}`);
+/** The booking's page in the panel, by product: where an approval is decided. */
+export const adminBookingUrl = (product, reference) => {
+    const path = { HOTEL: 'bookings', TRANSFER: 'transfers/bookings', TOUR: 'tours/bookings', SERVICE: 'services/bookings', ORDER: 'orders' }[product] ?? 'bookings';
+
+    return link(`/admin/${path}/${encodeURIComponent(reference)}`);
+};
 
 const formatDate = (date) =>
     new Intl.DateTimeFormat('en-GB', { dateStyle: 'long', timeStyle: 'short', timeZone: 'UTC' }).format(date);
@@ -627,6 +633,39 @@ export const templates = {
     }),
 
     /** Password reset, which falls out of the same token machinery. */
+    /**
+     * The administrator's test send from Settings → Email: proof that the
+     * connected Google account can send, and as which address, before or
+     * after the transport is switched to it. Only ever sent to the
+     * administrator who asked.
+     */
+    mailProviderTest: ({ contactName, accountEmail, fromAddress, sentAt = new Date() }) => ({
+        subject: 'I am Georgia: test email from the Gmail connection',
+        text: plain([
+            hello(contactName),
+            'This is the test email you sent from Settings → Email. If you are reading it, the platform can send mail through the connected Google account.',
+            `Connected account: ${accountEmail}`,
+            `Sent as: ${fromAddress}`,
+            `Sent at: ${formatDate(sentAt)} UTC`,
+            'Check that the sender above is the one you expect. If Gmail shows a different address, add it as a verified "Send mail as" alias in that account.'
+        ]),
+        html: layout({
+            eyebrow: 'Settings → Email',
+            heading: 'The Gmail connection works',
+            preheader: 'Test email from the platform’s Gmail connection',
+            paragraphs: [
+                helloHtml(contactName),
+                'This is the test email you sent from Settings → Email. If you are reading it, the platform can send mail through the connected Google account.'
+            ],
+            facts: [
+                { label: 'Connected account', value: accountEmail, strong: true },
+                { label: 'Sent as', value: fromAddress },
+                { label: 'Sent at', value: `${formatDate(sentAt)} UTC` }
+            ],
+            footer: 'Check that the sender above is the one you expect. If Gmail shows a different address, add it as a verified "Send mail as" alias in that account.'
+        })
+    }),
+
     passwordReset: ({ url, expiresAt }) => ({
         subject: 'Reset your I am Georgia password',
         text: plain([
@@ -1378,7 +1417,7 @@ export const templates = {
         };
     },
 
-    /** We received a buyer's money and applied it. To the agency. */
+    /** We received a buyer's money and applied it. To the agency, or to the guest who paid; only the agency has a statement (`url`) to open. */
     paymentReceipt: ({ partnerName, amountCents, currency, paidAt, method, reference, allocations, unallocatedCents, url }) => {
         const amount = formatMoney(amountCents, currency);
         const methodLabel = { BANK_TRANSFER: 'bank transfer', CASH: 'cash', CARD: 'card', OTHER: 'other' }[method] ?? 'payment';
@@ -1391,7 +1430,7 @@ export const templates = {
                 `We have received your ${methodLabel} of ${amount} on ${formatDay(paidAt)}${reference ? `, reference ${reference}` : ''}. Thank you.`,
                 applied.length > 0 ? `Applied to:\n${applied.join('\n')}` : null,
                 unallocatedCents > 0 ? `${formatMoney(unallocatedCents, currency)} is held on your account and will be applied to your next open item.` : null,
-                `Your statement:\n${url}`
+                url ? `Your statement:\n${url}` : null
             ]),
             html: layout({
                 eyebrow: 'Receipt',
@@ -1409,7 +1448,7 @@ export const templates = {
                     reference ? { label: 'Your reference', value: reference } : null,
                     applied.length > 0 ? { label: 'Applied to', value: applied.join('\n'), html: applied.map(escapeHtml).join('<br>') } : null
                 ],
-                cta: { label: 'View your statement', url }
+                cta: url ? { label: 'View your statement', url } : undefined
             })
         };
     },
@@ -1444,5 +1483,179 @@ export const templates = {
                 cta: { label: 'Open the invoice', url }
             })
         };
+    },
+
+    // --- booking approval (OD1) --------------------------------------------------
+    //
+    // Product-agnostic: the four read one `mail` shape built by the outbox
+    // (`approvalView`), so a hotel, a transfer, a tour, a service and an
+    // order are told the same way.
+
+    /** The buyer, the moment they book: we have it, and we will answer. */
+    bookingAwaitingApproval: ({ reference, title, when, timezone, leadName, currency, totalCents, deadlineAt, url }) => {
+        const dates = approvalWhen(when, timezone);
+        const answerBy = deadlineAt ? formatLocal(deadlineAt, timezone) : null;
+
+        return {
+            subject: `We have your booking request - ${reference}`,
+            text: plain([
+                hello(leadName),
+                `We have your request for ${title}, ${dates}. Your reference is ${reference}.`,
+                `The price of ${formatMoney(totalCents, currency)} is held for you and will not change while we check the booking.`,
+                answerBy ? `We expect to confirm it by ${answerBy} and will email you the moment we do.` : 'We will email you the moment it is confirmed.',
+                'Nothing is owed until the booking is confirmed.',
+                `Follow your request:\n${url}`
+            ]),
+            html: layout({
+                eyebrow: `Booking request · ${reference}`,
+                heading: 'We have your request',
+                preheader: `${title}, ${dates} — being checked now. We will email you as soon as it is confirmed.`,
+                paragraphs: [
+                    helloHtml(leadName),
+                    'We have your request and are checking it now. The price is held for you and will not change, and we will email you the moment it is confirmed.'
+                ],
+                facts: [
+                    { label: 'Booking', value: title, strong: true },
+                    { label: 'Dates', value: dates },
+                    { label: 'Price held', value: formatMoney(totalCents, currency), strong: true },
+                    answerBy ? { label: 'Answer expected by', value: answerBy } : null
+                ],
+                cta: { label: 'Follow your request', url },
+                footer: 'Nothing is owed until the booking is confirmed.'
+            })
+        };
+    },
+
+    /** The buyer, after a no. */
+    bookingRejected: ({ reference, title, when, timezone, leadName, reason, expired, url }) => {
+        const dates = approvalWhen(when, timezone);
+        const why = expired ? 'the service date passed before it could be confirmed' : reason ? reason : 'it could not be confirmed';
+
+        return {
+            subject: `Your booking request could not be confirmed - ${reference}`,
+            text: plain([
+                hello(leadName),
+                `We are sorry: your request ${reference} for ${title}, ${dates}, could not be confirmed — ${why}.`,
+                'Nothing has been charged and nothing is owed.',
+                `See the request:\n${url}`,
+                'Reply to this email if you would like us to find an alternative.'
+            ]),
+            html: layout({
+                eyebrow: `Booking request · ${reference}`,
+                heading: 'Your request could not be confirmed',
+                preheader: `${title}, ${dates}: not confirmed. Nothing has been charged.`,
+                paragraphs: [
+                    helloHtml(leadName),
+                    `We are sorry: your request for <strong>${escapeHtml(title)}</strong>, ${escapeHtml(dates)}, could not be confirmed — ${escapeHtml(why)}.`,
+                    'Nothing has been charged and nothing is owed.'
+                ],
+                facts: [
+                    { label: 'Reference', value: reference },
+                    { label: 'Booking', value: title },
+                    { label: 'Dates', value: dates }
+                ],
+                cta: { label: 'See the request', url },
+                footer: 'Reply to this email if you would like us to find an alternative.'
+            })
+        };
+    },
+
+    /** The desk: a booking has arrived and waits for a decision. */
+    bookingApprovalQueue: ({ reference, title, when, timezone, leadName, partnerName, currency, totalCents, deadlineAt, adminUrl }) => {
+        const dates = approvalWhen(when, timezone);
+        const who = partnerName ? `${partnerName} (${leadName})` : leadName;
+
+        return {
+            subject: `Approval needed: ${reference}, ${title}`,
+            text: plain([
+                `${who} booked ${title}, ${dates}, for ${formatMoney(totalCents, currency)}. It waits for approval${deadlineAt ? ` until ${formatLocal(deadlineAt, timezone)}` : ''}.`,
+                `Approve or reject it here:\n${adminUrl}`
+            ]),
+            html: layout({
+                eyebrow: `Approval · ${reference}`,
+                heading: 'A booking is waiting for approval',
+                preheader: `${title}, ${dates}, ${formatMoney(totalCents, currency)} — booked by ${who}.`,
+                paragraphs: [`<strong>${escapeHtml(who)}</strong> booked ${escapeHtml(title)}, ${escapeHtml(dates)}.`],
+                facts: [
+                    { label: 'Reference', value: reference },
+                    { label: 'Booking', value: title, strong: true },
+                    { label: 'Dates', value: dates },
+                    { label: 'Total', value: formatMoney(totalCents, currency), strong: true },
+                    deadlineAt ? { label: 'Answer by', value: formatLocal(deadlineAt, timezone) } : null
+                ],
+                cta: { label: 'Open the booking', url: adminUrl },
+                footer: 'The inventory is held while it waits; a late answer is still an answer.'
+            })
+        };
+    },
+
+    /** The desk: nobody answered in time. */
+    bookingApprovalOverdue: ({ reference, title, when, timezone, leadName, partnerName, deadlineAt, adminUrl }) => {
+        const dates = approvalWhen(when, timezone);
+        const who = partnerName ? `${partnerName} (${leadName})` : leadName;
+
+        return {
+            subject: `Unanswered booking: ${reference}, ${title}`,
+            text: plain([
+                `${reference} (${title}, ${dates}, booked by ${who}) passed its answer deadline${deadlineAt ? ` at ${formatLocal(deadlineAt, timezone)}` : ''} and is still waiting for approval.`,
+                `Approve or reject it here:\n${adminUrl}`
+            ]),
+            html: layout({
+                eyebrow: `Approval · ${reference}`,
+                heading: 'A booking approval is overdue',
+                preheader: `${title}, ${dates} — still waiting past its deadline.`,
+                paragraphs: [
+                    `<strong>${escapeHtml(reference)}</strong> (${escapeHtml(title)}, ${escapeHtml(dates)}, booked by ${escapeHtml(who)}) passed its answer deadline and is still waiting for approval.`
+                ],
+                cta: { label: 'Open the booking', url: adminUrl },
+                footer: 'The booking keeps its inventory until it is decided or its service date passes.'
+            })
+        };
     }
+};
+
+/** A deadline is N days away: the buyer's or the partner's nudge, by kind. */
+templates.deadlineReminder = ({ reference, title, when, timezone, leadName, partnerName, deadlineKind, deadlineLabel, dueAt, offsetDays, currency, totalCents, url, forPartner }) => {
+    const dates = approvalWhen(when, timezone);
+    const at = formatLocal(dueAt, timezone);
+    const days = Number(offsetDays);
+    const inWords = days <= 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days} days`;
+    const what =
+        deadlineKind === 'PAYMENT'
+            ? `the payment of ${formatMoney(totalCents, currency)} for ${title} (${reference}) is due ${inWords}, by ${at}`
+            : deadlineKind === 'FREE_CANCELLATION'
+              ? `free cancellation of ${title} (${reference}) ends ${inWords}, at ${at}; after that the booking's cancellation terms apply`
+              : `an answer on ${title} (${reference}) is due ${inWords}, by ${at}`;
+    const greeting = forPartner ? hello(partnerName) : hello(leadName);
+    const greetingHtml = forPartner ? helloHtml(partnerName) : helloHtml(leadName);
+
+    return {
+        subject: `${deadlineLabel} ${inWords}: ${reference}`,
+        text: plain([greeting, `A reminder that ${what}.`, `${title}, ${dates}.`, `See the booking:\n${url}`]),
+        html: layout({
+            eyebrow: `Reminder · ${reference}`,
+            heading: `${deadlineLabel} ${inWords}`,
+            preheader: `${title}, ${dates}: ${deadlineLabel.toLowerCase()} ${inWords}.`,
+            paragraphs: [greetingHtml, `A reminder that ${escapeHtml(what)}.`],
+            facts: [
+                { label: 'Booking', value: title, strong: true },
+                { label: 'Dates', value: dates },
+                { label: deadlineLabel, value: at, strong: true }
+            ],
+            cta: { label: 'See the booking', url }
+        })
+    };
+};
+
+/** "12 Jun 2027 to 15 Jun 2027", or a pick-up moment in its own time zone. */
+const approvalWhen = (when, timezone) => {
+    if (!when?.from) return '';
+    if (when.kind === 'INSTANT') {
+        return `${formatLocal(when.from, timezone)}${when.to ? `, returning ${formatLocal(when.to, timezone)}` : ''}`;
+    }
+
+    const from = formatDay(when.from);
+    const to = when.to ? formatDay(when.to) : null;
+
+    return to && to !== from ? `${from} to ${to}` : from;
 };

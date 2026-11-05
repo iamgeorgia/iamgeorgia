@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { PenaltiesBrowser } from "@/components/admin/finance/PenaltiesBrowser";
 import { productLabels } from "@/lib/admin/finance";
 import { listPenalties, type PenaltyQuery } from "@/lib/api/finance-controls";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 import type { PenaltyProduct } from "@/types/finance-controls";
 
@@ -38,11 +35,8 @@ function penaltyQueryFromParams(params: Record<string, string | string[] | undef
  * changed it. A change is always an approval request, never an edit.
  */
 export default async function AdminPenaltiesPage({ searchParams }: PageProps<"/[locale]/admin/finance/penalties">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.receivables.read")) {
-    redirect(localePath(await getLocale(), "/admin/finance"));
-  }
 
   const query = penaltyQueryFromParams(await searchParams);
   const list = await listPenalties(query);

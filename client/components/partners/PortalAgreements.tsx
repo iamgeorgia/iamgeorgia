@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { ExternalLink, FileText, Loader2 } from "lucide-react";
+
+import { PortalPanel } from "@/components/partners/PortalPage";
 import { useState } from "react";
 
 import { ApiError, describeError } from "@/lib/api/client";
@@ -50,17 +52,16 @@ export function PortalAgreements({ partner }: { partner: Partner }) {
   if (!contract && !terms) return null;
 
   return (
-    <section className="mt-8 rounded-sm border border-line bg-surface p-5 sm:p-6">
-      <h2 className="font-display text-[1.25rem] text-ink">Agreements</h2>
-      <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">
-        The terms you accepted and the contract we hold for your company.
-      </p>
-
-      <dl className="mt-5 divide-y divide-line border-t border-line text-[0.875rem]">
+    <PortalPanel
+      id="agreements"
+      title="Agreements"
+      description="The terms you accepted and the contract we hold for your company."
+    >
+      <dl className="divide-y divide-line text-[0.875rem]">
         {terms && (
-          <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
             <dt className="text-muted">Platform terms</dt>
-            <dd className="text-ink">
+            <dd className="text-end text-ink">
               {terms.acceptedVersion
                 ? `Version ${terms.acceptedVersion}, accepted ${formatPartnerDate(terms.acceptedAt)}`
                 : "Not accepted yet"}{" "}
@@ -74,15 +75,15 @@ export function PortalAgreements({ partner }: { partner: Partner }) {
           </div>
         )}
         {contract && (
-          <div className="flex flex-wrap items-center justify-between gap-3 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3 first:pt-0 last:pb-0">
             <dt className="text-muted">Contract</dt>
-            <dd className="text-ink">
+            <dd className="text-end text-ink">
               {contract.onFile ? (
                 <button
                   type="button"
                   onClick={openContract}
                   disabled={opening}
-                  className="inline-flex items-center gap-1.5 text-brand-text underline-offset-4 hover:underline disabled:opacity-60"
+                  className="inline-flex min-h-9 items-center gap-1.5 text-start text-brand-text underline-offset-4 hover:underline disabled:opacity-60"
                 >
                   {opening ? (
                     <Loader2 size={14} className="animate-spin" aria-hidden />
@@ -108,6 +109,6 @@ export function PortalAgreements({ partner }: { partner: Partner }) {
           {error}
         </p>
       )}
-    </section>
+    </PortalPanel>
   );
 }

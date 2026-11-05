@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Plus, X } from "lucide-react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import {
   CheckboxField,
   FormError,
@@ -36,6 +38,8 @@ type DayDraft = Omit<ItineraryDay, "day">;
 
 export function TourDetailsEditor({ tour }: { tour: Tour }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write", "tours.write");
 
   const [title, setTitle] = useState(tour.title);
   const [location, setLocation] = useState(tour.location);
@@ -128,6 +132,9 @@ export function TourDetailsEditor({ tour }: { tour: Tour }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-6">
+      {/* One disabled fieldset covers every control; the add and remove
+          buttons are hidden instead, so nothing looks broken. */}
+      <fieldset disabled={!canEdit} className="flex min-w-0 flex-col gap-6">
       <AdminPanel title="Listing" description="How the journey appears across the site.">
         <div className="grid gap-5 sm:grid-cols-2">
           <TextInput
@@ -351,17 +358,19 @@ export function TourDetailsEditor({ tour }: { tour: Tour }) {
         title="Itinerary"
         description="Day by day. A day trip has one entry; the publish checklist wants at least one."
         action={
-          <button
-            type="button"
-            onClick={() => {
-              touch();
-              setDays((current) => [...current, { title: "", description: "", meals: [], accommodation: null }]);
-            }}
-            className="inline-flex h-9 items-center gap-2 rounded-sm border border-ink/20 px-3 text-[0.8125rem] font-semibold text-ink hover:border-ink hover:bg-surface-soft"
-          >
-            <Plus size={14} aria-hidden />
-            Day
-          </button>
+          canEdit ? (
+            <button
+              type="button"
+              onClick={() => {
+                touch();
+                setDays((current) => [...current, { title: "", description: "", meals: [], accommodation: null }]);
+              }}
+              className="inline-flex h-9 items-center gap-2 rounded-sm border border-ink/20 px-3 text-[0.8125rem] font-semibold text-ink hover:border-ink hover:bg-surface-soft"
+            >
+              <Plus size={14} aria-hidden />
+              Day
+            </button>
+          ) : undefined
         }
         bodyClassName="p-0"
       >
@@ -375,17 +384,19 @@ export function TourDetailsEditor({ tour }: { tour: Tour }) {
                 <p className="text-[0.75rem] font-semibold tracking-[0.1em] text-muted uppercase">
                   Day {index + 1}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    touch();
-                    setDays((current) => current.filter((_, at) => at !== index));
-                  }}
-                  aria-label={`Remove day ${index + 1}`}
-                  className="text-subtle hover:text-error-text"
-                >
-                  <X size={15} aria-hidden />
-                </button>
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      touch();
+                      setDays((current) => current.filter((_, at) => at !== index));
+                    }}
+                    aria-label={`Remove day ${index + 1}`}
+                    className="text-subtle hover:text-error-text"
+                  >
+                    <X size={15} aria-hidden />
+                  </button>
+                )}
               </div>
               <TextInput
                 className="sm:col-span-2"
@@ -433,14 +444,19 @@ export function TourDetailsEditor({ tour }: { tour: Tour }) {
           ))}
         </ol>
       </AdminPanel>
+      </fieldset>
 
       <FormError message={error} />
 
-      <div className="flex justify-end">
-        <SubmitButton type="submit" busy={busy} saved={saved}>
-          {saved ? "Saved" : "Save changes"}
-        </SubmitButton>
-      </div>
+      {canEdit ? (
+        <div className="flex justify-end">
+          <SubmitButton type="submit" busy={busy} saved={saved}>
+            {saved ? "Saved" : "Save changes"}
+          </SubmitButton>
+        </div>
+      ) : (
+        <ReadOnlyNote needs={["catalogue.write", "tours.write"]} what="Editing this tour" />
+      )}
     </form>
   );
 }

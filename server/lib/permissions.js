@@ -34,6 +34,14 @@ export const CAPABILITIES = Object.freeze({
     BOOKINGS_READ: 'bookings.read',
     BOOKINGS_WRITE: 'bookings.write',
     BOOKINGS_CANCEL: 'bookings.cancel',
+    /** Letting a booking through: approving or rejecting one that waits for the platform's yes. */
+    BOOKINGS_APPROVE: 'bookings.approve',
+    /** Selling at other than the catalogue price: a signed, audited adjustment on a booking made at the desk. */
+    BOOKINGS_PRICE_OVERRIDE: 'bookings.price.override',
+    /** Moving a booking's free-cancellation or confirmation deadline by hand. */
+    BOOKINGS_DEADLINES_WRITE: 'bookings.deadlines.write',
+    /** The reminder schedule: how many days before each deadline who is told. */
+    SETTINGS_REMINDERS_WRITE: 'settings.reminders.write',
 
     DISPATCH_READ: 'dispatch.read',
     DISPATCH_WRITE: 'dispatch.write',
@@ -143,6 +151,10 @@ const ADMIN = [
     C.PRICING_WRITE,
     C.BOOKINGS_WRITE,
     C.BOOKINGS_CANCEL,
+    C.BOOKINGS_APPROVE,
+    C.BOOKINGS_PRICE_OVERRIDE,
+    C.BOOKINGS_DEADLINES_WRITE,
+    C.SETTINGS_REMINDERS_WRITE,
     C.DISPATCH_WRITE,
     C.PARTNERS_WRITE,
     C.FINANCE_COMMISSION_WRITE,
@@ -175,7 +187,15 @@ export const DEFAULT_ROLE_LISTS = {
      * drivers. Never a hotel price — those are `catalogue.write` and
      * `pricing.write`, neither of which it holds — and never a margin.
      */
-    TOUR_OPERATOR: [...PLATFORM_READ, C.BOOKINGS_WRITE, C.BOOKINGS_CANCEL, C.TOURS_WRITE, C.DISPATCH_WRITE],
+    TOUR_OPERATOR: [
+        ...PLATFORM_READ,
+        C.BOOKINGS_WRITE,
+        C.BOOKINGS_CANCEL,
+        C.BOOKINGS_APPROVE,
+        C.BOOKINGS_DEADLINES_WRITE,
+        C.TOURS_WRITE,
+        C.DISPATCH_WRITE
+    ],
     /** Keeps the books: records the money, sets terms and commission, reads what it needs to reconcile. */
     ACCOUNTANT: [
         C.AUDIT_READ,

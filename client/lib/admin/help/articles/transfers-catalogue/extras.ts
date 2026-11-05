@@ -13,7 +13,6 @@ export const article = {
   title: "Transfer extras",
   summary: "Child seats, waiting time, meet-and-greet and other add-ons — how each is charged, which classes offer it, and how it is retired.",
   category: "transfers-catalogue",
-  roles: ["ADMIN"],
   routes: ["/admin/transfers/extras"],
   keywords: ["extras", "add-on", "child seat", "per passenger", "per hour", "per booking", "share of the fare", "percent", "code", "retire", "offer it again"],
   related: ["tc-pricing-model", "tc-vehicle-classes", "bk-transfer-booking-detail"],

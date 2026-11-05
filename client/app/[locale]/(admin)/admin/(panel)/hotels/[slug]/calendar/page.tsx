@@ -8,6 +8,7 @@ import { getCalendar } from "@/lib/api/inventory";
 import { ApiError } from "@/lib/api/client";
 import { addDaysISO, todayISO } from "@/lib/admin/dates";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Inventory & pricing" };
 
@@ -22,6 +23,7 @@ export default async function HotelCalendarPage({
   params,
   searchParams,
 }: PageProps<"/[locale]/admin/hotels/[slug]/calendar">) {
+  await requireScreen();
   const { slug } = await params;
   const query = await searchParams;
   const { path } = await getI18n();

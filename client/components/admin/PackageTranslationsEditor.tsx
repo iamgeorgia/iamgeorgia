@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { FormError, SubmitButton, TextArea, TextInput } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { describeError } from "@/lib/api/client";
 import { setPackageTranslation } from "@/lib/api/packages";
 import { cn } from "@/lib/utils";
@@ -46,6 +48,8 @@ export function PackageTranslationsEditor({
   translations: PackageTranslation[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
   const [locale, setLocale] = useState<LocaleCode>("ka");
   const [drafts, setDrafts] = useState<Record<LocaleCode, Draft>>(() =>
     Object.fromEntries(
@@ -112,7 +116,12 @@ export function PackageTranslationsEditor({
         ))}
       </div>
 
-      <div className="mt-5 flex flex-col gap-4" dir={locale === "he" ? "rtl" : "ltr"}>
+      {/* The locale tabs above stay live for a reader; only the fields lock. */}
+      <fieldset
+        disabled={!canEdit}
+        className="mt-5 flex min-w-0 flex-col gap-4"
+        dir={locale === "he" ? "rtl" : "ltr"}
+      >
         <TextInput
           label="Name"
           value={draft.name}
@@ -131,14 +140,18 @@ export function PackageTranslationsEditor({
           value={draft.description}
           onChange={(event) => set("description", event.target.value)}
         />
-      </div>
+      </fieldset>
 
       <FormError message={error} />
 
       <div className="mt-5">
-        <SubmitButton busy={busy} saved={saved === locale} onClick={() => void save()}>
-          Save {LOCALES.find((entry) => entry.code === locale)?.label}
-        </SubmitButton>
+        {canEdit ? (
+          <SubmitButton busy={busy} saved={saved === locale} onClick={() => void save()}>
+            Save {LOCALES.find((entry) => entry.code === locale)?.label}
+          </SubmitButton>
+        ) : (
+          <ReadOnlyNote needs="catalogue.write" what="Editing translations" />
+        )}
       </div>
     </div>
   );

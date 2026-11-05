@@ -18,7 +18,6 @@ export const article = {
   title: "Vehicle classes",
   summary: "The categories a traveller buys — Economy, Comfort, Minivan and so on — with their capacity, fallback fare, features and sales channel.",
   category: "transfers-catalogue",
-  roles: ["ADMIN"],
   routes: [
     { pattern: "/admin/transfers/vehicles", section: "register" },
     { pattern: "/admin/transfers/vehicles/new", section: "create" },

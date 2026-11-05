@@ -9,6 +9,8 @@ import { TransferRoutesBrowser } from "@/components/admin/TransferRoutesBrowser"
 import { listAdminTransferRoutes, listAdminTransferVehicles } from "@/lib/api/transfers";
 import { transferRouteQueryFromParams } from "@/lib/admin/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Transfer routes" };
 
@@ -23,6 +25,7 @@ export const metadata: Metadata = { title: "Transfer routes" };
 export default async function AdminTransferRoutesPage({
   searchParams,
 }: PageProps<"/[locale]/admin/transfers/routes">) {
+  const session = await requireScreen();
   const params = await searchParams;
   const query = transferRouteQueryFromParams(params);
 
@@ -45,13 +48,15 @@ export default async function AdminTransferRoutesPage({
         title="Transfer routes"
         description="Every named journey in the catalogue, and what each costs in every vehicle class."
         actions={
-          <Link
-            href={path("/admin/transfers/routes/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add a route
-          </Link>
+          can(session, "catalogue.write") && (
+            <Link
+              href={path("/admin/transfers/routes/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add a route
+            </Link>
+          )
         }
       />
 
@@ -71,11 +76,13 @@ export default async function AdminTransferRoutesPage({
         />
       </div>
 
-      <div className="mt-10">
-        <TransferBulkPricer
-          vehicles={vehicles.data.filter((vehicle) => vehicle.status !== "ARCHIVED")}
-        />
-      </div>
+      {can(session, "catalogue.write") && (
+        <div className="mt-10">
+          <TransferBulkPricer
+            vehicles={vehicles.data.filter((vehicle) => vehicle.status !== "ARCHIVED")}
+          />
+        </div>
+      )}
 
       <div className="mt-8">
         <TransferRoutesBrowser

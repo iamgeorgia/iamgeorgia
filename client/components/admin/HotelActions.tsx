@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Archive, CheckCircle2, EyeOff, Loader2, Trash2 } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { archiveHotel, deleteHotel, publishHotel, unpublishHotel, updateHotel } from "@/lib/api/hotels";
 import { ApiError, describeError } from "@/lib/api/client";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -17,13 +19,22 @@ import type { HotelWithChecklist } from "@/types/catalogue";
  * rules — a courtesy, not a control. The server enforces the transitions
  * regardless and answers 409 or 422 when a stale page tries one that no longer
  * applies, and those errors are surfaced rather than swallowed.
+ *
+ * Every transition is a catalogue write, so a viewer without that capability
+ * sees the checklist above and one line here instead of five buttons that
+ * would each answer 403.
  */
 export function HotelActions({ hotel }: { hotel: HotelWithChecklist }) {
   const router = useRouter();
   const path = useLocalePath();
+  const can = useCan();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  if (!can("catalogue.write")) {
+    return <ReadOnlyNote needs="catalogue.write" what="Publishing, archiving or deleting this property" />;
+  }
 
   const run = async (action: string, call: () => Promise<unknown>, note: string) => {
     setBusy(action);

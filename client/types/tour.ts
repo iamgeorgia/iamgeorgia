@@ -1,5 +1,15 @@
 import type { CancellationPolicy, ImageAsset, Money } from "./catalogue";
-import type { BookingGuestType, CancellationQuote, CancellationWindow } from "./booking";
+import type {
+  BookingApproval,
+  BookingDesk,
+  BookingGuestType,
+  BookingPayment,
+  BookingSource,
+  CancellationQuote,
+  CancellationWindow,
+  GuestTitle,
+  SharedBookingFilters,
+} from "./booking";
 import type { GalleryImage } from "./common";
 
 /**
@@ -27,7 +37,13 @@ export type TourUnitKind = "SEAT" | "GROUP";
 export type TourScheduleKind = "SCHEDULED" | "ON_DEMAND";
 export type ConfirmationMode = "INSTANT" | "ON_REQUEST";
 export type TourVisibility = "PUBLIC" | "PARTNER_ONLY";
-export type TourBookingStatus = "PENDING" | "CONFIRMED" | "CANCELLED" | "COMPLETED" | "NO_SHOW";
+export type TourBookingStatus =
+  | "PENDING_APPROVAL"
+  | "PENDING"
+  | "CONFIRMED"
+  | "CANCELLED"
+  | "COMPLETED"
+  | "NO_SHOW";
 
 /**
  * Meals are a closed vocabulary rather than free text: the same three words
@@ -349,6 +365,7 @@ export interface TourHold {
 }
 
 export interface LeadTraveller {
+  title?: GuestTitle;
   firstName: string;
   lastName: string;
   email: string;
@@ -357,6 +374,7 @@ export interface LeadTraveller {
 
 export interface TourTravellerInput {
   type?: BookingGuestType;
+  title?: GuestTitle;
   firstName: string;
   lastName: string;
   age?: number;
@@ -412,16 +430,22 @@ export interface TourBookingSummary {
   confirmedAt: string | null;
   cancelledAt: string | null;
   declinedAt: string | null;
+  /** The platform's yes: null on a booking that never needed one. */
+  approval: BookingApproval | null;
+  payment: BookingPayment;
   /** staff only */
   netTotalCents?: number;
   markupBps?: number;
   marginCents?: number;
   partner?: { id: string; reference: string; name: string } | null;
+  /** staff with `partners.read` only: the buyer and the desk's own fields. */
+  desk?: BookingDesk;
 }
 
 export interface TourTraveller {
   id: string;
   type: BookingGuestType;
+  title?: GuestTitle | null;
   firstName: string;
   lastName: string;
   age: number | null;
@@ -477,13 +501,13 @@ export interface TourBooking extends TourBookingSummary {
     reason: string | null;
   };
   declineReason: string | null;
-  source: string;
+  source: BookingSource;
   travellers: TourTraveller[];
 }
 
 export type TourCancellationQuote = CancellationQuote;
 
-export interface TourBookingQuery {
+export interface TourBookingQuery extends SharedBookingFilters {
   status?: TourBookingStatus | TourBookingStatus[];
   tourId?: string;
   partnerId?: string;

@@ -15,6 +15,7 @@ import { getAdminTransferPoint, listAdminTransferRoutes } from "@/lib/api/transf
 import { pointKindLabels } from "@/lib/admin/transfers";
 import { getI18n } from "@/lib/i18n/server";
 import type { TransferPoint } from "@/types/transfer";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Pick-up point" };
 
@@ -30,6 +31,7 @@ export const metadata: Metadata = { title: "Pick-up point" };
 export default async function AdminTransferPointPage({
   params,
 }: PageProps<"/[locale]/admin/transfers/points/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const { path } = await getI18n();
 
@@ -60,7 +62,7 @@ export default async function AdminTransferPointPage({
         description={`${pointKindLabels[point.kind] ?? point.kind} in ${point.region}.`}
       />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-8">
           <AdminPanel title="Details">
             <TransferPointForm point={point} />

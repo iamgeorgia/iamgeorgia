@@ -4,13 +4,13 @@ import { validate } from '../middleware/validate.js';
 import { authenticate, requireApprovedPartner, requireCapability, requirePartner } from '../middleware/auth.js';
 import { CAPABILITIES } from '../lib/permissions.js';
 import {
-    countUnreadNotifications,
     listNotifications,
+    unreadSummary,
     markAllNotificationsRead,
     markNotificationRead,
     toNotification
 } from '../services/notifications/notification.service.js';
-import { notificationParamSchema, notificationQuerySchema } from '../validation/notification.js';
+import { notificationParamSchema, notificationQuerySchema, readAllSchema } from '../validation/notification.js';
 
 /**
  * The portal's bell: a driver confirmed, a payment received, an invoice
@@ -24,15 +24,15 @@ partnerNotificationRoutes.use(authenticate, requirePartner, requireApprovedPartn
 partnerNotificationRoutes.get('/', validate({ query: notificationQuerySchema }), async (req, res) => {
     const { notifications, ...page } = await listNotifications(req.user.id, req.valid.query);
 
-    res.json({ data: notifications.map(toNotification), ...page });
+    res.json({ data: notifications.map((row) => toNotification(row, 'partner')), ...page });
 });
 
 partnerNotificationRoutes.get('/unread-count', async (req, res) => {
-    res.json({ unreadCount: await countUnreadNotifications(req.user.id) });
+    res.json(await unreadSummary(req.user.id));
 });
 
-partnerNotificationRoutes.post('/read-all', async (req, res) => {
-    const { count } = await markAllNotificationsRead(req.user.id);
+partnerNotificationRoutes.post('/read-all', validate({ body: readAllSchema }), async (req, res) => {
+    const { count } = await markAllNotificationsRead(req.user.id, req.valid.body);
 
     res.json({ count });
 });
@@ -40,5 +40,5 @@ partnerNotificationRoutes.post('/read-all', async (req, res) => {
 partnerNotificationRoutes.post('/:id/read', validate({ params: notificationParamSchema }), async (req, res) => {
     const { notification } = await markNotificationRead(req.user.id, req.valid.params.id);
 
-    res.json(toNotification(notification));
+    res.json(toNotification(notification, 'partner'));
 });

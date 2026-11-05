@@ -17,7 +17,7 @@ import { ApiError } from "@/lib/api/client";
 import { getAdminTransferVehicle } from "@/lib/api/transfers";
 import { featureLabels, vehicleClassLabels } from "@/lib/admin/transfers";
 import { getI18n } from "@/lib/i18n/server";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 import type { TransferVehicle } from "@/types/transfer";
 
@@ -32,6 +32,7 @@ export const metadata: Metadata = { title: "Vehicle class" };
 export default async function AdminTransferVehiclePage({
   params,
 }: PageProps<"/[locale]/admin/transfers/vehicles/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
@@ -55,7 +56,7 @@ export default async function AdminTransferVehiclePage({
 
       <AdminPageHeader title={vehicle.name} description={vehicle.summary} />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 lg:col-span-8">
           <AdminPanel title="Details">
             <TransferVehicleEditor vehicle={vehicle} />

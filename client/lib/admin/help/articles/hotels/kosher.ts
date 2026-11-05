@@ -16,7 +16,6 @@ export const article = {
   title: "Kosher profile and certificates",
   summary: "How a property becomes kosher on the platform: the profile, the level, the certificates that earn the certified badge, and the private documents behind them.",
   category: "hotels",
-  roles: ["ADMIN"],
   keywords: ["kosher", "kashrut", "certificate", "certified", "supervising authority", "hechsher", "mashgiach", "verify", "scope", "expiry", "passover", "kitchen"],
   routes: ["/admin/hotels/[slug]/kosher"],
   related: ["ht-hub", "ht-publish-checklist", "ht-register", "pk-kosher", "md-documents"],

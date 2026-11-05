@@ -50,21 +50,21 @@ export function ContextualHelpButton({
 
     try {
       const help = await import("@/lib/admin/help");
-      const role = help.helpRoleOf(viewer?.role ?? "ADMIN");
+      const capabilities = viewer?.capabilities ?? [];
       const named = articleId ? help.helpArticleById(articleId) : undefined;
       const match = named
         ? { article: named, section }
         : help.helpForPath(canonical);
-      const readable = match && match.article.roles.includes(role) ? match : null;
+      const readable = match && help.helpReadable(match.article, capabilities) ? match : null;
       const fallback = readable ? null : help.helpFallbackForPath(canonical);
-      const categories = help.helpCategoriesFor(role);
+      const categories = help.helpCategoriesFor(capabilities);
       const counts = Object.fromEntries(
-        categories.map((category) => [category.id, help.helpArticlesIn(category.id, role).length]),
+        categories.map((category) => [category.id, help.helpArticlesIn(category.id, capabilities).length]),
       );
 
       setContent({
         match: readable,
-        targets: readable ? help.helpLinkTargets(readable.article, role) : {},
+        targets: readable ? help.helpLinkTargets(readable.article, capabilities) : {},
         fallback,
         fallbackCategories: fallback ? categories.filter((category) => category.id === fallback.id) : categories,
         fallbackCounts: counts,

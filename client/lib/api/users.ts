@@ -23,6 +23,13 @@ export const listUsers = (scope: UserScope, query: UserQuery = {}) =>
 
 export const getUser = (scope: UserScope, id: string) => serverFetch<ManagedUser>(`${base(scope)}/${id}`);
 
+/** The same list from the browser, for a picker that searches as somebody types. */
+export const listUsersClient = (scope: UserScope, query: UserQuery = {}) =>
+  apiFetch<Paginated<ManagedUser>>(`${base(scope)}${toQueryString(query)}`);
+
+/** One account from the browser: a filter chip naming the id the URL carries. */
+export const getUserClient = (scope: UserScope, id: string) => apiFetch<ManagedUser>(`${base(scope)}/${id}`);
+
 /** One staff account with its roles, overrides and effective capabilities. */
 export const getUserDetail = (id: string) => serverFetch<UserDetail>(`/api/admin/users/${id}`);
 
@@ -34,7 +41,7 @@ export const getGrantable = (scope: UserScope, id?: string) =>
   serverFetch<Grantable>(grantablePath(scope, id));
 
 const grantablePath = (scope: UserScope, id?: string) =>
-  scope === "staff" ? `/api/admin/users/${id}/grantable` : "/api/partner/team/grantable";
+  scope === "staff" ? (id ? `/api/admin/users/${id}/grantable` : "/api/admin/users/grantable") : "/api/partner/team/grantable";
 
 /** The same, from the browser, for a component that loads it on mount. */
 export const fetchGrantable = (scope: UserScope, id?: string) =>

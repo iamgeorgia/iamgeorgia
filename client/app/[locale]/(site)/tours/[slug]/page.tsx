@@ -242,13 +242,13 @@ export default async function TourDetailPage(props: PageProps<"/[locale]/tours/[
       {/* The control the whole page hangs off: on a tour page the first
           question is "when does it run, and what does it cost us". */}
       <Container className="pt-8">
-        <div id="tour-search" className="scroll-mt-36">
+        <div id="tour-search" className="scroll-mt-14">
           <TourSearchForm value={stay} action={`/tours/${tour.slug}`} minAge={tour.minAge} />
         </div>
       </Container>
 
       <Container className="pt-14 pb-24 lg:pt-16 lg:pb-32">
-        <div className="grid gap-12 lg:grid-cols-12 lg:gap-16">
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-16">
           <div className="min-w-0 lg:col-span-7 xl:col-span-8">
             <dl className="grid grid-cols-2 gap-6 border-y border-line py-7 sm:grid-cols-4">
               {facts.map((fact) => (
@@ -288,7 +288,7 @@ export default async function TourDetailPage(props: PageProps<"/[locale]/tours/[
             )}
 
             {/* --- the bookable part ------------------------------------- */}
-            <section id="departures" className="scroll-mt-36 pt-14">
+            <section id="departures" className="scroll-mt-14 pt-14">
               <h2 className="type-h2">{t.tours.availability.heading}</h2>
 
               {stay && window ? (

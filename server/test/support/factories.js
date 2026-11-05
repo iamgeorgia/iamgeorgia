@@ -38,6 +38,24 @@ export const unique = (prefix) =>
 
 export const testEmail = (prefix = 'user') => `${unique(prefix)}@example.test`;
 
+/**
+ * A delete that fans out by cascade (a user takes their sessions, roles,
+ * notifications and more with them) can deadlock with another file writing
+ * those rows for the same people at that moment. Postgres rolls the loser
+ * back and a delete is safe to run again, so cleanup tries it a few times
+ * rather than failing a file whose tests all passed.
+ */
+const retryOnDeadlock = async (remove) => {
+    for (let attempt = 1; ; attempt++) {
+        try {
+            return await remove();
+        } catch (error) {
+            if (attempt >= 3 || !/40P01|deadlock detected/.test(String(error?.message))) throw error;
+            await new Promise((resolve) => setTimeout(resolve, 50 * attempt));
+        }
+    }
+};
+
 // Hashing costs ~165 ms by design. Every fixture uses the same password, so it
 // is derived once per process instead of once per user — the suite is testing
 // the flows, and password.test.js is what tests the hashing.
@@ -507,11 +525,11 @@ export const createTracker = () => {
             }
 
             if (partnerIds.size > 0) {
-                await prisma.partner.deleteMany({ where: { id: { in: [...partnerIds] } } });
+                await retryOnDeadlock(() => prisma.partner.deleteMany({ where: { id: { in: [...partnerIds] } } }));
             }
 
             if (userIds.size > 0) {
-                await prisma.user.deleteMany({ where: { id: { in: [...userIds] } } });
+                await retryOnDeadlock(() => prisma.user.deleteMany({ where: { id: { in: [...userIds] } } }));
             }
 
             partnerIds.clear();
@@ -1035,7 +1053,7 @@ export const makeTransferBooking = async (
                     windows: [{ fromAt: null, toAt: null, chargeCents: 0, basis: 'FREE', description: 'Free cancellation' }]
                 },
                 confirmedAt: new Date(),
-                source: 'admin',
+                source: 'ADMIN',
                 legs: {
                     create: {
                         legIndex: 0,

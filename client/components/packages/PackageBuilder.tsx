@@ -16,11 +16,13 @@ import {
 import { useState, useTransition } from "react";
 import type { LucideIcon } from "lucide-react";
 
+import { AddToCartButton } from "@/components/booking/AddToCartButton";
 import { KosherPanel } from "@/components/packages/KosherPanel";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { createOrderHolds } from "@/lib/api/orders";
 import { ApiError } from "@/lib/api/client";
+import type { CartItem } from "@/lib/booking/cart";
 import { newIdempotencyKey, saveOrderCheckoutDraft } from "@/lib/booking/checkoutSession";
 import { formatInstant, formatStayDate } from "@/lib/booking/stay";
 import { fill } from "@/lib/i18n/fill";
@@ -28,6 +30,7 @@ import { plural } from "@/lib/i18n/plural";
 import { useI18n, useLocalePath } from "@/lib/i18n/provider";
 import { formatMoney } from "@/lib/money";
 import {
+  packageImageUrl,
   packageSearchQueryString,
   resolvedHotel,
   resolvedService,
@@ -135,6 +138,28 @@ export function PackageBuilder({ slug, name, search, quote }: PackageBuilderProp
       router.refresh();
     }
   };
+
+  /**
+   * The whole priced trip for the cart, as one item. The cart's checkout
+   * flattens it into its components under this name, holding each slot then
+   * — not now — so a package waiting in a cart keeps no room from anyone.
+   */
+  const cartItem = (): Omit<CartItem, "id" | "addedAt"> => ({
+    payload: { type: "PACKAGE", packageToken: quote.token ?? "" },
+    display: {
+      title: name,
+      detail: quote.components
+        .filter((component) => component.included)
+        .map((component) => component.label)
+        .join(" · "),
+      dates: { from: quote.startDate, to: quote.endDate },
+      priceCents: quote.totals.totalCents,
+      currency: quote.currency,
+      image: packageImageUrl(quote.package),
+      href: `/packages/${slug}${packageSearchQueryString(search)}`,
+      packageName: name,
+    },
+  });
 
   const party = [
     plural(locale, search.adults, t.units.adult),
@@ -255,6 +280,13 @@ export function PackageBuilder({ slug, name, search, quote }: PackageBuilderProp
           >
             {holding ? t.packages.quote.holding : t.packages.quote.reserve}
           </Button>
+          <AddToCartButton
+            item={cartItem}
+            size="lg"
+            fullWidth
+            className="mt-3"
+            disabled={!quote.available || !quote.token || busy}
+          />
         </div>
       </aside>
     </div>

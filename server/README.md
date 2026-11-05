@@ -38,8 +38,10 @@ admin already inside the panel. The script prints a generated password once.
 
 In development `MAIL_TRANSPORT` defaults to `log`, so invitation and activation
 links are printed through the logger instead of being emailed. Set it to `smtp`
-with `SMTP_*` credentials to send for real; the test suite uses `capture`,
-which collects messages into an in-memory outbox the tests assert on.
+with `SMTP_*` credentials to send for real, or to `gmail` to send through the
+Gmail API as a Google account connected under Settings → Email (see
+docs/DEPLOYMENT.md §3.4c); the test suite uses `capture`, which collects
+messages into an in-memory outbox the tests assert on.
 
 Deploying it — the Dockerfile, the Render Blueprint and the one-host Compose
 stack — is covered in [docs/DEPLOYMENT.md](../docs/DEPLOYMENT.md).
@@ -480,8 +482,12 @@ as production would be, so it is held to the same list.
 | `AUTH_TOKEN_PEPPER` | Mixed into every token hash, so a database dump alone cannot rebuild a link |
 | `TRUST_PROXY` | Required behind a reverse proxy, or the per-IP rate limits protect nothing |
 | `REDIS_URL` | Shared rate-limit counters; required once the API runs on more than one instance |
-| `MAIL_TRANSPORT` | `smtp`, `log` (development) or `capture` (tests); anything else refuses to boot |
-| `MAIL_FROM`, `SMTP_*` | Mail credentials; required outside development and test |
+| `MAIL_TRANSPORT` | `smtp`, `gmail`, `log` (development) or `capture` (tests); anything else refuses to boot |
+| `MAIL_FROM`, `SMTP_*` | Mail credentials; `SMTP_*` required outside development and test unless the transport is `gmail` |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GMAIL_SENDER_EMAIL` | The Gmail API: all four or none. With them set, an administrator can connect the account and test it before `MAIL_TRANSPORT=gmail` |
+| `MAIL_CREDENTIALS_KEY` | 32 random bytes, base64: seals the stored Google refresh token. Required on a deployed instance once the Gmail API is configured |
+| `GMAIL_FROM_ALIAS_VERIFIED` | `true` when `MAIL_FROM` is a verified "Send mail as" alias of the Gmail account; otherwise `MAIL_FROM` must be the account itself |
+| `GMAIL_DAILY_SEND_WARN` | Sends in 24 hours after which administrators are warned in-app (default 400; not a cap) |
 | `SMTP_CONNECTION_TIMEOUT_MS` / `SMTP_SOCKET_TIMEOUT_MS` | How long a send may wait on the relay (default 10s / 30s) |
 | `MEDIA_S3_REQUEST_TIMEOUT_MS` / `MEDIA_S3_CONNECTION_TIMEOUT_MS` / `MEDIA_S3_MAX_ATTEMPTS` | Object storage timeouts and retries (default 30s / 5s / 3) |
 | `REQUEST_TIMEOUT_MS` | How long a client may take to send a whole request (default 30s) |

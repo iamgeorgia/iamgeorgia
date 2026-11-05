@@ -503,7 +503,7 @@ adminFinanceRoutes.get(
     async (req, res) => {
         const partner = await prisma.partner.findUnique({
             where: { id: req.valid.params.id },
-            select: { id: true, paymentDueDays: true, paymentDueAnchor: true, paymentTermsNote: true }
+            select: { id: true, paymentDueDays: true, paymentDueAnchor: true, paymentTermsNote: true, bookingApproval: true }
         });
         if (!partner) throw new NotFoundError('Partner not found');
         res.json(partner);

@@ -103,6 +103,7 @@ export const assignmentStatusLabels: Record<TransferAssignmentStatus, string> = 
 };
 
 export const transferBookingStatusLabels: Record<TransferBookingStatus, string> = {
+  PENDING_APPROVAL: "Awaiting approval",
   PENDING: "Pending",
   CONFIRMED: "Confirmed",
   CANCELLED: "Cancelled",

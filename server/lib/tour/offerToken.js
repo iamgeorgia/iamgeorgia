@@ -63,7 +63,7 @@ export const readTourOfferToken = (token) => {
     }
 
     if (Date.now() - decoded.iat > config.tour.offerTokenTtlMs) {
-        throw new GoneError('That offer has expired. Search again for current prices.');
+        throw new GoneError('That offer has expired. Search again for current prices.', { reason: 'OFFER_EXPIRED' });
     }
 
     return {

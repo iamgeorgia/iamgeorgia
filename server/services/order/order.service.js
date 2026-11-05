@@ -4,6 +4,7 @@ import { prisma } from '../../db/index.js';
 import { config } from '../../config.js';
 import { ConflictError, GoneError, HttpError, NotFoundError, UnprocessableEntityError } from '../../lib/errors.js';
 import { assertReplayOwner } from '../../lib/idempotency.js';
+import { lockRows } from '../../lib/locks.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { syncOrderReceivableInTx } from '../finance/ledger.service.js';
 import { assertCreditInTx } from '../finance/credit.service.js';
@@ -13,6 +14,12 @@ import { addDays, dateOnlyToUtc, toDateOnly, todayInTimezone } from '../../lib/t
 import { readPackageOfferToken } from '../../lib/package/offerToken.js';
 import { readOfferToken } from '../../lib/hotel/offerToken.js';
 import { readTourOfferToken } from '../../lib/tour/offerToken.js';
+import { sourceFor } from '../../lib/booking/source.js';
+import { approvalModeFor, approvalStampsFor } from '../../lib/booking/approval.js';
+import { RECEIVABLE_SUMMARY_SELECT } from '../../lib/finance/paymentStatus.js';
+import { DESK_INCLUDE, assertAdjustedTotal, deskColumns, deskFrom } from '../../lib/booking/desk.js';
+import { syncBookingIndexInTx } from '../booking/index.service.js';
+import { bookingOrderBy, bookingWhere } from '../../lib/listing/bookingFilters.js';
 import { impliedOrderStatus, LIVE_ITEM_STATUSES, orderMachine } from '../../lib/order/machines.js';
 import { ACTOR } from '../../lib/transfer/machines.js';
 import { isTrade, readsAllBookings } from '../../middleware/auth.js';
@@ -87,6 +94,8 @@ const { OPS, PARTNER, GUEST, SYSTEM } = ACTOR;
 export const orderInclude = {
     partner: { select: { id: true, reference: true, name: true } },
     package: { select: { id: true, slug: true, name: true } },
+    receivable: RECEIVABLE_SUMMARY_SELECT,
+    ...DESK_INCLUDE,
     items: {
         orderBy: { slotIndex: 'asc' },
         include: {
@@ -98,18 +107,19 @@ export const orderInclude = {
     }
 };
 
-const deriveIdempotencyKey = (input) =>
+export const deriveOrderIdempotencyKey = (input) =>
     input.idempotencyKey ??
     createHash('sha256')
         .update([input.packageToken, input.leadGuest.email.toLowerCase(), input.leadGuest.lastName.toLowerCase()].join('|'))
         .digest('base64url');
 
-const actorKind = (viewer) => (can(viewer, CAPABILITIES.BOOKINGS_WRITE) ? OPS : viewer?.partnerId ? PARTNER : viewer ? PARTNER : GUEST);
+export const actorKind = (viewer) =>
+    can(viewer, CAPABILITIES.BOOKINGS_WRITE, CAPABILITIES.BOOKINGS_APPROVE) ? OPS : viewer?.partnerId ? PARTNER : viewer ? PARTNER : GUEST;
 
 /** The child booking an item points at, whichever product it is. */
 export const childOf = (item) => item.hotelBooking ?? item.transferBooking ?? item.tourBooking ?? item.serviceBooking ?? null;
 
-const CHILD_KEY = {
+export const CHILD_KEY = {
     HOTEL_STAY: 'hotelBookingId',
     TRANSFER: 'transferBookingId',
     TOUR: 'tourBookingId',
@@ -118,16 +128,27 @@ const CHILD_KEY = {
 
 // --- prepare -----------------------------------------------------------------
 
-const isGone = (error) =>
+export const isGone = (error) =>
     error instanceof GoneError ||
     error instanceof NotFoundError ||
     (error instanceof ConflictError && ['UNAVAILABLE', 'ALREADY_COMMITTED', 'HOLD_INCONSISTENT', 'HOLD_EXPIRED', 'TOO_SOON'].includes(error.details?.reason)) ||
     (error instanceof UnprocessableEntityError && ['PARTY_SIZE', 'QUANTITY', 'PAST', 'BEYOND_HORIZON'].includes(error.details?.reason));
 
 /** Prepares one slot through its product's own `prepare`, price drift allowed. */
-const prepareSlot = async (slot, component, input, actor, lead) => {
+export const prepareSlot = async (slot, component, input, actor, lead) => {
     const hold = input.holdTokens?.[String(slot.slotIndex)] ?? null;
-    const shared = { specialRequests: input.specialRequests, source: input.source ?? 'web' };
+    // The children inherit the order's channel and its approval mode, so an
+    // order is approved as one: no child decides for itself.
+    const shared = {
+        specialRequests: input.specialRequests,
+        channel: input.channel ?? null,
+        manual: Boolean(input.manual),
+        confirmNow: Boolean(input.confirmNow),
+        // The children know their buyer and their manager; the adjustment, if
+        // any, is the order's business and lives on its items.
+        customerId: input.customerId ?? null,
+        assignedManagerUserId: input.assignedManagerUserId ?? null
+    };
 
     switch (component.componentType) {
         case 'HOTEL_STAY':
@@ -137,6 +158,7 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
                     leadGuest: lead,
                     guests: (input.travellers ?? []).map((traveller) => ({
                         type: traveller.type ?? 'ADULT',
+                        title: traveller.title,
                         firstName: traveller.firstName,
                         lastName: traveller.lastName,
                         age: traveller.age
@@ -153,8 +175,11 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
                     quoteToken: slot.token,
                     leadPassenger: lead,
                     flightNumber: input.flightNumber,
+                    flights: input.flights,
                     pickupAddress: input.pickupAddress,
+                    dropoffAddress: input.dropoffAddress,
                     pickupPlace: input.pickupPlace,
+                    dropoffPlace: input.dropoffPlace,
                     preferredDriverId: input.preferredDriverId,
                     preferredFleetVehicleId: input.preferredFleetVehicleId,
                     ...shared
@@ -185,7 +210,11 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
                     quotedSellCents: slot.sellCents,
                     lead,
                     notes: input.specialRequests,
-                    source: shared.source
+                    channel: shared.channel,
+                    manual: shared.manual,
+                    confirmNow: shared.confirmNow,
+                    customerId: shared.customerId,
+                    assignedManagerUserId: shared.assignedManagerUserId
                 },
                 actor,
                 { strict: false }
@@ -196,7 +225,7 @@ const prepareSlot = async (slot, component, input, actor, lead) => {
 };
 
 /** The shape the kosher validator reads, from a prepared child. */
-const resolvedFromPrepared = async (component, prepared) => {
+export const resolvedFromPrepared = async (component, prepared) => {
     switch (component.componentType) {
         case 'HOTEL_STAY': {
             const hotel = await prisma.hotel.findUnique({ where: { id: prepared.hotel.id }, include: kosherHotelInclude });
@@ -220,7 +249,7 @@ const resolvedFromPrepared = async (component, prepared) => {
     }
 };
 
-const snapshotPackage = (pkg, decoded, slots, kosher) => ({
+export const snapshotPackage = (pkg, decoded, slots, kosher) => ({
     id: pkg.id,
     slug: pkg.slug,
     name: pkg.name,
@@ -259,7 +288,13 @@ const snapshotPackage = (pkg, decoded, slots, kosher) => ({
  * refusal: PRICE_CHANGED listing every drifted slot, UNAVAILABLE listing
  * every slot that went, KOSHER_INELIGIBLE listing every blocker.
  */
-export const prepareOrder = async (input, actor, { now = new Date() } = {}) => {
+/**
+ * One package, prepared: its slots through their products' own `prepare`,
+ * the adjustment allocated, the kosher profile checked. A package order is
+ * one group; a cart (`cart.service.js`) flattens several, beside standalone
+ * items, into one CUSTOM order.
+ */
+export const preparePackageGroup = async (input, actor, { now = new Date() } = {}) => {
     const decoded = readPackageOfferToken(input.packageToken);
     const trade = isTrade(actor);
     const pkg = await findPackageOr404(decoded.packageId, { statuses: ['ACTIVE'], b2cOnly: !trade, access: accessWhere(actor, 'PACKAGE') });
@@ -380,7 +415,7 @@ export const prepareOrder = async (input, actor, { now = new Date() } = {}) => {
     slots.sort((a, b) => rank[a.component.componentType] - rank[b.component.componentType] || String(a.prepared.lockKey ?? '').localeCompare(String(b.prepared.lockKey ?? '')));
 
     return {
-        idempotencyKey: deriveIdempotencyKey(input),
+        idempotencyKey: deriveOrderIdempotencyKey(input),
         pkg,
         decoded,
         party,
@@ -393,9 +428,59 @@ export const prepareOrder = async (input, actor, { now = new Date() } = {}) => {
     };
 };
 
+export const prepareOrder = preparePackageGroup;
+
+/**
+ * Spreads the desk's adjustment (OD3) over an order's lines, in place.
+ *
+ * Over the lines that carry no package share — the cart's own items — or
+ * over every line when there are none (a package order, an all-package
+ * cart), weighted by catalogue price. A discount those lines cannot carry
+ * without one of them going below zero, which `order_items` refuses by CHECK
+ * and which used to surface as a 409 "conflicts with current availability",
+ * is spread instead by what each line still costs, and what they cannot carry
+ * falls on the package lines. `assertAdjustedTotal` has already refused a
+ * discount larger than the order, so every line ends at zero or more and the
+ * lines still add up to what the buyer pays.
+ */
+export const spreadManualAdjustment = (entries, cents) => {
+    if (!cents || entries.length === 0) return;
+
+    const own = entries.filter((entry) => !entry.group);
+    const first = own.length > 0 ? own : entries;
+    const rest = own.length > 0 ? entries.filter((entry) => entry.group) : [];
+    const give = (entry, share) => {
+        entry.adjustmentCents = (entry.adjustmentCents ?? 0) + share;
+        entry.adjustmentSource = 'MANUAL';
+        entry.lineTotalCents = entry.prepared.currentCents + entry.adjustmentCents;
+    };
+
+    const plain = allocate(cents, first.map((entry) => Math.max(entry.prepared.currentCents, 1)));
+
+    if (cents > 0 || first.every((entry, index) => entry.lineTotalCents + plain[index] >= 0)) {
+        first.forEach((entry, index) => give(entry, plain[index]));
+
+        return;
+    }
+
+    let left = -cents;
+
+    for (const tier of [first, rest]) {
+        const room = tier.map((entry) => Math.max(entry.lineTotalCents, 0));
+        const take = Math.min(left, room.reduce((sum, value) => sum + value, 0));
+
+        if (take === 0) continue;
+
+        allocate(-take, room).forEach((share, index) => {
+            if (share !== 0) give(tier[index], share);
+        });
+        left -= take;
+    }
+};
+
 // --- confirm -----------------------------------------------------------------
 
-const confirmChildInTx = (tx, entry, childKey, actor, req) => {
+export const confirmChildInTx = (tx, entry, childKey, actor, req) => {
     const { component, prepared } = entry;
 
     switch (component.componentType) {
@@ -411,7 +496,7 @@ const confirmChildInTx = (tx, entry, childKey, actor, req) => {
     }
 };
 
-const childDeadline = (child) => child.requestDeadlineAt ?? null;
+export const childDeadline = (child) => child.requestDeadlineAt ?? null;
 
 /**
  * Recomputes the order's status and deadline from its items. Called after
@@ -465,7 +550,7 @@ export const confirmOrder = async (input, actor, req) => {
     // taken the inventory, so preparing it again would refuse it as
     // UNAVAILABLE — for an order that exists. A replay is a read of the
     // original, and must be answered as one whatever the catalogue says now.
-    const idempotencyKey = deriveIdempotencyKey(input);
+    const idempotencyKey = deriveOrderIdempotencyKey(input);
 
     const existing = await prisma.order.findUnique({ where: { idempotencyKey }, include: orderInclude });
 
@@ -483,6 +568,23 @@ export const confirmOrder = async (input, actor, req) => {
 
     const prepared = await prepareOrder(input, actor);
 
+    // The desk's adjustment (OD3): checked against the package's price and
+    // spread over its lines, as the cart does, so the order, its lines, the
+    // credit check and the receivable all carry what the buyer pays. It was
+    // accepted and permission-checked here, then silently dropped.
+    const manualCents = input.manual ? (input.priceAdjustment?.cents ?? 0) : 0;
+    const catalogueCents = prepared.totals.sellTotalCents;
+
+    if (manualCents) {
+        assertAdjustedTotal(catalogueCents, manualCents);
+        spreadManualAdjustment(prepared.slots, manualCents);
+        prepared.totals = {
+            ...prepared.totals,
+            adjustmentCents: prepared.totals.adjustmentCents + manualCents,
+            sellTotalCents: prepared.totals.sellTotalCents + manualCents
+        };
+    }
+
     try {
         const order = await prisma.$transaction(
             async (tx) => {
@@ -490,10 +592,15 @@ export const confirmOrder = async (input, actor, req) => {
                 await assertCreditInTx(tx, actor?.partnerId, { addCents: prepared.totals.sellTotalCents, currency: prepared.pkg.currency }, actor, req);
 
                 const reference = await nextOrderReference(tx);
+                // The platform's wait (OD1) is stamped on the order; the
+                // status itself is rolled up from the items below.
+                const approval = approvalModeFor(actor, { manual: Boolean(input.manual), confirmNow: Boolean(input.confirmNow) });
+                const { status: _ignored, confirmedAt: _never, ...approvalStamps } = approvalStampsFor(approval);
                 const created = await tx.order.create({
                     data: {
                         reference,
                         status: 'PENDING_CONFIRMATION',
+                        ...approvalStamps,
                         idempotencyKey,
                         partnerId: actor?.partnerId ?? null,
                         bookedByUserId: actor?.id ?? null,
@@ -515,13 +622,15 @@ export const confirmOrder = async (input, actor, req) => {
                         leadPhone: prepared.lead.phone ?? null,
                         specialRequests: input.specialRequests ?? null,
                         packageSnapshot: prepared.snapshot,
-                        source: input.source ?? 'web'
+                        source: sourceFor(actor, input.channel ?? null),
+                        ...deskColumns({ desk: deskFrom(input) }, { adjustment: false })
                     }
                 });
 
                 for (const entry of prepared.slots) {
                     const child = await confirmChildInTx(tx, entry, `${idempotencyKey}:${entry.component.slotIndex}`, actor, req);
                     const requested = child.status === 'PENDING';
+                    const awaiting = child.status === 'PENDING_APPROVAL';
 
                     await tx.orderItem.create({
                         data: {
@@ -530,7 +639,8 @@ export const confirmOrder = async (input, actor, req) => {
                             componentType: entry.component.componentType,
                             label: entry.component.label,
                             required: entry.component.required,
-                            status: requested ? 'REQUESTED' : 'CONFIRMED',
+                            status: awaiting ? 'AWAITING_APPROVAL' : requested ? 'REQUESTED' : 'CONFIRMED',
+                            // Settled at approval for an item still waiting for it.
                             fulfilment: requested ? 'ON_REQUEST' : 'INTERNAL',
                             [CHILD_KEY[entry.component.componentType]]: child.id,
                             netCents: entry.netCents,
@@ -557,6 +667,18 @@ export const confirmOrder = async (input, actor, req) => {
                     req
                 });
 
+                if (manualCents) {
+                    await recordAudit(tx, {
+                        action: 'BOOKING_PRICE_ADJUSTED',
+                        actor,
+                        entityType: AUDIT_ENTITY.order,
+                        entityId: created.id,
+                        summary: `${reference} sold at ${manualCents > 0 ? '+' : ''}${(manualCents / 100).toFixed(2)} ${prepared.pkg.currency} on the catalogue price`,
+                        metadata: { reference, catalogueCents, adjustmentCents: manualCents, reason: input.priceAdjustment?.reason ?? null },
+                        req
+                    });
+                }
+
                 // The status the items imply, and the mail that follows it.
                 const rolled = await tx.order.findUnique({ where: { id: created.id }, include: orderInclude });
                 const status = impliedOrderStatus(rolled.items);
@@ -570,11 +692,18 @@ export const confirmOrder = async (input, actor, req) => {
                 await syncOrderReceivableInTx(tx, created.id, actor, req);
 
                 await enqueueEvent(tx, {
-                    topic: status === 'CONFIRMED' ? TOPICS.ORDER_CONFIRMED : TOPICS.ORDER_REQUESTED,
-                    payload: { orderId: created.id },
+                    topic:
+                        status === 'PENDING_APPROVAL'
+                            ? TOPICS.BOOKING_AWAITING_APPROVAL
+                            : status === 'CONFIRMED'
+                              ? TOPICS.ORDER_CONFIRMED
+                              : TOPICS.ORDER_REQUESTED,
+                    payload: status === 'PENDING_APPROVAL' ? { product: 'ORDER', bookingId: created.id } : { orderId: created.id },
                     entityType: AUDIT_ENTITY.order,
                     entityId: created.id
                 });
+
+                await enqueueEvent(tx, { topic: TOPICS.BOOKING_CREATED, payload: { product: 'ORDER', bookingId: created.id }, entityType: AUDIT_ENTITY.order, entityId: created.id });
 
                 return finished;
             },
@@ -660,7 +789,7 @@ export const releaseOrderHolds = async (holdTokens) => {
 
 // --- reads -------------------------------------------------------------------
 
-const assertMayRead = (order, viewer, { email } = {}) => {
+export const assertMayRead = (order, viewer, { email } = {}) => {
     if (readsAllBookings(viewer)) return;
 
     if (viewer?.partnerId) {
@@ -694,27 +823,66 @@ export const findOrderOr404 = async (reference, viewer, options = {}) => {
 };
 
 /**
- * The order a viewer may *change*. Narrower than reading: management and
- * finance read every order, but a cancellation fixes money, so of the
- * platform side only holders of the capability pass; staff who read but may
- * not change get the stranger's 404, the same as any other booking module.
+ * The order row, locked for the rest of the transaction and read under the
+ * lock. Every change to an existing order — cancelling it or one of its
+ * items, approving or rejecting it, answering one of its requests — starts
+ * here, so two changes to one order take turns and the second reads what the
+ * first wrote: a double cancel, or a no racing a yes, is a 409, never the
+ * seats handed back twice. Null when there is no such order.
+ *
+ * `authorize` throws for a caller who may not change the order. It runs on a
+ * plain read before the lock, so a stranger is turned away at once instead
+ * of queueing behind (and holding a connection for) everyone else's lock,
+ * and again on the row read under the lock, which may have changed meanwhile.
  */
-const findOrderForChange = async (reference, viewer, { capability, ...options }) => {
-    const order = await prisma.order.findUnique({ where: { reference }, include: orderInclude });
+export const lockOrderInTx = async (tx, where, authorize = () => {}) => {
+    const found = await tx.order.findFirst({ where, select: { id: true, partnerId: true, leadEmail: true } });
+
+    if (!found) return null;
+
+    authorize(found);
+
+    await lockRows(tx, 'orders', [found.id]);
+
+    const order = await tx.order.findUnique({ where: { id: found.id }, include: orderInclude });
+
+    authorize(order);
+
+    return order;
+};
+
+/** `findOrderOr404` for a change: inside the transaction, under the order's lock. */
+const findOrderForUpdate = async (tx, reference, viewer, options = {}) => {
+    const order = await lockOrderInTx(tx, { reference }, (row) => assertMayRead(row, viewer, options));
 
     if (!order) {
         throw new NotFoundError('Order not found');
     }
 
-    if (can(viewer, capability)) {
-        return order;
-    }
+    return order;
+};
 
-    if (readsAllBookings(viewer)) {
+/**
+ * The order a viewer may *change*. Narrower than reading: management and
+ * finance read every order, but a cancellation fixes money, so of the
+ * platform side only holders of the capability pass; staff who read but may
+ * not change get the stranger's 404, the same as any other booking module.
+ * Read under the order's lock, inside the caller's transaction.
+ */
+const findOrderForChange = async (tx, reference, viewer, { capability, ...options }) => {
+    const order = await lockOrderInTx(tx, { reference }, (row) => {
+        if (can(viewer, capability)) return;
+
+        if (readsAllBookings(viewer)) {
+            throw new NotFoundError('Order not found');
+        }
+
+        assertMayRead(row, viewer, options);
+    });
+
+    if (!order) {
         throw new NotFoundError('Order not found');
     }
-
-    assertMayRead(order, viewer, options);
 
     return order;
 };
@@ -723,6 +891,7 @@ export const listOrders = async (query, viewer) => {
     const { page, pageSize, status, packageId, partnerId, from, to, search } = query;
 
     const where = {
+        ...bookingWhere(query, { order: true, destination: (id) => ({ package: { is: { destinationId: id } } }) }),
         ...(readsAllBookings(viewer) ? { ...(partnerId ? { partnerId } : {}) } : { partnerId: viewer?.partnerId ?? '__none__' }),
         ...(status ? { status: { in: Array.isArray(status) ? status : [status] } } : {}),
         ...(packageId ? { packageId } : {}),
@@ -743,7 +912,10 @@ export const listOrders = async (query, viewer) => {
         prisma.order.findMany({
             where,
             include: orderInclude,
-            orderBy: status === 'PENDING_CONFIRMATION' ? [{ requestDeadlineAt: 'asc' }, { createdAt: 'desc' }] : { createdAt: 'desc' },
+            orderBy: bookingOrderBy(query.sort, {
+                dateField: 'startDate',
+                fallback: status === 'PENDING_CONFIRMATION' ? [{ requestDeadlineAt: 'asc' }, { createdAt: 'desc' }] : { createdAt: 'desc' }
+            }),
             skip: (page - 1) * pageSize,
             take: pageSize
         })
@@ -853,7 +1025,7 @@ const assertLive = (item) => {
 
 export const cancelOrderItem = async (reference, slotIndex, { reason, email } = {}, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
+        const order = await findOrderForChange(tx, reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email });
         const item = order.items.find((candidate) => candidate.slotIndex === slotIndex);
 
         if (!item) {
@@ -879,6 +1051,18 @@ export const cancelOrderItem = async (reference, slotIndex, { reason, email } = 
     }, { timeout: config.order.txTimeoutMs });
 
 export const cancelOrderInTx = async (tx, order, { reason, waiveCharges = false }, actor, req) => {
+    // Callers read the order under its lock (`lockOrderInTx`). It is taken
+    // again here — nothing for a transaction that already holds it — and the
+    // status checked against the row as it stands, so even a caller holding
+    // a stale read cannot cancel twice: the second waits for the first, then
+    // finds the order moved on, rather than releasing every item again.
+    await lockRows(tx, 'orders', [order.id]);
+    const current = await tx.order.findUnique({ where: { id: order.id }, select: { status: true } });
+
+    if (current?.status !== order.status) {
+        throw new ConflictError('That order has changed since it was read', { reason: 'STATUS_CHANGED', status: current?.status ?? null });
+    }
+
     if (orderMachine.isTerminal(order.status)) {
         throw new ConflictError('That order cannot be cancelled', { reason: 'NOT_CANCELLABLE', status: order.status });
     }
@@ -927,7 +1111,7 @@ export const cancelOrder = (reference, { reason, email } = {}, actor, req) =>
         async (tx) =>
             cancelOrderInTx(
                 tx,
-                await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email }),
+                await findOrderForChange(tx, reference, actor, { capability: CAPABILITIES.BOOKINGS_CANCEL, email }),
                 { reason },
                 actor,
                 req
@@ -954,7 +1138,7 @@ const requestedItem = (order, slotIndex) => {
 
 export const confirmOrderItem = (reference, slotIndex, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderOr404(reference, actor);
+        const order = await findOrderForUpdate(tx, reference, actor);
         const item = requestedItem(order, slotIndex);
         const child = childOf(item);
 
@@ -985,7 +1169,7 @@ export const confirmOrderItem = (reference, slotIndex, actor, req) =>
         }
 
         return rolled.order;
-    });
+    }, { timeout: config.order.txTimeoutMs });
 
 /**
  * Declining an item. Optional: it drops out at no charge and the order's
@@ -994,7 +1178,7 @@ export const confirmOrderItem = (reference, slotIndex, actor, req) =>
  */
 export const declineOrderItem = (reference, slotIndex, { reason }, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderOr404(reference, actor);
+        const order = await findOrderForUpdate(tx, reference, actor);
         const item = requestedItem(order, slotIndex);
         const child = childOf(item);
 
@@ -1049,13 +1233,13 @@ export const declineOrderItem = (reference, slotIndex, { reason }, actor, req) =
         }
 
         return rolled.order;
-    });
+    }, { timeout: config.order.txTimeoutMs });
 
 // --- paperwork ---------------------------------------------------------------
 
 export const amendOrder = (reference, input, actor, req) =>
     prisma.$transaction(async (tx) => {
-        const order = await findOrderForChange(reference, actor, { capability: CAPABILITIES.BOOKINGS_WRITE, email: input.email });
+        const order = await findOrderForChange(tx, reference, actor, { capability: CAPABILITIES.BOOKINGS_WRITE, email: input.email });
 
         if (orderMachine.isTerminal(order.status)) {
             throw new ConflictError('That order can no longer be amended', { status: order.status });
@@ -1081,6 +1265,15 @@ export const amendOrder = (reference, input, actor, req) =>
             metadata: { fields: Object.keys(data) },
             req
         });
+
+        await enqueueEvent(tx, {
+            topic: TOPICS.BOOKING_MODIFIED,
+            payload: { product: 'ORDER', bookingId: order.id, fields: Object.keys(data), byUserId: actor?.id ?? null },
+            entityType: AUDIT_ENTITY.order,
+            entityId: order.id
+        });
+
+        await syncBookingIndexInTx(tx, 'ORDER', order.id);
 
         return updated;
     });

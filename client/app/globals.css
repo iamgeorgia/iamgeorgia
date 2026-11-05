@@ -159,6 +159,18 @@
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
+    /* Every shell has a bar pinned to the top: the site header (h-18, h-20
+       from lg), the admin bar (h-16) and the driver bar. Without this, a field
+       reached with Tab or an anchor jump was scrolled to y=0 and landed under
+       the bar (WCAG 2.4.11). The header height plus a 1rem breath; in-page
+       anchors add only what sits below the header (`scroll-mt-14`). */
+    scroll-padding-top: 5.5rem;
+  }
+
+  @media (width >= 64rem) {
+    html {
+      scroll-padding-top: 6rem;
+    }
   }
 
   body {
@@ -564,6 +576,35 @@
   }
   &::-webkit-scrollbar-thumb:hover {
     background: color-mix(in srgb, var(--color-on-dark) 30%, transparent);
+  }
+}
+
+/*
+ * A row of chips that wraps on a tablet and up, and on a phone becomes one
+ * swipeable line bleeding to the screen edges instead. Seven quick views or
+ * seven statuses wrapped into three or four rows on a 390px phone, which put
+ * the register's first row a full screen below its title. The bleed matches
+ * the 1rem gutter both panels use below `sm`; the block padding is room for
+ * the focus ring, which a scroll box would otherwise clip.
+ */
+@utility chip-rail {
+  @media (width < 40rem) {
+    /* Important: the rows carry `flex-wrap` for the wider screens, and
+       Tailwind emits this custom utility ahead of it in the stylesheet. */
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    margin-inline: -1rem;
+    padding: 0.25rem 1rem;
+    margin-block: -0.25rem;
+    scroll-padding-inline: 1rem;
+    scrollbar-width: none;
+    &::-webkit-scrollbar {
+      display: none;
+    }
+    & > * {
+      flex-shrink: 0;
+    }
   }
 }
 

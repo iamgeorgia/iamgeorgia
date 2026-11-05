@@ -1,23 +1,17 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { NewRoleForm } from "@/components/admin/NewRoleForm";
 import { listCapabilities } from "@/lib/api/roles";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 
 export const metadata: Metadata = { title: "New role — Roles" };
 
 /** Creating a custom role. */
 export default async function NewRolePage() {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "roles.manage")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { path } = await getI18n();
   const catalogue = await listCapabilities();

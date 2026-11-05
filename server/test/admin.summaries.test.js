@@ -1,5 +1,6 @@
 import { after, before, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { isDeepStrictEqual } from 'node:util';
 
 import request from 'supertest';
 
@@ -25,6 +26,25 @@ const app = createApp();
 const dbAvailable = await databaseAvailable();
 
 const DAY = 86_400_000;
+
+/**
+ * These figures are the whole platform's, and other files book, cancel and
+ * apply at the same moment, so one reading can move by somebody else's row.
+ * `measure` seeds its own rows between two readings and returns how far the
+ * figures moved; it is tried afresh up to five times until it moves by
+ * `expected`. A summary that counts the wrong rows is off on every try, not
+ * just one.
+ */
+const untilSteady = async (measure, expected) => {
+    const seen = [];
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+        seen.push(await measure());
+        if (isDeepStrictEqual(seen.at(-1), expected)) return;
+    }
+
+    assert.deepEqual(seen.at(-1), expected, `moved by ${JSON.stringify(seen)}`);
+};
 
 /**
  * The aggregate endpoints behind the admin panel's sidebar badges and
@@ -143,37 +163,41 @@ describe('admin summaries', { skip: dbAvailable ? false : 'Postgres is not reach
     });
 
     it('counts a live booking and a pending application, and moves when they do', async () => {
-        const before = (await request(app).get('/api/admin/badges').set('Cookie', adminCookie)).body;
+        await untilSteady(
+            async () => {
+                const before = (await request(app).get('/api/admin/badges').set('Cookie', adminCookie)).body;
 
-        await seedHotelBooking({ status: 'PENDING' });
-        await seedHotelBooking({ status: 'CANCELLED', cancelledAt: new Date() });
-        await makePartner(tracker, { status: 'PENDING_APPROVAL' });
+                await seedHotelBooking({ status: 'PENDING' });
+                await seedHotelBooking({ status: 'CANCELLED', cancelledAt: new Date() });
+                await makePartner(tracker, { status: 'PENDING_APPROVAL' });
 
-        const after = (await request(app).get('/api/admin/badges').set('Cookie', adminCookie)).body;
-
-        assert.equal(after.activeBookings, before.activeBookings + 1);
-        assert.equal(after.pendingPartners, before.pendingPartners + 1);
+                const after = (await request(app).get('/api/admin/badges').set('Cookie', adminCookie)).body;
+                return { activeBookings: after.activeBookings - before.activeBookings, pendingPartners: after.pendingPartners - before.pendingPartners };
+            },
+            { activeBookings: 1, pendingPartners: 1 }
+        );
     });
 
     it('counts an unassigned leg inside the window and ignores one beyond it', async () => {
-        const before = (await request(app).get('/api/admin/badges').set('Cookie', dispatcherCookie)).body;
+        await untilSteady(async () => {
+            const before = (await request(app).get('/api/admin/badges').set('Cookie', dispatcherCookie)).body;
 
-        await makeTransferBooking(tracker, {
-            vehicleId: vehicleClass.id,
-            from: airport,
-            to: city,
-            pickupAt: new Date(Date.now() + 3 * DAY)
-        });
-        await makeTransferBooking(tracker, {
-            vehicleId: vehicleClass.id,
-            from: airport,
-            to: city,
-            pickupAt: new Date(Date.now() + 60 * DAY)
-        });
+            await makeTransferBooking(tracker, {
+                vehicleId: vehicleClass.id,
+                from: airport,
+                to: city,
+                pickupAt: new Date(Date.now() + 3 * DAY)
+            });
+            await makeTransferBooking(tracker, {
+                vehicleId: vehicleClass.id,
+                from: airport,
+                to: city,
+                pickupAt: new Date(Date.now() + 60 * DAY)
+            });
 
-        const after = (await request(app).get('/api/admin/badges').set('Cookie', dispatcherCookie)).body;
-
-        assert.equal(after.unassignedLegs, before.unassignedLegs + 1);
+            const after = (await request(app).get('/api/admin/badges').set('Cookie', dispatcherCookie)).body;
+            return after.unassignedLegs - before.unassignedLegs;
+        }, 1);
     });
 
     // --- Hotel booking summary ---------------------------------------------
@@ -186,30 +210,35 @@ describe('admin summaries', { skip: dbAvailable ? false : 'Postgres is not reach
     });
 
     it('sums recent live bookings by currency and leaves cancellations out', async () => {
-        const before = (await request(app).get('/api/admin/bookings/summary').set('Cookie', adminCookie)).body;
-        const gelBefore = before.recent.byCurrency.find((row) => row.currency === 'GEL') ?? { amountCents: 0, count: 0 };
-        const usdBefore = before.recent.byCurrency.find((row) => row.currency === 'USD') ?? { amountCents: 0, count: 0 };
+        const inCurrency = (body, currency) => body.recent.byCurrency.find((row) => row.currency === currency) ?? { amountCents: 0, count: 0 };
+        let res;
 
-        await seedHotelBooking({ status: 'CONFIRMED', sellTotalCents: 23000 });
-        await seedHotelBooking({ status: 'PENDING', sellTotalCents: 7000 });
-        await seedHotelBooking({ status: 'CANCELLED', cancelledAt: new Date(), sellTotalCents: 99000 });
-        await seedHotelBooking({ status: 'CONFIRMED', currency: 'USD', sellTotalCents: 5000 });
-        // Booked long ago: outside the window whatever its check-in date.
-        await seedHotelBooking({ status: 'CONFIRMED', sellTotalCents: 50000, createdAt: new Date(Date.now() - 45 * DAY) });
+        await untilSteady(
+            async () => {
+                const before = (await request(app).get('/api/admin/bookings/summary').set('Cookie', adminCookie)).body;
 
-        const res = await request(app).get('/api/admin/bookings/summary').query({ days: 30 }).set('Cookie', adminCookie);
+                await seedHotelBooking({ status: 'CONFIRMED', sellTotalCents: 23000 });
+                await seedHotelBooking({ status: 'PENDING', sellTotalCents: 7000 });
+                await seedHotelBooking({ status: 'CANCELLED', cancelledAt: new Date(), sellTotalCents: 99000 });
+                await seedHotelBooking({ status: 'CONFIRMED', currency: 'USD', sellTotalCents: 5000 });
+                // Booked long ago: outside the window whatever its check-in date.
+                await seedHotelBooking({ status: 'CONFIRMED', sellTotalCents: 50000, createdAt: new Date(Date.now() - 45 * DAY) });
 
-        assert.equal(res.status, 200);
+                res = await request(app).get('/api/admin/bookings/summary').query({ days: 30 }).set('Cookie', adminCookie);
+                assert.equal(res.status, 200);
+
+                const moved = (currency) => ({
+                    amountCents: inCurrency(res.body, currency).amountCents - inCurrency(before, currency).amountCents,
+                    count: inCurrency(res.body, currency).count - inCurrency(before, currency).count
+                });
+                return { GEL: moved('GEL'), USD: moved('USD') };
+            },
+            { GEL: { amountCents: 30000, count: 2 }, USD: { amountCents: 5000, count: 1 } }
+        );
+
         assert.equal(typeof res.body.activeCount, 'number');
         assert.equal(res.body.recent.days, 30);
         assert.ok(Date.parse(res.body.recent.from) > 0);
-
-        const gel = res.body.recent.byCurrency.find((row) => row.currency === 'GEL');
-        const usd = res.body.recent.byCurrency.find((row) => row.currency === 'USD');
-        assert.equal(gel.amountCents, gelBefore.amountCents + 30000);
-        assert.equal(gel.count, gelBefore.count + 2);
-        assert.equal(usd.amountCents, usdBefore.amountCents + 5000);
-        assert.equal(usd.count, usdBefore.count + 1);
 
         // Largest first, so the tile can show the leading currency.
         const amounts = res.body.recent.byCurrency.map((row) => row.amountCents);
@@ -217,30 +246,38 @@ describe('admin summaries', { skip: dbAvailable ? false : 'Postgres is not reach
     });
 
     it('widens with the window', async () => {
-        const narrow = (await request(app).get('/api/admin/bookings/summary').query({ days: 30 }).set('Cookie', adminCookie)).body;
-        const wide = (await request(app).get('/api/admin/bookings/summary').query({ days: 60 }).set('Cookie', adminCookie)).body;
-
         const sum = (body) => body.recent.byCurrency.reduce((total, row) => total + row.amountCents, 0);
+
         // The 45-day-old booking above is inside 60 days and outside 30.
-        assert.ok(sum(wide) >= sum(narrow) + 50000);
+        await untilSteady(async () => {
+            const narrow = (await request(app).get('/api/admin/bookings/summary').query({ days: 30 }).set('Cookie', adminCookie)).body;
+            const wide = (await request(app).get('/api/admin/bookings/summary').query({ days: 60 }).set('Cookie', adminCookie)).body;
+            return sum(wide) >= sum(narrow) + 50000;
+        }, true);
     });
 
     // --- Transfer booking summary -------------------------------------------
 
     it('counts every transfer booking and sums the confirmed ones', async () => {
-        const before = (await request(app).get('/api/admin/transfers/bookings/summary').set('Cookie', adminCookie)).body;
-        const gelBefore = before.confirmedValue.byCurrency.find((row) => row.currency === 'GEL') ?? { amountCents: 0 };
+        // In francs: every other file's transfer booking is the factory's
+        // GEL 200.00, created and purged all through the run, so the sum is
+        // only this file's in a currency nobody else books in.
+        const chfOf = (body) => (body.confirmedValue.byCurrency.find((row) => row.currency === 'CHF') ?? { amountCents: 0 }).amountCents;
 
-        await makeTransferBooking(tracker, { vehicleId: vehicleClass.id, from: airport, to: city });
-        await makeTransferBooking(tracker, { vehicleId: vehicleClass.id, from: airport, to: city, status: 'CANCELLED' });
+        await untilSteady(
+            async () => {
+                const before = (await request(app).get('/api/admin/transfers/bookings/summary').set('Cookie', adminCookie)).body;
 
-        const res = await request(app).get('/api/admin/transfers/bookings/summary').set('Cookie', adminCookie);
+                await makeTransferBooking(tracker, { vehicleId: vehicleClass.id, from: airport, to: city, currency: 'CHF' });
+                await makeTransferBooking(tracker, { vehicleId: vehicleClass.id, from: airport, to: city, currency: 'CHF', status: 'CANCELLED' });
 
-        assert.equal(res.status, 200);
-        assert.equal(res.body.total, before.total + 2);
-        assert.equal(res.body.confirmed, before.confirmed + 1);
-        const gel = res.body.confirmedValue.byCurrency.find((row) => row.currency === 'GEL');
-        assert.equal(gel.amountCents, gelBefore.amountCents + 20000);
+                const res = await request(app).get('/api/admin/transfers/bookings/summary').set('Cookie', adminCookie);
+                assert.equal(res.status, 200);
+
+                return { total: res.body.total - before.total, confirmed: res.body.confirmed - before.confirmed, chfCents: chfOf(res.body) - chfOf(before) };
+            },
+            { total: 2, confirmed: 1, chfCents: 20000 }
+        );
     });
 
     it('does not mistake the word for a reference', async () => {

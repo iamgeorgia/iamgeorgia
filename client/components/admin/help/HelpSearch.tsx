@@ -6,7 +6,6 @@ import { useEffect, useId, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useLocalePath } from "@/lib/i18n/provider";
-import type { HelpRole } from "@/lib/admin/help/types";
 import type { HelpSearchEntry, HelpSearchHit } from "@/lib/admin/help/search";
 import { HelpInline } from "./HelpInline";
 
@@ -25,15 +24,16 @@ import { HelpInline } from "./HelpInline";
  */
 type Engine = {
   index: HelpSearchEntry[];
-  search: (index: HelpSearchEntry[], query: string, role: HelpRole) => HelpSearchHit[];
+  search: (index: HelpSearchEntry[], query: string) => HelpSearchHit[];
 };
 
 export function HelpSearch({
-  role,
+  capabilities,
   categoryTitles,
   onActiveChange,
 }: {
-  role: HelpRole;
+  /** What the reader holds; only the articles these open are indexed. */
+  capabilities: readonly string[];
   /** Category id → title, for the eyebrow on each result. */
   categoryTitles: Record<string, string>;
   /** Told whether results are currently replacing the hub's own content. */
@@ -57,11 +57,11 @@ export function HelpSearch({
     if (engine.current) return engine.current;
     setLoading(true);
     try {
-      const [{ helpArticles }, { buildHelpSearchIndex, searchHelp }] = await Promise.all([
+      const [{ helpArticlesFor }, { buildHelpSearchIndex, searchHelp }] = await Promise.all([
         import("@/lib/admin/help"),
         import("@/lib/admin/help/search"),
       ]);
-      engine.current = { index: buildHelpSearchIndex(helpArticles), search: searchHelp };
+      engine.current = { index: buildHelpSearchIndex(helpArticlesFor(capabilities)), search: searchHelp };
       return engine.current;
     } finally {
       setLoading(false);
@@ -82,7 +82,7 @@ export function HelpSearch({
       }
       const loaded = await ensureEngine();
       if (cancelled) return;
-      setHits(loaded.search(loaded.index, debounced, role));
+      setHits(loaded.search(loaded.index, debounced));
       onActiveChange?.(true);
     };
     void Promise.resolve().then(run);
@@ -91,7 +91,7 @@ export function HelpSearch({
     };
     // `ensureEngine` is stable in effect: it only reads a ref.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [debounced, role]);
+  }, [debounced]);
 
   const active = debounced.length > 0;
 

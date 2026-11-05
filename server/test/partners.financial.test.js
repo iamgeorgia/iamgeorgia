@@ -155,6 +155,34 @@ describe('financial data exposure', { skip: dbAvailable ? false : 'Postgres is n
         assert.equal(finance.body.iban, IBAN);
     });
 
+    it('keeps the commission rate and credit limit from staff who read partners for the bookings desk', async () => {
+        const partner = await scenario();
+
+        for (const role of ['TOUR_OPERATOR', 'FINANCE_OPERATOR']) {
+            const cookie = await cookieFor(await makeAdmin(tracker, { role }));
+            const detail = await request(app).get(`/api/admin/partners/${partner.id}`).set('Cookie', cookie);
+
+            assert.equal(detail.status, 200, role);
+            assert.equal('commissionRateBps' in detail.body, false, `${role} sees the commission`);
+            // The finance operator watches the debts, so the limit is its business; the desk's it is not.
+            assert.equal('creditLimitCents' in detail.body, role === 'FINANCE_OPERATOR', `${role} credit limit`);
+        }
+
+        for (const role of ['ADMIN', 'MANAGEMENT', 'ACCOUNTANT']) {
+            const cookie = await cookieFor(await makeAdmin(tracker, { role }));
+            const detail = await request(app).get(`/api/admin/partners/${partner.id}`).set('Cookie', cookie);
+
+            assert.equal(detail.status, 200, role);
+            assert.equal(typeof detail.body.commissionRateBps, 'number', `${role} commission`);
+            assert.equal('creditLimitMode' in detail.body, true, `${role} credit limit`);
+        }
+
+        // A company is party to its own terms and keeps reading them.
+        const own = await request(app).get('/api/partner/me').set('Cookie', await cookieFor(await makePartnerUser(tracker, partner)));
+        assert.equal(own.status, 200);
+        assert.equal(typeof own.body.commissionRateBps, 'number');
+    });
+
     it('keeps the IBAN out of the session an owner bootstraps from', async () => {
         const partner = await scenario();
         const cookie = await cookieFor(await makePartnerUser(tracker, partner));

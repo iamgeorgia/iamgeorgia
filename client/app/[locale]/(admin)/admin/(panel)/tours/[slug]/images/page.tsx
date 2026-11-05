@@ -6,10 +6,12 @@ import { TourGalleryManager } from "@/components/admin/TourGalleryManager";
 import { getTour } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Images" };
 
 export default async function TourImagesPage({ params }: PageProps<"/[locale]/admin/tours/[slug]/images">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

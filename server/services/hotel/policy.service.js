@@ -186,6 +186,37 @@ export const freeCancellationUntil = (schedule) => {
 };
 
 /**
+ * Moves the end of free cancellation on a frozen schedule, by hand.
+ *
+ * The windows stay what they were; only the boundary between "free" and the
+ * first charge moves to `instant`. A schedule that was never free (a
+ * non-refundable rate) gains a free window up to that moment. What
+ * cancelling costs is read off the schedule, so the deadline a desk shows
+ * and the charge it applies can never disagree.
+ */
+export const moveFreeCancellationUntil = (schedule, instant) => {
+    const at = (instant instanceof Date ? instant : new Date(instant)).toISOString();
+    const windows = schedule.windows.map((window) => ({ ...window }));
+    const free = windows.filter((window) => window.chargeCents === 0);
+
+    if (free.length === 0) {
+        windows.unshift({ fromAt: null, toAt: at, chargeCents: 0, basis: 'FREE', description: 'Free cancellation' });
+        windows[1].fromAt = at;
+    } else {
+        const last = free.at(-1);
+        const index = windows.indexOf(last);
+
+        last.toAt = windows[index + 1] ? at : null;
+        if (windows[index + 1]) windows[index + 1].fromAt = at;
+    }
+
+    // A charged window that now ends before it starts is swallowed.
+    const kept = windows.filter((window, index) => index === 0 || window.toAt === null || Date.parse(window.toAt) > Date.parse(window.fromAt));
+
+    return { ...schedule, windows: kept };
+};
+
+/**
  * The three policies every new property starts from, so the wizard's policy
  * step is a choice rather than a blank form.
  *

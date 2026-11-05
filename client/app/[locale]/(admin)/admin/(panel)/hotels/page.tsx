@@ -8,6 +8,8 @@ import { StatCard } from "@/components/admin/StatCard";
 import { listHotels } from "@/lib/api/hotels";
 import { hotelQueryFromParams } from "@/lib/admin/hotels";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Hotels" };
 
@@ -23,6 +25,7 @@ export const metadata: Metadata = { title: "Hotels" };
 export default async function AdminHotelsPage({
   searchParams,
 }: PageProps<"/[locale]/admin/hotels">) {
+  const session = await requireScreen();
   const { path } = await getI18n();
   const params = await searchParams;
   const query = hotelQueryFromParams(params);
@@ -39,13 +42,15 @@ export default async function AdminHotelsPage({
         title="Hotels"
         description="Every property on the platform and where each sits in its lifecycle."
         actions={
-          <Link
-            href={path("/admin/hotels/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add property
-          </Link>
+          can(session, "catalogue.write") && (
+            <Link
+              href={path("/admin/hotels/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add property
+            </Link>
+          )
         }
       />
 

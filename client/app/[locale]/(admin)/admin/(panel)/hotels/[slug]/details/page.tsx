@@ -6,6 +6,7 @@ import { HotelDetailsEditor } from "@/components/admin/HotelDetailsEditor";
 import { getHotel, listAmenities } from "@/lib/api/hotels";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Details" };
 
@@ -17,6 +18,7 @@ export const metadata: Metadata = { title: "Details" };
 export default async function HotelDetailsPage({
   params,
 }: PageProps<"/[locale]/admin/hotels/[slug]/details">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

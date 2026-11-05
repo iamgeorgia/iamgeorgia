@@ -12,7 +12,6 @@ export const article = {
   title: "Details and itinerary",
   summary: "The words a traveller reads, the age limits, the four lists and the day-by-day itinerary — all saved with one button.",
   category: "tours",
-  roles: ["ADMIN"],
   routes: ["/admin/tours/[slug]/details"],
   keywords: ["description", "highlights", "included", "not included", "important information", "itinerary", "day", "meals", "overnight", "meeting point", "meeting time", "minimum age", "infant", "child", "editorial image", "cover"],
   related: ["tr-create", "tr-publish-checklist", "md-images", "pb-translations"],

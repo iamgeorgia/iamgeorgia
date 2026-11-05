@@ -88,7 +88,42 @@ export const GENERIC_ERROR_MESSAGE = "Something went wrong. Try again.";
  * context ("Could not close those dates.").
  */
 export function describeError(error: unknown, fallback = GENERIC_ERROR_MESSAGE): string {
-  return error instanceof ApiError ? error.message : fallback;
+  if (!(error instanceof ApiError)) return fallback;
+  return describeRefusal(error) ?? error.message;
+}
+
+/**
+ * Whether a failure was the server refusing on capability grounds — the
+ * viewer's role does not allow the action — as opposed to any other 403.
+ * Shared by the panels, which re-read the session on it so a role changed
+ * mid-session is reflected in the menus without a sign-out.
+ */
+export function isCapabilityRefusal(error: unknown): error is ApiError {
+  if (!(error instanceof ApiError) || error.status !== 403) return false;
+  const details = error.details as { reason?: unknown } | undefined;
+  return details?.reason === "INSUFFICIENT_CAPABILITY";
+}
+
+/** The capability names a refusal asked for, if it named any. */
+export function refusedCapabilities(error: unknown): string[] {
+  if (!isCapabilityRefusal(error)) return [];
+  const details = error.details as { required?: unknown };
+  return Array.isArray(details.required) ? details.required.filter((c): c is string => typeof c === "string") : [];
+}
+
+/**
+ * A sentence for a capability refusal that says what was missing, so the
+ * person can ask for the right thing rather than "access". Falls back to the
+ * server's own message when the refusal named nothing.
+ */
+function describeRefusal(error: ApiError): string | null {
+  if (!isCapabilityRefusal(error)) return null;
+  const required = refusedCapabilities(error);
+  if (required.length === 0) return null;
+  const details = error.details as { fields?: unknown };
+  const fields = Array.isArray(details.fields) ? (details.fields as string[]) : [];
+  const what = fields.length > 0 ? `Changing ${fields.join(", ")}` : "This action";
+  return `${what} is not part of your role. It needs ${required.length === 1 ? "" : "one of "}${required.join(", ")}.`;
 }
 
 /**

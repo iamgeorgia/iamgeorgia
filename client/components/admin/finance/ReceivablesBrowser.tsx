@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ChevronRight, Search, X } from "lucide-react";
@@ -39,7 +40,9 @@ const COLUMNS: Column[] = [
   { label: "Outstanding", align: "end" },
   { label: "Status" },
   { label: "Due" },
-  { label: "", align: "end" },
+  // The reference already opens the record; the extra "Open" link earns its
+  // column only once the row has room for it.
+  { label: "", align: "end", hideBelow: "xl" },
 ];
 
 const isOpen = (receivable: Receivable) => receivable.status === "OPEN" || receivable.status === "PARTIAL";
@@ -147,96 +150,101 @@ export function ReceivablesBrowser({
   return (
     <section className="mt-8">
       <div className="rounded-sm border border-line bg-surface p-4 sm:p-5">
-        <div className="relative">
-          <Search
-            size={16}
-            className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Reference, name or email"
-            aria-label="Search receivables"
-            className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
-          />
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
-          <fieldset>
-            <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Status
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => apply({ status: null })}
-                aria-pressed={statuses.length === 0}
-                className={chip(statuses.length === 0)}
-              >
-                All
-              </button>
-              {STATUSES.map((value) => (
+        <FilterDisclosure
+          count={Math.max(0, activeFilters - (query.trim() !== "" ? 1 : 0))}
+          lead={
+          <div className="relative min-w-[16rem] flex-1">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
+              aria-hidden
+            />
+            <input
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Reference, name or email"
+              aria-label="Search receivables"
+              className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
+            />
+          </div>
+          }
+        >
+          <div className="flex flex-wrap gap-x-8 gap-y-4">
+            <fieldset>
+              <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Status
+              </legend>
+              <div className="flex flex-wrap gap-2">
                 <button
-                  key={value}
                   type="button"
-                  onClick={() => toggleStatus(value)}
-                  aria-pressed={statuses.includes(value)}
-                  className={chip(statuses.includes(value))}
+                  onClick={() => apply({ status: null })}
+                  aria-pressed={statuses.length === 0}
+                  className={chip(statuses.length === 0)}
                 >
-                  {settlementStatusLabels[value]}
+                  All
                 </button>
-              ))}
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Show
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => apply({ overdue: overdue ? null : "true" })}
-                aria-pressed={overdue}
-                className={chip(overdue)}
-              >
-                Overdue only
-              </button>
-              <button
-                type="button"
-                onClick={() => apply({ guests: guests ? null : "true", partner: null })}
-                aria-pressed={guests}
-                className={chip(guests)}
-              >
-                Guests only
-              </button>
-            </div>
-          </fieldset>
-
-          <fieldset>
-            <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
-              Currency
-            </legend>
-            <div className="flex flex-wrap gap-2">
-              {(["all", ...FINANCE_CURRENCIES] as const).map((value) => {
-                const selected = value === "all" ? currency === "" : currency === value;
-                return (
+                {STATUSES.map((value) => (
                   <button
                     key={value}
                     type="button"
-                    onClick={() => apply({ currency: value })}
-                    aria-pressed={selected}
-                    className={chip(selected)}
+                    onClick={() => toggleStatus(value)}
+                    aria-pressed={statuses.includes(value)}
+                    className={chip(statuses.includes(value))}
                   >
-                    {value === "all" ? "All" : value}
+                    {settlementStatusLabels[value]}
                   </button>
-                );
-              })}
-            </div>
-          </fieldset>
-        </div>
+                ))}
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Show
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => apply({ overdue: overdue ? null : "true" })}
+                  aria-pressed={overdue}
+                  className={chip(overdue)}
+                >
+                  Overdue only
+                </button>
+                <button
+                  type="button"
+                  onClick={() => apply({ guests: guests ? null : "true", partner: null })}
+                  aria-pressed={guests}
+                  className={chip(guests)}
+                >
+                  Guests only
+                </button>
+              </div>
+            </fieldset>
+
+            <fieldset>
+              <legend className="mb-2 text-[0.75rem] font-medium tracking-wide text-muted uppercase">
+                Currency
+              </legend>
+              <div className="flex flex-wrap gap-2">
+                {(["all", ...FINANCE_CURRENCIES] as const).map((value) => {
+                  const selected = value === "all" ? currency === "" : currency === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => apply({ currency: value })}
+                      aria-pressed={selected}
+                      className={chip(selected)}
+                    >
+                      {value === "all" ? "All" : value}
+                    </button>
+                  );
+                })}
+              </div>
+            </fieldset>
+          </div>
+        </FilterDisclosure>
 
         {partner && (
           <ul className="mt-4 flex flex-wrap gap-2" aria-label="Narrowed to">
@@ -290,7 +298,7 @@ export function ReceivablesBrowser({
                   <Link
                     href={href(receivable)}
                     prefetch={false}
-                    className="font-mono text-[0.8125rem] font-medium text-ink underline-offset-4 hover:underline"
+                    className="font-mono text-[0.8125rem] font-medium whitespace-nowrap text-ink underline-offset-4 hover:underline"
                   >
                     {receivable.reference}
                   </Link>
@@ -300,7 +308,10 @@ export function ReceivablesBrowser({
                 </Cell>
                 <Cell>
                   <span className="block text-ink">{receivableDebtorName(receivable)}</span>
-                  <span className="block text-[0.75rem] text-muted">{debtorMeta(receivable)}</span>
+                  {/* Wraps rather than running on: a guest's email was the
+                      longest unbreakable line in the row and set the column's
+                      width, pushing the table past the panel at 1024px. */}
+                  <span className="block text-[0.75rem] wrap-anywhere text-muted">{debtorMeta(receivable)}</span>
                 </Cell>
                 <Cell align="end" hideBelow="xl" className="tabular-nums whitespace-nowrap">
                   {formatMoney(receivable.amountCents, receivable.currency)}
@@ -319,7 +330,7 @@ export function ReceivablesBrowser({
                   <SettlementStatusBadge status={receivable.status} overdue={receivable.overdue} />
                 </Cell>
                 <Cell>{due(receivable)}</Cell>
-                <Cell align="end">
+                <Cell align="end" hideBelow="xl">
                   <Link
                     href={href(receivable)}
                     prefetch={false}

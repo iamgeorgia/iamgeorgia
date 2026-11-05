@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MediaImg } from "@/components/ui/MediaImg";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { ArrowRight, CalendarDays, ExternalLink, FileText, ImageIcon, Languages, Tags, Wallet } from "lucide-react";
@@ -26,7 +27,7 @@ import {
 } from "@/lib/admin/tours";
 import { formatMoney } from "@/lib/money";
 import { getI18n } from "@/lib/i18n/server";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import { can } from "@/types/auth";
 import type { TourBookingSummary } from "@/types/tour";
 
@@ -40,6 +41,7 @@ export const metadata: Metadata = { title: "Tour" };
  * exactly what stands between a draft and going on sale.
  */
 export default async function AdminTourPage({ params }: PageProps<"/[locale]/admin/tours/[slug]">) {
+  await requireScreen();
   const { slug } = await params;
   const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
@@ -131,7 +133,7 @@ export default async function AdminTourPage({ params }: PageProps<"/[locale]/adm
         }
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 flex flex-col gap-6 lg:col-span-2">
           <nav aria-label="Tour sections" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {subScreens.map((screen) => (
@@ -218,10 +220,7 @@ export default async function AdminTourPage({ params }: PageProps<"/[locale]/adm
         </div>
 
         <div className="flex flex-col gap-6">
-          {cover && (
-            // eslint-disable-next-line @next/next/no-img-element -- editorial or API-served
-            <img src={cover} alt={tour.title} className="aspect-4/3 w-full rounded-sm object-cover" />
-          )}
+          {cover && <MediaImg src={cover} alt={tour.title} className="aspect-4/3 w-full rounded-sm object-cover" />}
 
           <AdminPanel
             title="Publishing"

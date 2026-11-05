@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import { AnimatePresence, m, useReducedMotion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Expand, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -98,7 +98,7 @@ export function MediaGallery({ images, label, className, preload }: MediaGallery
             onClick={() => setLightboxIndex(index)}
             className="relative aspect-4/3 w-[85%] shrink-0 snap-start overflow-hidden rounded-sm bg-line"
           >
-            <Image
+            <SafeImage
               src={image.src}
               alt={image.alt}
               fill
@@ -123,7 +123,7 @@ export function MediaGallery({ images, label, className, preload }: MediaGallery
           aria-label={`Open ${label} gallery`}
           className={cn("group relative overflow-hidden bg-line", mosaic.lead)}
         >
-          <Image
+          <SafeImage
             src={lead.src}
             alt={lead.alt}
             fill
@@ -142,7 +142,7 @@ export function MediaGallery({ images, label, className, preload }: MediaGallery
             aria-label={`Open ${label} gallery at image ${index + 2}`}
             className={cn("group relative overflow-hidden bg-line", index === 0 && mosaic.first)}
           >
-            <Image
+            <SafeImage
               src={image.src}
               alt={image.alt}
               fill
@@ -199,7 +199,7 @@ export function MediaGallery({ images, label, className, preload }: MediaGallery
                   exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.985 }}
                   transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                 >
-                  <Image
+                  <SafeImage
                     src={images[lightboxIndex].src}
                     alt={images[lightboxIndex].alt}
                     fill

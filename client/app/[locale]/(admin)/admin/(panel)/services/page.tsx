@@ -9,6 +9,7 @@ import { listPartners } from "@/lib/api/partners";
 import { listServices } from "@/lib/api/services";
 import { listTourCancellationPolicies } from "@/lib/api/tours";
 import { serviceQueryFromParams } from "@/lib/admin/services";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Services" };
 
@@ -28,6 +29,7 @@ export const metadata: Metadata = { title: "Services" };
 export default async function AdminServicesPage({
   searchParams,
 }: PageProps<"/[locale]/admin/services">) {
+  await requireScreen();
   const query = serviceQueryFromParams(await searchParams);
 
   const [list, active, drafts, tree, suppliers, policies] = await Promise.all([

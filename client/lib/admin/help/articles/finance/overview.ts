@@ -14,7 +14,6 @@ export const article = {
   title: "The finance overview",
   summary: "Open money per currency at a glance, and what needs attention.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance"],
   keywords: [
     "finance",

@@ -303,7 +303,7 @@ const seed = async () => {
         where: {
             status: 'UNASSIGNED',
             pickupAt: { gt: new Date() },
-            booking: { status: 'CONFIRMED', source: 'demo' }
+            booking: { status: 'CONFIRMED', source: 'DEMO' }
         },
         include: { booking: { select: { adults: true, children: true, luggage: true, reference: true } } },
         orderBy: { pickupAt: 'asc' },

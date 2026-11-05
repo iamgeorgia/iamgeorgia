@@ -15,7 +15,6 @@ export const article = {
   title: "How a transfer fare is computed",
   summary: "Curated fare first, distance engine second, extras on top — and which screen changes which figure.",
   category: "transfers-catalogue",
-  roles: ["ADMIN"],
   keywords: ["pricing", "fare", "price", "distance engine", "fallback", "per km", "minimum", "airport fee", "return", "tetri", "lari", "curated"],
   related: ["tc-route-editing", "tc-vehicle-classes", "tc-points", "tc-extras", "tc-routes-register"],
   blocks: [

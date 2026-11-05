@@ -14,6 +14,9 @@ import { sweepCompletedTourBookings, sweepOverdueTourRequests } from './services
 import { sweepCompletedHotelBookings } from './services/hotel/booking.service.js';
 import { sweepCompletedServiceBookings } from './services/service/booking.service.js';
 import { sweepCompletedOrders, sweepOverdueOrderRequests } from './services/order/order.service.js';
+import { sweepBookingApprovals } from './services/booking/approval.service.js';
+import { reconcileBookingIndex } from './services/booking/index.service.js';
+import { sweepDeadlineReminders } from './services/booking/deadline.service.js';
 import { sweepPackagePriceFrom } from './services/package/priceFrom.service.js';
 
 const start = async () => {
@@ -166,6 +169,41 @@ const start = async () => {
 
     tourRequestSweeper.unref();
 
+    /**
+     * Booking approvals (OD1): operations are told about bookings nobody has
+     * answered in time, and a booking still waiting when its service date
+     * has passed is rejected at no charge — nobody can approve a stay that
+     * has already begun. Nothing runs while approval is switched off.
+     */
+    const approvalSweeper = config.booking.approvalEnabled
+        ? setInterval(() => {
+              sweepBookingApprovals()
+                  .then(({ alerted, expired }) => {
+                      if (alerted + expired > 0) logger.info({ alerted, expired }, 'Booking approvals swept');
+                  })
+                  .catch((err) => logger.error({ err }, 'Booking approval sweep failed'));
+          }, config.booking.approvalSweepIntervalMs)
+        : null;
+
+    approvalSweeper?.unref();
+
+    /**
+     * Deadline reminders: payment, free cancellation and confirmation, on
+     * the schedule in `reminder_policies`. Claims are unique rows, so two
+     * instances cannot remind twice. Off until the calendar ships.
+     */
+    const deadlineSweeper = config.booking.deadlineRemindersEnabled
+        ? setInterval(() => {
+              sweepDeadlineReminders()
+                  .then(({ skipped, events, missed }) => {
+                      if (!skipped && events + missed > 0) logger.info({ events, missed }, 'Deadline reminders queued');
+                  })
+                  .catch((err) => logger.error({ err }, 'Deadline reminder sweep failed'));
+          }, config.booking.deadlineSweepIntervalMs)
+        : null;
+
+    deadlineSweeper?.unref();
+
     /** Orders: the on-request queue's overdue alert, and completion once every part has finished. */
     const orderRequestSweeper = setInterval(() => {
         sweepOverdueOrderRequests().catch((err) => logger.error({ err }, 'Order request sweep failed'));
@@ -180,6 +218,29 @@ const start = async () => {
      * Run the other way round, an order would wait a whole interval longer
      * than it needed to.
      */
+    /**
+     * The booking index is kept in step by the services; this catches what
+     * they missed — a crash between a write and its sync — by rebuilding
+     * every row whose booking moved in the last day and a half, and drops
+     * the rows (and deadlines) of bookings that no longer exist.
+     *
+     * Also once soon after boot: on a 24-hour interval alone, a server
+     * deployed more often than daily never reconciled at all, and the
+     * register and the dashboard kept listing bookings that were gone.
+     */
+    const reconcileIndex = () =>
+        reconcileBookingIndex()
+            .then((counts) => {
+                const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+                if (total > 0) logger.info({ counts }, 'Booking index reconciled');
+            })
+            .catch((err) => logger.error({ err }, 'Booking index reconcile failed'));
+    const indexReconcileKickoff = setTimeout(reconcileIndex, 30_000);
+    const indexReconciler = setInterval(reconcileIndex, 24 * 60 * 60 * 1000);
+
+    indexReconcileKickoff.unref();
+    indexReconciler.unref();
+
     const orderCompletionSweeper = setInterval(() => {
         sweepCompletedHotelBookings()
             .then(({ completed }) => {
@@ -224,6 +285,8 @@ const start = async () => {
         clearInterval(tourRequestSweeper);
         clearInterval(orderRequestSweeper);
         clearInterval(orderCompletionSweeper);
+        clearTimeout(indexReconcileKickoff);
+        clearInterval(indexReconciler);
         clearTimeout(packagePriceKickoff);
         clearInterval(packagePriceSweeper);
 

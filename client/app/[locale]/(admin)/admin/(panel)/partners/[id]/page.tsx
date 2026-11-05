@@ -22,7 +22,7 @@ import { getPartnerTerms } from "@/lib/api/finance";
 import { getPartnerCredit } from "@/lib/api/finance-controls";
 import { getInvoicingSettings } from "@/lib/api/invoices";
 import { getPartner, getPartnerAudit, getPartnerInvitations, getProductAccessServer } from "@/lib/api/partners";
-import { getSession } from "@/lib/auth/session";
+import { getSession, requireScreen } from "@/lib/auth/session";
 import {
   auditActionLabels,
   formatCommission,
@@ -63,6 +63,7 @@ export async function generateMetadata({
 export default async function AdminPartnerPage({
   params,
 }: PageProps<"/[locale]/admin/partners/[id]">) {
+  await requireScreen();
   const { id } = await params;
   const [{ path }, session] = await Promise.all([getI18n(), getSession()]);
 
@@ -129,7 +130,7 @@ export default async function AdminPartnerPage({
         actions={<PartnerStatusBadge status={partner.status} className="text-[0.8125rem]" />}
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
           <AdminPanel title="Company" description="Submitted by the partner and verifiable against the register.">
             <AdminDefinitionList
@@ -164,7 +165,10 @@ export default async function AdminPartnerPage({
                     "—"
                   ),
                 },
-                { label: "Commission", value: formatCommission(partner.commissionRateBps) },
+                // Absent when the viewer's role does not read the rate; the row goes with it.
+                ...(partner.commissionRateBps === undefined
+                  ? []
+                  : [{ label: "Commission", value: formatCommission(partner.commissionRateBps) }]),
               ]}
             />
 

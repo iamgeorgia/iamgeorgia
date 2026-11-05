@@ -7,6 +7,7 @@ import { getTour, getTourCalendar } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
 import { addDaysISO, todayISO } from "@/lib/admin/dates";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Departures" };
 
@@ -20,6 +21,7 @@ export default async function TourDeparturesPage({
   params,
   searchParams,
 }: PageProps<"/[locale]/admin/tours/[slug]/departures">) {
+  await requireScreen();
   const { slug } = await params;
   const query = await searchParams;
   const { path } = await getI18n();

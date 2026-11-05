@@ -19,7 +19,6 @@ export const article = {
   title: "Images: limits, cover, detach vs delete",
   summary: "What an upload must be, how the cover is chosen, why alt text cannot be edited, and the difference between removing an image and deleting it.",
   category: "media",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: [
     { pattern: "/admin/hotels/[slug]/images", section: "hotels" },
     { pattern: "/admin/tours/[slug]/images", section: "tours" },

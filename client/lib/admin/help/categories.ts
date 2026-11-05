@@ -20,7 +20,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Getting started",
     summary: "What the panel is, how to sign in, what each role sees, and where things are.",
     iconName: "compass",
-    roles: ["ADMIN", "DISPATCHER"],
     pathPrefixes: ["/admin"],
   },
   {
@@ -28,15 +27,22 @@ export const helpCategories: HelpCategory[] = [
     title: "Bookings & orders",
     summary: "The four registers — hotel, tour, transfer and package orders — and what can be done to one.",
     iconName: "calendarCheck",
-    roles: ["ADMIN", "DISPATCHER"],
-    pathPrefixes: ["/admin/bookings", "/admin/orders", "/admin/tours/bookings", "/admin/transfers/bookings"],
+    pathPrefixes: [
+      "/admin/bookings",
+      "/admin/orders",
+      "/admin/tours/bookings",
+      "/admin/transfers/bookings",
+      "/admin/services/bookings",
+      "/admin/customers",
+      "/admin/deadlines",
+      "/admin/settings/reminders",
+    ],
   },
   {
     id: "dispatch",
     title: "Dispatch, schedule & ratings",
     summary: "Putting a driver and a car on each leg, moving it through its day, and moderating what passengers write.",
     iconName: "radio",
-    roles: ["ADMIN", "DISPATCHER"],
     pathPrefixes: ["/admin/transfers/dispatch", "/admin/transfers/schedule", "/admin/transfers/ratings"],
   },
   {
@@ -44,7 +50,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Destinations",
     summary: "The tree of places everything else is filed inside.",
     iconName: "globe",
-    roles: ["ADMIN"],
     pathPrefixes: ["/admin/destinations"],
   },
   {
@@ -52,7 +57,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Hotels",
     summary: "From a named draft to a property on sale: rooms, rates, inventory, images, policies, location, kosher.",
     iconName: "bedDouble",
-    roles: ["ADMIN"],
     pathPrefixes: ["/admin/hotels"],
   },
   {
@@ -60,7 +64,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Tours",
     summary: "Options, seasons and price tiers, departures and capacity, the itinerary, translations.",
     iconName: "map",
-    roles: ["ADMIN"],
     pathPrefixes: ["/admin/tours"],
   },
   {
@@ -68,7 +71,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Packages",
     summary: "A trip assembled from hotels, transfers, tours and services, sold as one thing.",
     iconName: "boxes",
-    roles: ["ADMIN"],
     pathPrefixes: ["/admin/packages"],
   },
   {
@@ -76,7 +78,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Services",
     summary: "Priced extras with no inventory — a kosher meal, a guide, a mashgiach — sold inside packages.",
     iconName: "conciergeBell",
-    roles: ["ADMIN"],
     pathPrefixes: ["/admin/services"],
   },
   {
@@ -84,7 +85,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Transfers catalogue",
     summary: "Routes and their fares, pick-up points, vehicle classes and extras — what a traveller buys.",
     iconName: "route",
-    roles: ["ADMIN"],
     pathPrefixes: [
       "/admin/transfers/routes",
       "/admin/transfers/points",
@@ -97,7 +97,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Fleet & drivers",
     summary: "The cars that turn up and the people who drive them: documents, verification, logins.",
     iconName: "car",
-    roles: ["ADMIN", "DISPATCHER"],
     pathPrefixes: ["/admin/transfers/fleet", "/admin/transfers/drivers"],
   },
   {
@@ -105,7 +104,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Partners",
     summary: "Registering supplier companies and agencies, reviewing applications, suspending and reinstating.",
     iconName: "handshake",
-    roles: ["ADMIN"],
     pathPrefixes: ["/admin/partners"],
   },
   {
@@ -113,23 +111,20 @@ export const helpCategories: HelpCategory[] = [
     title: "Finance",
     summary: "What we owe suppliers, what buyers owe us, recording payments and refunds, payment terms, and the reports.",
     iconName: "wallet",
-    roles: ["ADMIN"],
     pathPrefixes: ["/admin/finance"],
   },
   {
     id: "people",
     title: "Staff & audit log",
-    summary: "Giving colleagues a seat in the panel with the right role, retiring it again, and reading who did what.",
+    summary: "Giving colleagues a seat in the panel with the right role, retiring it again, reading who did what, and the account the platform's email is sent from.",
     iconName: "users",
-    roles: ["ADMIN"],
-    pathPrefixes: ["/admin/users", "/admin/audit"],
+    pathPrefixes: ["/admin/users", "/admin/audit", "/admin/settings/email"],
   },
   {
     id: "media",
     title: "Images & documents",
     summary: "What uploads are accepted, how a cover is chosen, and the difference between removing and deleting.",
     iconName: "image",
-    roles: ["ADMIN", "DISPATCHER"],
     pathPrefixes: [],
   },
   {
@@ -137,7 +132,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Publishing, statuses & the public site",
     summary: "Draft, on sale, off sale and archived; the checklists; slugs, translations and the public channel.",
     iconName: "send",
-    roles: ["ADMIN"],
     pathPrefixes: [],
   },
   {
@@ -145,7 +139,6 @@ export const helpCategories: HelpCategory[] = [
     title: "Working in the panel",
     summary: "Search and filters, common tasks, what an error means, and the actions that cannot be undone.",
     iconName: "bookOpen",
-    roles: ["ADMIN", "DISPATCHER"],
     pathPrefixes: [],
   },
 ];

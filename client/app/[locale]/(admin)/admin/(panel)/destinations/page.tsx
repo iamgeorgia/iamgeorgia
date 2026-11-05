@@ -8,6 +8,8 @@ import { StatCard } from "@/components/admin/StatCard";
 import { listDestinations } from "@/lib/api/hotels";
 import { destinationQueryFromParams } from "@/lib/admin/destinations";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Destinations" };
 
@@ -27,6 +29,7 @@ export const metadata: Metadata = { title: "Destinations" };
 export default async function AdminDestinationsPage({
   searchParams,
 }: PageProps<"/[locale]/admin/destinations">) {
+  const session = await requireScreen();
   const { path } = await getI18n();
   const params = await searchParams;
   const query = destinationQueryFromParams(params);
@@ -46,13 +49,15 @@ export default async function AdminDestinationsPage({
         title="Destinations"
         description="Countries, regions, cities and resorts. Everything else on the platform is filed under one of these, and searching a whole country is a search of the tree they form."
         actions={
-          <Link
-            href={path("/admin/destinations/new")}
-            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
-          >
-            <Plus size={15} aria-hidden />
-            Add destination
-          </Link>
+          can(session, "catalogue.write") && (
+            <Link
+              href={path("/admin/destinations/new")}
+              className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover"
+            >
+              <Plus size={15} aria-hidden />
+              Add destination
+            </Link>
+          )
         }
       />
 

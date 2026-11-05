@@ -83,23 +83,43 @@ export const updatePartnerTerms = (partnerId, input, actor, req) =>
             data: {
                 ...(input.paymentDueDays !== undefined ? { paymentDueDays: input.paymentDueDays } : {}),
                 ...(input.paymentDueAnchor !== undefined ? { paymentDueAnchor: input.paymentDueAnchor } : {}),
-                ...(input.paymentTermsNote !== undefined ? { paymentTermsNote: input.paymentTermsNote } : {})
+                ...(input.paymentTermsNote !== undefined ? { paymentTermsNote: input.paymentTermsNote } : {}),
+                ...(input.bookingApproval !== undefined ? { bookingApproval: input.bookingApproval } : {})
             },
-            select: { id: true, paymentDueDays: true, paymentDueAnchor: true, paymentTermsNote: true }
+            select: { id: true, paymentDueDays: true, paymentDueAnchor: true, paymentTermsNote: true, bookingApproval: true }
         });
 
-        await recordAudit(tx, {
-            action: 'PARTNER_TERMS_UPDATED',
-            actor,
-            entityType: AUDIT_ENTITY.partner,
-            entityId: partnerId,
-            summary: `Payment terms for ${partner.name}: ${updated.paymentDueDays} days from ${updated.paymentDueAnchor.toLowerCase()}`,
-            metadata: {
-                from: { paymentDueDays: partner.paymentDueDays, paymentDueAnchor: partner.paymentDueAnchor },
-                to: { paymentDueDays: updated.paymentDueDays, paymentDueAnchor: updated.paymentDueAnchor }
-            },
-            req
-        });
+        const termsChanged =
+            input.paymentDueDays !== undefined || input.paymentDueAnchor !== undefined || input.paymentTermsNote !== undefined;
+
+        if (termsChanged) {
+            await recordAudit(tx, {
+                action: 'PARTNER_TERMS_UPDATED',
+                actor,
+                entityType: AUDIT_ENTITY.partner,
+                entityId: partnerId,
+                summary: `Payment terms for ${partner.name}: ${updated.paymentDueDays} days from ${updated.paymentDueAnchor.toLowerCase()}`,
+                metadata: {
+                    from: { paymentDueDays: partner.paymentDueDays, paymentDueAnchor: partner.paymentDueAnchor },
+                    to: { paymentDueDays: updated.paymentDueDays, paymentDueAnchor: updated.paymentDueAnchor }
+                },
+                req
+            });
+        }
+
+        // Its own row: whether a company's bookings wait for the platform's
+        // yes (OD1) is an operations decision, read separately from the money.
+        if (input.bookingApproval !== undefined && input.bookingApproval !== partner.bookingApproval) {
+            await recordAudit(tx, {
+                action: 'PARTNER_BOOKING_APPROVAL_CHANGED',
+                actor,
+                entityType: AUDIT_ENTITY.partner,
+                entityId: partnerId,
+                summary: `Bookings by ${partner.name} are now ${updated.bookingApproval === 'AUTO' ? 'confirmed at once' : 'approved first'}`,
+                metadata: { from: partner.bookingApproval, to: updated.bookingApproval },
+                req
+            });
+        }
 
         return updated;
     });

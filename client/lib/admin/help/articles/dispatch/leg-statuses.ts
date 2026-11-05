@@ -12,7 +12,6 @@ export const article = {
   title: "Leg statuses and where they can go",
   summary: "The ten states a leg passes through, the label each wears on the board, which moves are allowed from each, and the two backward moves that undo a mistake.",
   category: "dispatch",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["status", "leg", "UNASSIGNED", "ASSIGNED", "ACCEPTED", "EN_ROUTE", "ARRIVED", "ON_BOARD", "COMPLETED", "NO_SHOW", "NO_SHOW_REPORTED", "CANCELLED", "transition", "correction", "withdrawn"],
   related: ["dp-dispatch-board", "dp-assigning-a-driver", "bk-statuses-glossary", "bk-transfer-booking-detail"],
   blocks: [

@@ -1,5 +1,6 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowDownLeft, ArrowUpRight, ChevronRight, Search, X } from "lucide-react";
@@ -146,77 +147,82 @@ export function PaymentsBrowser({ payments, total, page, pageSize, totalPages }:
   return (
     <section className="mt-8">
       <div className="rounded-sm border border-line bg-surface p-4 sm:p-5">
-        <div className="relative">
-          <Search
-            size={16}
-            className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
-            aria-hidden
-          />
-          <input
-            type="search"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Reference or name"
-            aria-label="Search payments"
-            className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
-          />
-        </div>
-
-        <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
-          <fieldset>
-            <legend className={legend}>Direction</legend>
-            {chips("direction", direction, [
-              { value: "IN", label: "Money in" },
-              { value: "OUT", label: "Money out" },
-            ])}
-          </fieldset>
-          <fieldset>
-            <legend className={legend}>Kind</legend>
-            {chips("kind", kind, [
-              { value: "PAYMENT", label: "Payments" },
-              { value: "REFUND", label: "Refunds" },
-            ])}
-          </fieldset>
-          <fieldset>
-            <legend className={legend}>Method</legend>
-            {chips(
-              "method",
-              method,
-              METHODS.map((value) => ({ value, label: paymentMethodLabels[value] })),
-            )}
-          </fieldset>
-          <fieldset>
-            <legend className={legend}>Currency</legend>
-            {chips(
-              "currency",
-              currency,
-              FINANCE_CURRENCIES.map((value) => ({ value, label: value })),
-            )}
-          </fieldset>
-        </div>
-
-        <div className="mt-4 grid gap-3 sm:max-w-md sm:grid-cols-2">
-          <label className="block min-w-0">
-            <span className={labelClass}>Paid from</span>
-            <input
-              type="date"
-              value={from}
-              max={to || undefined}
-              onChange={(event) => apply({ from: event.target.value || null })}
-              className="mt-1.5 h-10 w-full rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
+        <FilterDisclosure
+          count={Math.max(0, activeFilters - (query.trim() !== "" ? 1 : 0))}
+          lead={
+          <div className="relative min-w-[16rem] flex-1">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle"
+              aria-hidden
             />
-          </label>
-          <label className="block min-w-0">
-            <span className={labelClass}>Paid to</span>
             <input
-              type="date"
-              value={to}
-              min={from || undefined}
-              onChange={(event) => apply({ to: event.target.value || null })}
-              className="mt-1.5 h-10 w-full rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Reference or name"
+              aria-label="Search payments"
+              className="h-11 w-full rounded-sm border border-line bg-background ps-9 pe-3 text-sm text-ink transition-colors focus:border-ink focus:outline-none"
             />
-          </label>
-        </div>
+          </div>
+          }
+        >
+          <div className="flex flex-wrap gap-x-8 gap-y-4">
+            <fieldset>
+              <legend className={legend}>Direction</legend>
+              {chips("direction", direction, [
+                { value: "IN", label: "Money in" },
+                { value: "OUT", label: "Money out" },
+              ])}
+            </fieldset>
+            <fieldset>
+              <legend className={legend}>Kind</legend>
+              {chips("kind", kind, [
+                { value: "PAYMENT", label: "Payments" },
+                { value: "REFUND", label: "Refunds" },
+              ])}
+            </fieldset>
+            <fieldset>
+              <legend className={legend}>Method</legend>
+              {chips(
+                "method",
+                method,
+                METHODS.map((value) => ({ value, label: paymentMethodLabels[value] })),
+              )}
+            </fieldset>
+            <fieldset>
+              <legend className={legend}>Currency</legend>
+              {chips(
+                "currency",
+                currency,
+                FINANCE_CURRENCIES.map((value) => ({ value, label: value })),
+              )}
+            </fieldset>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:max-w-md sm:grid-cols-2">
+            <label className="block min-w-0">
+              <span className={labelClass}>Paid from</span>
+              <input
+                type="date"
+                value={from}
+                max={to || undefined}
+                onChange={(event) => apply({ from: event.target.value || null })}
+                className="mt-1.5 h-10 w-full rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
+              />
+            </label>
+            <label className="block min-w-0">
+              <span className={labelClass}>Paid to</span>
+              <input
+                type="date"
+                value={to}
+                min={from || undefined}
+                onChange={(event) => apply({ to: event.target.value || null })}
+                className="mt-1.5 h-10 w-full rounded-sm border border-line bg-surface px-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
+              />
+            </label>
+          </div>
+        </FilterDisclosure>
 
         {partner && (
           <ul className="mt-4 flex flex-wrap gap-2" aria-label="Narrowed to">

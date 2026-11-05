@@ -6,7 +6,7 @@ import { ArrowRight, BookOpen, RotateCcw } from "lucide-react";
 import { AdminPanel } from "@/components/admin/AdminPage";
 import { CheckboxField } from "@/components/admin/FormControls";
 import { useLocalePath } from "@/lib/i18n/provider";
-import type { HelpRole, QuickStartStep } from "@/lib/admin/help/types";
+import type { QuickStartStep } from "@/lib/admin/help/types";
 import { quickStartStore, useQuickStartState } from "@/lib/admin/help/storage";
 import { WhereChip } from "./HelpBlocks";
 
@@ -23,11 +23,15 @@ import { WhereChip } from "./HelpBlocks";
  * registry never has to reach the browser for the card to render.
  */
 export function QuickStartCard({
+  title: heading,
   role,
   steps,
   dismissable,
 }: {
-  role: HelpRole;
+  /** The card's heading, from `quickStartTitle(capabilities)`. */
+  title?: string;
+  /** Older callers named an audience; kept so they still render, mapped to a heading. */
+  role?: string;
   steps: QuickStartStep[];
   dismissable?: boolean;
 }) {
@@ -37,7 +41,7 @@ export function QuickStartCard({
   if (dismissable && state.dismissedAt) return null;
 
   const done = steps.filter((step) => state.done.includes(step.id)).length;
-  const title = role === "DISPATCHER" ? "Quick start for dispatchers" : "Quick start for administrators";
+  const title = heading ?? (role === "DISPATCHER" ? "Quick start for dispatchers" : "Quick start for administrators");
 
   return (
     <AdminPanel
@@ -122,6 +126,8 @@ const PREFIXES: Record<string, string> = {
   tc: "transfers-catalogue",
   fd: "fleet-drivers",
   pt: "partners",
+  fn: "finance",
+  pp: "people",
   md: "media",
   pb: "publishing",
   rf: "reference",

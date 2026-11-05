@@ -11,6 +11,7 @@ import { PackageKosherEditor } from "@/components/admin/PackageKosherEditor";
 import { ApiError } from "@/lib/api/client";
 import { getPackage } from "@/lib/api/packages";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Package kosher" };
 
@@ -23,6 +24,7 @@ export const metadata: Metadata = { title: "Package kosher" };
 export default async function AdminPackageKosherPage({
   params,
 }: PageProps<"/[locale]/admin/packages/[slug]/kosher">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

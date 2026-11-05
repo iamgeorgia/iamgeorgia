@@ -8,15 +8,22 @@ import {
   AdminPageHeader,
   AdminPanel,
 } from "@/components/admin/AdminPage";
+import { BookingApprovalPanel } from "@/components/admin/BookingApprovalPanel";
+import { BookingDeadlinesPanel } from "@/components/admin/BookingDeadlinesPanel";
+import { BookingDeskPanel } from "@/components/admin/BookingDeskPanel";
+import { BookingPaymentPanel } from "@/components/admin/BookingPaymentPanel";
 import { Cell, DataTable, Row } from "@/components/admin/DataTable";
 import { TransferBookingStatusBadge, TransferLegStatusBadge } from "@/components/admin/DispatchBadges";
 import { LegActions } from "@/components/admin/LegActions";
+import { ReadOnlyNote } from "@/components/admin/ReadOnlyNote";
 import { listDispatchLegs } from "@/lib/api/dispatch";
 import { formatPickup } from "@/lib/admin/dispatch";
 import { ApiError } from "@/lib/api/client";
 import { getAdminTransferBooking } from "@/lib/api/transfers";
 import { getI18n } from "@/lib/i18n/server";
 import { formatBps, formatMoney } from "@/lib/money";
+import { requireScreen } from "@/lib/auth/session";
+import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Transfer booking" };
 
@@ -31,6 +38,7 @@ export const metadata: Metadata = { title: "Transfer booking" };
 export default async function AdminTransferBookingPage({
   params,
 }: PageProps<"/[locale]/admin/transfers/bookings/[reference]">) {
+  const session = await requireScreen();
   const { reference } = await params;
   const { path } = await getI18n();
 
@@ -72,7 +80,7 @@ export default async function AdminTransferBookingPage({
         actions={<TransferBookingStatusBadge status={booking.status} />}
       />
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-12">
+      <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="min-w-0 space-y-8 lg:col-span-7">
           <AdminPanel title="Dispatch" description="Who is driving each leg, and where it stands.">
             {legs.length === 0 ? (
@@ -101,16 +109,23 @@ export default async function AdminTransferBookingPage({
                 ))}
               </ul>
             )}
+            {/* The per-leg controls render nothing without the right; one line says why. */}
+            {legs.length > 0 && !can(session, "dispatch.write") && (
+              <ReadOnlyNote needs="dispatch.write" what="Assigning drivers and moving legs" className="mt-4" />
+            )}
           </AdminPanel>
 
           <AdminPanel title="Legs" description="Each journey as it was priced.">
+            {/* This sits in the 7/12 column, ~365px at 1024. Pick-up is already
+                in the Dispatch panel above, so it waits for a wide screen; Net
+                joins from `xl`. Sell, the figure the buyer pays, always shows. */}
             <DataTable
               caption="Booking legs"
               columns={[
                 { label: "Direction" },
                 { label: "Journey" },
-                { label: "Pick-up", hideBelow: "md" },
-                { label: "Net", align: "end", hideBelow: "lg" },
+                { label: "Pick-up", hideBelow: "2xl" },
+                { label: "Net", align: "end", hideBelow: "xl" },
                 { label: "Sell", align: "end" },
               ]}
             >
@@ -121,12 +136,13 @@ export default async function AdminTransferBookingPage({
                     {leg.from} → {leg.to}
                     <span className="type-caption mt-0.5 block text-subtle">
                       {leg.distanceKm} km · {Math.round(leg.durationMinutes / 5) * 5} min
+                      {leg.flightNumber ? ` · flight ${leg.flightNumber}` : ""}
                     </span>
                   </Cell>
-                  <Cell hideBelow="md" className="tabular-nums">
+                  <Cell hideBelow="2xl" className="tabular-nums">
                     {instant(leg.pickupAt)}
                   </Cell>
-                  <Cell align="end" hideBelow="lg" className="tabular-nums">
+                  <Cell align="end" hideBelow="xl" className="tabular-nums">
                     {leg.netCents === undefined
                       ? "—"
                       : formatMoney(leg.netCents, booking.currency)}
@@ -181,6 +197,26 @@ export default async function AdminTransferBookingPage({
         </div>
 
         <div className="min-w-0 space-y-8 lg:col-span-5">
+          {/* The platform's own gate, before any supplier is asked. Renders
+              nothing on a booking that never needed it. */}
+          <BookingApprovalPanel
+            product="TRANSFER"
+            reference={booking.reference}
+            approval={booking.approval}
+            partnerName={booking.partner?.name ?? null}
+          />
+
+          <BookingPaymentPanel payment={booking.payment} currency={booking.currency} />
+
+          <BookingDeadlinesPanel
+            product="TRANSFER"
+            reference={booking.reference}
+            lastDate={(booking.returnPickupAt ?? booking.pickupAt).slice(0, 10)}
+          />
+
+          {/* The desk's fields: staff who may see the buyer only. */}
+          <BookingDeskPanel product="TRANSFER" reference={booking.reference} desk={booking.desk} currency={booking.currency} />
+
           <AdminPanel title="Passenger">
             <AdminDefinitionList
               items={[
@@ -229,7 +265,7 @@ export default async function AdminTransferBookingPage({
                   label: "Markup",
                   value: booking.markupBps === undefined ? "—" : formatBps(booking.markupBps),
                 },
-                { label: "Partner", value: booking.partner?.name ?? "Direct" },
+                { label: "Partner", value: booking.partner?.name ?? booking.desk?.customer?.name ?? "Direct" },
               ]}
             />
           </AdminPanel>

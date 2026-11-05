@@ -11,7 +11,6 @@ export const article = {
   title: "Preview a quote",
   summary: "Running the real quote engine on a package, on a draft, on any date — and reading a slot that did not resolve.",
   category: "packages",
-  roles: ["ADMIN"],
   routes: ["/admin/packages/[slug]/preview"],
   keywords: ["quote", "preview", "test", "price", "margin", "net", "sell", "resolve", "reason", "sold out", "no price", "start date", "rooms"],
   related: ["pk-parts", "pk-details-pricing", "pk-register", "pk-hub"],

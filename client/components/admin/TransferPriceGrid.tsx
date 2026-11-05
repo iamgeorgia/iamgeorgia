@@ -4,7 +4,9 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, Check } from "lucide-react";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import { Cell, DataTable, Row } from "./DataTable";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import {
   publishTransferRoute,
@@ -25,6 +27,11 @@ import type { TransferRouteWithChecklist, TransferVehicle } from "@/types/transf
  * Amounts are typed in lari and converted on the way out. `toMinorUnits`
  * rounds rather than truncates, so 12.005 becomes 1201 and not 1200: a
  * truncation here is a tetri the operator did not mean to give away.
+ *
+ * Fares and the publish switch are both writes to the transfer catalogue,
+ * which the server guards with `catalogue.write` (not `pricing.write` — the
+ * transfer router has no separate pricing gate). A reader sees the grid
+ * disabled and one line where the buttons were.
  */
 export function TransferPriceGrid({
   route,
@@ -34,6 +41,8 @@ export function TransferPriceGrid({
   vehicles: TransferVehicle[];
 }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [values, setValues] = useState<Record<string, { oneWay: string; return: string }>>(() =>
     Object.fromEntries(
@@ -120,7 +129,7 @@ export function TransferPriceGrid({
   };
 
   return (
-    <div>
+    <fieldset disabled={!canEdit} className="min-w-0">
       <div className="rounded-sm border border-line bg-surface">
         <DataTable
           caption="Fares by vehicle class"
@@ -176,8 +185,9 @@ export function TransferPriceGrid({
       </div>
 
       <p className="type-caption mt-3 text-subtle">
-        Leave a fare blank to take that class off this route — the distance estimate will price it
-        instead. A blank return means twice the one-way.
+        {canEdit
+          ? "Leave a fare blank to take that class off this route — the distance estimate will price it instead. A blank return means twice the one-way."
+          : "A blank fare means the distance estimate prices that class. A blank return means twice the one-way."}
       </p>
 
       {error && (
@@ -190,26 +200,34 @@ export function TransferPriceGrid({
         </p>
       )}
 
-      <div className="mt-5 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={save}
-          disabled={saving}
-          className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
-        >
-          {saved && <Check size={15} aria-hidden />}
-          {saving ? "Saving…" : saved ? "Saved" : "Save fares"}
-        </button>
+      {canEdit ? (
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving}
+            className="inline-flex h-10 items-center gap-2 rounded-sm bg-brand px-4 text-[0.8125rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
+          >
+            {saved && <Check size={15} aria-hidden />}
+            {saving ? "Saving…" : saved ? "Saved" : "Save fares"}
+          </button>
 
-        <button
-          type="button"
-          onClick={togglePublished}
-          disabled={saving}
-          className="inline-flex h-10 items-center rounded-sm border border-ink/25 px-4 text-[0.8125rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-surface-soft disabled:opacity-50"
-        >
-          {route.status === "ACTIVE" ? "Unpublish route" : "Publish route"}
-        </button>
-      </div>
-    </div>
+          <button
+            type="button"
+            onClick={togglePublished}
+            disabled={saving}
+            className="inline-flex h-10 items-center rounded-sm border border-ink/25 px-4 text-[0.8125rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-surface-soft disabled:opacity-50"
+          >
+            {route.status === "ACTIVE" ? "Unpublish route" : "Publish route"}
+          </button>
+        </div>
+      ) : (
+        <ReadOnlyNote
+          className="mt-5"
+          needs="catalogue.write"
+          what="Changing fares or publishing the route"
+        />
+      )}
+    </fieldset>
   );
 }

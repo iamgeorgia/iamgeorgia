@@ -949,3 +949,50 @@ lands.
 ---
 
 *Generated with [Claude Code](https://claude.com/claude-code)*
+
+## 16. The public cart (2026-10-20)
+
+Several products booked as one `CUSTOM` order (`POST /orders/custom`, see
+`server/API.md` → "The cart"). Behind **`NEXT_PUBLIC_CART_ENABLED=true`**
+(`lib/booking/cartFlag.ts`): off, there is no bag in the header, no "Add to
+cart" button, and `/cart` and `/cart/checkout` are 404s. The API has its own
+`CART_ENABLED`; both must be on.
+
+### The shape
+
+- `lib/booking/cart.ts` — the store: `localStorage` key `iag:cart`, envelope
+  `{ v: 1, items }`, one currency per cart (the button refuses a second one
+  with a message), at most 20 items (the server's cap). Each item keeps the
+  API payload (`CustomOrderItemInput`, strict on the server) *beside* a
+  display snapshot (title, dates, price when added, link back); the snapshot
+  is never sent and never trusted for money. Same `useSyncExternalStore`
+  pattern as the checkout drafts; `useCart()` in `lib/booking/useCart.ts`.
+  Unit-tested in `test/cart.test.ts` against a Map.
+- `components/booking/AddToCartButton.tsx` — beside every Reserve: hotel rate
+  rows, tour departures, the transfer checkout form (carries the typed flight,
+  doors and driver), the package builder. Outcome is an inline `role="status"`
+  line with a link to the cart, not a toast.
+- `components/layout/CartLink.tsx` — the bag with a count, on every width,
+  hidden while empty and on the server render.
+- `/cart` (`CartView`) quotes the list on arrival and on "Refresh prices"
+  (`POST /orders/custom/quote`, writes nothing): per-line was/now, gone items
+  with a remove link, package lines grouped under their package, today's total.
+- `/cart/checkout` (`CartCheckoutForm`) holds on entry (`POST
+  /orders/custom/holds`), keeps the holds in the tab's draft keyed to the exact
+  item list (a refresh resumes them; an edited list releases and re-holds),
+  counts down, and confirms with the draft's `Idempotency-Key`. 409
+  `UNAVAILABLE`/`PRICE_CHANGED` render per item with remove / re-add; 422
+  `MIXED_CURRENCY` is explained; 410 offers "hold again". Per-item requests
+  exist only for hotel and tour lines — the contract has no such field on a
+  transfer, service or package item.
+- Confirmation and manage pages reuse the order views: a CUSTOM order's
+  `package.name` is the snapshot name, and `OrderItems` groups lines by
+  `groupKey` under the package names from `packageSnapshot.packages`, with
+  standalone items last.
+
+### Not done
+
+- No public service booking form exists, so `SERVICE` items can only reach a
+  cart inside a package; the store and types support them regardless.
+- `next build` was not run: the other branch work in progress fails `tsc` in
+  admin files, which a build would stop on.

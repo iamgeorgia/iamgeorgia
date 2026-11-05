@@ -13,7 +13,6 @@ export const article = {
   summary:
     "The built-in staff roles, from super admin to dispatcher: what each one sees, what each one may change, and who sees the money.",
   category: "getting-started",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: [
     "role",
     "permission",

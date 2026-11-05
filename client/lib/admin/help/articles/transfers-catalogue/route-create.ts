@@ -13,7 +13,6 @@ export const article = {
   title: "Adding a route",
   summary: "Joining two pick-up points into a new route, which starts life as a draft with no fares.",
   category: "transfers-catalogue",
-  roles: ["ADMIN"],
   routes: ["/admin/transfers/routes/new"],
   keywords: ["new route", "add route", "create route", "pick-up", "drop-off", "slug", "sales tier", "category", "distance", "journey time"],
   related: ["tc-points", "tc-route-editing", "tc-routes-register", "tc-pricing-model"],

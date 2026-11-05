@@ -4,6 +4,7 @@ import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/
 import { NewTransferVehicleForm } from "@/components/admin/NewTransferVehicleForm";
 import { listAdminTransferProviders } from "@/lib/api/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add a vehicle class" };
 
@@ -16,6 +17,7 @@ export const metadata: Metadata = { title: "Add a vehicle class" };
  * so instead of offering an empty dropdown.
  */
 export default async function NewTransferVehiclePage() {
+  await requireScreen();
   const [{ data: providers }, { path }] = await Promise.all([
     listAdminTransferProviders(),
     getI18n(),

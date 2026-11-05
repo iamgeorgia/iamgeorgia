@@ -11,7 +11,6 @@ export const article = {
   title: "Packages register",
   summary: "Finding a package, reading its row, and why the From column is a sample rather than a quote.",
   category: "packages",
-  roles: ["ADMIN"],
   routes: ["/admin/packages"],
   keywords: ["package list", "find a package", "search packages", "filter", "kosher", "status", "from price", "sampled", "nights", "parts", "featured"],
   related: ["pk-create", "pk-hub", "pk-preview-quote", "rf-search-filters", "pb-statuses"],

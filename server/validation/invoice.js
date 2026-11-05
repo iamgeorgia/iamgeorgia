@@ -2,9 +2,11 @@ import { z } from 'zod';
 
 import { INVOICEOCEAN_LANGS } from '../config.js';
 import { emailField, textField } from './normalize.js';
+// A calendar date, not merely its shape: 2026-13-45 turned into an Invalid
+// Date in the filter and answered 500, and 2026-02-30 rolled into March.
+import { dateOnlyField } from './ratePlan.js';
 
 const idField = z.string().min(1).max(64);
-const dateOnlyField = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 
 export const INVOICE_KINDS = ['PROFORMA', 'VAT', 'ADVANCE', 'FINAL', 'CORRECTION'];
 export const INVOICE_STATUSES = ['DRAFT', 'ISSUED', 'SENT', 'PAID', 'PARTIAL', 'CANCELLED', 'ERROR'];

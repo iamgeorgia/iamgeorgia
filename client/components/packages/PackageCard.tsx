@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { SafeImage } from "@/components/ui/SafeImage";
 import Link from "next/link";
 import { Layers, MapPin, Moon } from "lucide-react";
 
@@ -56,7 +56,7 @@ export function PackageCard({
           )}
         >
           {image && (
-            <Image
+            <SafeImage
               src={image}
               alt={pkg.name}
               fill

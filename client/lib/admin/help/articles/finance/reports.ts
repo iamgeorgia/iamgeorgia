@@ -14,7 +14,6 @@ export const article = {
   title: "Finance reports",
   summary: "The summary, margin and ageing reports, per currency, and exporting them.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/reports"],
   keywords: [
     "finance",

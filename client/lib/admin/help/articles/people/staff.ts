@@ -14,7 +14,6 @@ export const article = {
   title: "Staff accounts",
   summary: "Inviting colleagues into the panel, choosing their role, and retiring an account.",
   category: "people",
-  roles: ["ADMIN"],
   routes: ["/admin/users", "/admin/users/[id]"],
   keywords: [
     "staff",

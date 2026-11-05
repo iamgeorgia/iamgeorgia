@@ -13,7 +13,6 @@ export const article = {
   title: "Driver ratings moderation",
   summary: "Reading what passengers wrote about a driver, publishing or rejecting it, and what that does to the driver's average.",
   category: "dispatch",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/ratings"],
   keywords: ["rating", "review", "comment", "stars", "publish", "reject", "moderation", "average", "waiting for a look"],
   related: ["fd-driver-detail", "dp-dispatch-board", "dp-who-is-told-what"],

@@ -14,7 +14,6 @@ export const article = {
   title: "Translations (ka / ru / he)",
   summary: "How the Georgian, Russian and Hebrew versions of a page are written, what happens to a field left blank, and which records cannot be translated from the panel.",
   category: "publishing",
-  roles: ["ADMIN"],
   routes: [
     { pattern: "/admin/tours/[slug]/translations", section: "tours" },
     { pattern: "/admin/packages/[slug]/translations", section: "packages" },

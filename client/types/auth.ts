@@ -5,6 +5,7 @@ import type { Partner, Role } from "./partner";
 export interface SessionUser {
   id: string;
   email: string;
+  /** The primary role's key: a built-in name or a custom role's lower-case key. */
   role: Role;
   firstName: string;
   lastName: string;
@@ -45,8 +46,6 @@ export interface Session {
   driver: DriverSelf | null;
 }
 
-export const ADMIN_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN"];
-
 /**
  * Whether an account holds any of the given capabilities.
  *
@@ -54,6 +53,11 @@ export const ADMIN_ROLES: Role[] = ["SUPER_ADMIN", "ADMIN"];
  * component can ask without checking first. "Any of", like the server's
  * `requireCapability`. The server enforces every one of these on its own;
  * this only keeps the screens from offering what would answer 403.
+ *
+ * This is the only question the client ever asks about who the viewer is.
+ * Nothing compares a role's *name*: a custom role made in the Roles editor
+ * must work everywhere a built-in one does, and it can only do that if every
+ * screen reads the capabilities and not the label.
  */
 export const can = (
   viewer: Session | SessionUser | null | undefined,
@@ -64,9 +68,6 @@ export const can = (
   return Array.isArray(held) && anyOf.some((capability) => held.includes(capability));
 };
 
-export const isAdmin = (session: Session | null): boolean =>
-  Boolean(session) && ADMIN_ROLES.includes(session!.user.role);
-
 /**
  * Whether an account sits in the admin panel: every platform role except a
  * driver. Read off the catalogue capability, which every staff role holds.
@@ -74,13 +75,21 @@ export const isAdmin = (session: Session | null): boolean =>
 export const isStaff = (viewer: Session | SessionUser | null | undefined): boolean =>
   can(viewer, "catalogue.read");
 
-export const isDriver = (session: Session | null): boolean =>
-  session?.user.role === "DRIVER";
+/** Whether an account belongs in the driver panel. */
+export const isDriver = (viewer: Session | SessionUser | null | undefined): boolean =>
+  can(viewer, "driver.panel");
 
-/** Where a signed-in account belongs, for redirects between the panels. */
+/**
+ * Where a signed-in account belongs, for redirects between the panels.
+ *
+ * Staff land on the overview, which composes itself from what they hold; a
+ * dispatcher's overview is the board's figures, a finance desk's is the money
+ * due. One address for everyone keeps bookmarks, sign-in and the logo link
+ * honest.
+ */
 export const homePathFor = (session: Session): string => {
   if (isStaff(session)) return "/admin";
-  if (session.user.role === "DRIVER") return "/driver";
+  if (isDriver(session)) return "/driver";
   if (session.partner) return "/portal";
   return "/";
 };

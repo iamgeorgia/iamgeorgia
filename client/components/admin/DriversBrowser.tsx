@@ -1,5 +1,7 @@
 "use client";
 
+import { FilterDisclosure } from "@/components/ui/FilterDisclosure";
+import { MediaImg } from "@/components/ui/MediaImg";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, UserRound } from "lucide-react";
@@ -64,7 +66,9 @@ export function DriversBrowser({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3">
+      <FilterDisclosure
+        count={["verificationStatus", "isActive"].filter((key) => { const value = searchParams.get(key); return value && value !== "all"; }).length}
+        lead={
         <label className="relative min-w-56 flex-1">
           <Search size={15} className="pointer-events-none absolute top-1/2 start-3 -translate-y-1/2 text-subtle" aria-hidden />
           <input
@@ -76,32 +80,35 @@ export function DriversBrowser({
             className="h-10 w-full rounded-sm border border-line bg-surface ps-9 pe-3 text-[0.875rem] text-ink focus:border-ink focus:outline-none"
           />
         </label>
+        }
+      >
+        <div className="flex flex-wrap items-center gap-3">
+          <select
+            value={searchParams.get("verificationStatus") ?? ""}
+            onChange={(event) => setParam("verificationStatus", event.target.value)}
+            aria-label="Filter by verification"
+            className={select}
+          >
+            <option value="">Any verification</option>
+            {verificationOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
 
-        <select
-          value={searchParams.get("verificationStatus") ?? ""}
-          onChange={(event) => setParam("verificationStatus", event.target.value)}
-          aria-label="Filter by verification"
-          className={select}
-        >
-          <option value="">Any verification</option>
-          {verificationOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={searchParams.get("isActive") ?? ""}
-          onChange={(event) => setParam("isActive", event.target.value)}
-          aria-label="Filter by active"
-          className={select}
-        >
-          <option value="">Active and deactivated</option>
-          <option value="true">Active</option>
-          <option value="false">Deactivated</option>
-        </select>
-      </div>
+          <select
+            value={searchParams.get("isActive") ?? ""}
+            onChange={(event) => setParam("isActive", event.target.value)}
+            aria-label="Filter by active"
+            className={select}
+          >
+            <option value="">Active and deactivated</option>
+            <option value="true">Active</option>
+            <option value="false">Deactivated</option>
+          </select>
+        </div>
+      </FilterDisclosure>
 
       <div className="mt-6 rounded-sm border border-line bg-surface">
         <DataTable
@@ -121,14 +128,16 @@ export function DriversBrowser({
               <Row key={driver.id}>
                 <Cell>
                   <div className="flex items-center gap-3">
-                    {thumb(driver) ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- API-served
-                      <img src={thumb(driver)} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-                    ) : (
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
-                        <UserRound size={18} aria-hidden />
-                      </span>
-                    )}
+                    <MediaImg
+                      src={thumb(driver)}
+                      alt=""
+                      className="h-10 w-10 shrink-0 rounded-full object-cover"
+                      fallback={
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-soft text-subtle">
+                          <UserRound size={18} aria-hidden />
+                        </span>
+                      }
+                    />
                     <div className="min-w-0">
                       <Link
                         href={path(`/admin/transfers/drivers/${driver.id}`)}

@@ -6,6 +6,7 @@ import { Menu } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AccountNav } from "./AccountNav";
+import { CartLink } from "./CartLink";
 import { LanguageMenu } from "./LanguageMenu";
 import { Logo } from "./Logo";
 import { MobileNavigation } from "./MobileNavigation";
@@ -132,6 +133,11 @@ export function Header() {
             <span className="hidden sm:contents">
               <AccountNav tone={overImagery ? "light" : "dark"} />
             </span>
+
+            {/* Only while there is something in it, and only with the cart
+                switched on — see `CartLink`. Sits on every width, including
+                phones, because a bag behind a burger is a bag nobody finds. */}
+            <CartLink tone={overImagery ? "light" : "dark"} />
 
             <LanguageMenu tone={overImagery ? "light" : "dark"} />
 

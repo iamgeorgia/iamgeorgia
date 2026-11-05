@@ -11,6 +11,7 @@ import { PackageTranslationsEditor } from "@/components/admin/PackageTranslation
 import { ApiError } from "@/lib/api/client";
 import { getPackage, listPackageTranslations } from "@/lib/api/packages";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Package translations" };
 
@@ -23,6 +24,7 @@ export const metadata: Metadata = { title: "Package translations" };
 export default async function AdminPackageTranslationsPage({
   params,
 }: PageProps<"/[locale]/admin/packages/[slug]/translations">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

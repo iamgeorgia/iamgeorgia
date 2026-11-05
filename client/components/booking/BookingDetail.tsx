@@ -55,6 +55,7 @@ export async function BookingDetail({ booking }: BookingDetailProps) {
   const { hotelSnapshot: property, currency } = booking;
 
   const statusTone: Record<HotelBookingStatus, string> = {
+    PENDING_APPROVAL: "border-warning/40 bg-warning/10 text-warning-text",
     PENDING: "border-warning/40 bg-warning/10 text-warning-text",
     CONFIRMED: "border-success/40 bg-success/10 text-success",
     CANCELLED: "border-error/40 bg-error/10 text-error-text",
@@ -94,13 +95,15 @@ export async function BookingDetail({ booking }: BookingDetailProps) {
             {property.address && (
               <p className="type-body-sm mt-2 flex items-start gap-2 text-muted">
                 <MapPin size={14} className="mt-0.5 shrink-0" aria-hidden />
-                {property.address}
+                {/* Data, often Latin and opening with a house number, which an
+                    RTL line would otherwise move to the end. */}
+                <bdi>{property.address}</bdi>
               </p>
             )}
             {property.phone && (
               <p className="type-body-sm mt-1.5 flex items-center gap-2 text-muted">
                 <Phone size={14} className="shrink-0" aria-hidden />
-                {property.phone}
+                <span dir="ltr">{property.phone}</span>
               </p>
             )}
             {property.email && (
@@ -143,7 +146,7 @@ export async function BookingDetail({ booking }: BookingDetailProps) {
             {booking.leadGuestPhone && (
               <p className="type-body-sm mt-1.5 flex items-center gap-2 text-muted">
                 <Phone size={14} className="shrink-0" aria-hidden />
-                {booking.leadGuestPhone}
+                <span dir="ltr">{booking.leadGuestPhone}</span>
               </p>
             )}
           </div>
@@ -256,7 +259,7 @@ export async function BookingDetail({ booking }: BookingDetailProps) {
                   {room.bedConfiguration && (
                     <li className="type-caption flex items-center gap-1.5 text-muted">
                       <BedDouble size={13} aria-hidden />
-                      {room.bedConfiguration}
+                      <bdi>{room.bedConfiguration}</bdi>
                     </li>
                   )}
                   <li className="type-caption text-muted">

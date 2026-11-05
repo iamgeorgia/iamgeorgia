@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import {
   AdminBreadcrumbs,
@@ -18,10 +18,8 @@ import { rolesText, userStatusHints } from "@/lib/admin/users";
 import { ApiError } from "@/lib/api/client";
 import { listCapabilities } from "@/lib/api/roles";
 import { getGrantable, getUser, getUserDetail } from "@/lib/api/users";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import type { UserDetail } from "@/types/rbac";
 import type { UserActorRef } from "@/types/user";
 
@@ -50,11 +48,8 @@ const actor = (ref: UserActorRef | null) =>
 
 /** One staff account: who they are, where it stands, and what can be done to it. */
 export default async function AdminUserPage({ params }: PageProps<"/[locale]/admin/users/[id]">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "users.staff.manage")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { id } = await params;
   const { path } = await getI18n();
@@ -94,7 +89,7 @@ export default async function AdminUserPage({ params }: PageProps<"/[locale]/adm
         actions={<UserStatusBadge status={user.status} className="text-[0.8125rem]" />}
       />
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-3">
+      <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="min-w-0 space-y-6 lg:col-span-2">
           <AdminPanel title="Profile">
             <AdminDefinitionList

@@ -17,7 +17,6 @@ export const article = {
   title: "A car: details, photographs, documents, status",
   summary: "The car's page — editing it, keeping its photographs and documents, taking it on and off the road, and archiving or deleting it.",
   category: "fleet-drivers",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/fleet/[id]"],
   keywords: ["car", "photographs", "main photo", "documents", "insurance", "registration", "technical inspection", "valid until", "expired", "off the road", "on the road", "archive", "delete", "plate"],
   related: ["fd-fleet-register", "fd-add-car", "fd-driver-detail", "fd-verification-documents", "md-documents", "rf-dangerous-actions"],

@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { Ban, CheckCircle2, MailPlus, UsersRound } from "lucide-react";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
@@ -7,11 +6,8 @@ import { InviteUserButton } from "@/components/admin/InviteUserModal";
 import { StatCard } from "@/components/admin/StatCard";
 import { UsersBrowser } from "@/components/admin/UsersBrowser";
 import { staffQueryFromParams } from "@/lib/admin/users";
-import { listUsers } from "@/lib/api/users";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getLocale } from "@/lib/i18n/server";
-import { can } from "@/types/auth";
+import { getGrantable, listUsers } from "@/lib/api/users";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Staff" };
 
@@ -21,21 +17,20 @@ export const metadata: Metadata = { title: "Staff" };
  * than shown a screen of refusals.
  */
 export default async function AdminUsersPage({ searchParams }: PageProps<"/[locale]/admin/users">) {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "users.staff.manage")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const query = staffQueryFromParams(await searchParams);
 
   // The counters describe the whole staff, the table the current filter;
   // `pageSize: 1` asks each counter for a total and not the records.
-  const [list, active, invited, deactivated] = await Promise.all([
+  const [list, active, invited, deactivated, grantable] = await Promise.all([
     listUsers("staff", query),
     listUsers("staff", { status: "ACTIVE", pageSize: 1 }),
     listUsers("staff", { status: "INVITED", pageSize: 1 }),
     listUsers("staff", { status: "DEACTIVATED", pageSize: 1 }),
+    // The roles this viewer may invite someone into, from the server.
+    getGrantable("staff"),
   ]);
 
   return (
@@ -43,7 +38,7 @@ export default async function AdminUsersPage({ searchParams }: PageProps<"/[loca
       <AdminPageHeader
         title="Staff"
         description="Everyone who can sign in to this panel, the role each one holds, and who invited them."
-        actions={<InviteUserButton />}
+        actions={<InviteUserButton roles={grantable.roles} />}
       />
 
       <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

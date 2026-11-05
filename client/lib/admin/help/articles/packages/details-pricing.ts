@@ -11,7 +11,6 @@ export const article = {
   title: "Details, party, windows and adjustment",
   summary: "The package's words, who it can be sold to, when it can be travelled and sold, and the discount or fixed price laid over its parts.",
   category: "packages",
-  roles: ["ADMIN"],
   routes: ["/admin/packages/[slug]/details"],
   keywords: ["description", "nights", "editorial image", "party", "adults", "children", "travellers", "travel window", "on sale window", "adjustment", "discount", "fixed price", "per traveller", "required parts", "applies to"],
   related: ["pk-create", "pk-parts", "pk-preview-quote", "pk-publish-checklist", "md-images"],

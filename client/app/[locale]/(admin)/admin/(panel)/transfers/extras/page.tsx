@@ -5,6 +5,7 @@ import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { StatCard } from "@/components/admin/StatCard";
 import { TransferExtrasEditor } from "@/components/admin/TransferExtrasEditor";
 import { listAdminTransferExtras } from "@/lib/api/transfers";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Transfer extras" };
 
@@ -21,6 +22,7 @@ export const metadata: Metadata = { title: "Transfer extras" };
  * "skiEquipment" was.
  */
 export default async function AdminTransferExtrasPage() {
+  await requireScreen();
   const { data: extras } = await listAdminTransferExtras();
 
   const offered = extras.filter((extra) => extra.isActive !== false);

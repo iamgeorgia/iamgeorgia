@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 
 import { AdminContainer, AdminPageHeader } from "@/components/admin/AdminPage";
 import { FinanceOverviewCurrency } from "@/components/admin/finance/FinanceOverviewCurrency";
 import { FinanceOverviewPayments, FinanceOverviewReceivables } from "@/components/admin/finance/FinanceOverviewPanels";
 import { PaymentsDuePanel } from "@/components/admin/finance/PaymentsDuePanel";
 import { getFinanceSummary, getPaymentsDue, listPayments, listReceivables } from "@/lib/api/finance";
-import { getSession } from "@/lib/auth/session";
-import { localePath } from "@/lib/i18n/config";
-import { getI18n, getLocale } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
+import { getI18n } from "@/lib/i18n/server";
 import { can } from "@/types/auth";
 
 export const metadata: Metadata = { title: "Finance overview" };
@@ -29,11 +27,8 @@ const DUE_DAYS = 7;
  * emptier screen rather than an error page.
  */
 export default async function AdminFinanceOverviewPage() {
-  const session = await getSession();
+  const session = await requireScreen();
 
-  if (!can(session, "finance.payables.read")) {
-    redirect(localePath(await getLocale(), "/admin"));
-  }
 
   const { path } = await getI18n();
   const now = new Date();

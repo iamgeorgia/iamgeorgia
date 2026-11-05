@@ -6,6 +6,7 @@ import { AlertTriangle, Loader2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { AdminPanel } from "./AdminPage";
+import { useCan } from "./AdminViewerContext";
 import { ApiError, describeError } from "@/lib/api/client";
 import { deletePartner } from "@/lib/api/partners";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -23,15 +24,19 @@ import type { Partner } from "@/types";
  *
  * The confirmation is not theatre: the Partner ID travels to the server, which
  * refuses the delete unless it matches the record. Nothing about this is
- * enforced by hiding the button.
+ * enforced by hiding the button — the panel is simply not shown to a viewer
+ * without `partners.write`, the capability the route asks for.
  */
 export function PartnerDangerZone({ partner }: { partner: Partner }) {
   const router = useRouter();
   const path = useLocalePath();
+  const can = useCan();
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  if (!can("partners.write")) return null;
 
   const matches = confirm.trim().toUpperCase() === partner.reference;
   const accountCount = partner.users.length;

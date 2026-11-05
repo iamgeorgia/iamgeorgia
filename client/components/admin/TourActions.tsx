@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Archive, CheckCircle2, EyeOff, Loader2, Star, Trash2 } from "lucide-react";
 
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { archiveTour, deleteTour, publishTour, unpublishTour, updateTour } from "@/lib/api/tours";
 import { ApiError, describeError } from "@/lib/api/client";
 import { useLocalePath } from "@/lib/i18n/provider";
@@ -20,6 +22,7 @@ import type { TourWithChecklist } from "@/types/tour";
 export function TourActions({ tour }: { tour: TourWithChecklist }) {
   const router = useRouter();
   const path = useLocalePath();
+  const can = useCan();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -48,6 +51,12 @@ export function TourActions({ tour }: { tour: TourWithChecklist }) {
       setBusy(null);
     }
   };
+
+  // Every transition here is a write the tours router gates on either
+  // capability; a viewer without one gets the checklist above and this line.
+  if (!can("catalogue.write", "tours.write")) {
+    return <ReadOnlyNote needs={["catalogue.write", "tours.write"]} what="Publishing or changing this tour" />;
+  }
 
   const base =
     "inline-flex h-10 w-full items-center justify-center gap-2 rounded-sm px-4 text-[0.8125rem] font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50";

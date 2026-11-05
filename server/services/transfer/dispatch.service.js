@@ -108,16 +108,19 @@ export const listDispatchLegs = async (query) => {
               }
             : {}),
         ...(driverId ? { assignments: { some: { driverId, status: { in: ACTIVE_ASSIGNMENT_STATUSES } } } } : {}),
-        ...(search
-            ? {
-                  booking: {
+        // A booking still waiting for the platform's yes is not dispatch's
+        // yet: its legs sit UNASSIGNED but must not be offered to anyone.
+        booking: {
+            status: { not: 'PENDING_APPROVAL' },
+            ...(search
+                ? {
                       OR: [
                           { reference: { contains: search, mode: 'insensitive' } },
                           { leadPassengerName: { contains: search, mode: 'insensitive' } }
                       ]
                   }
-              }
-            : {})
+                : {})
+        }
     };
 
     const [total, legs] = await Promise.all([

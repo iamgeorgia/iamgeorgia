@@ -31,6 +31,24 @@ export const canViewFinancial = (viewer, partner) =>
     can(viewer, CAPABILITIES.PARTNERS_FINANCIAL_READ) ||
     (can(viewer, CAPABILITIES.PARTNER_FINANCIAL_READ) && viewer.partnerId === partner.id);
 
+/**
+ * Whether a viewer may see the money terms on a partner: the commission rate
+ * and the credit limit.
+ *
+ * A company sees its own, since it is party to them. On the platform side the
+ * commission is finance's figure (the report reads it, the accountant sets it)
+ * and the credit limit belongs to whoever watches the debts or sets the limit.
+ * A desk that reads partners to know who booked gets neither: the rate we
+ * charge an agency is not what the desk needs to handle its booking.
+ */
+const ownCompany = (viewer, partner) => Boolean(viewer?.partnerId) && viewer.partnerId === partner.id;
+
+export const canViewCommission = (viewer, partner) =>
+    ownCompany(viewer, partner) || can(viewer, CAPABILITIES.FINANCE_COMMISSION_READ, CAPABILITIES.FINANCE_COMMISSION_WRITE);
+
+export const canViewCredit = (viewer, partner) =>
+    ownCompany(viewer, partner) || can(viewer, CAPABILITIES.PARTNERS_CREDIT_WRITE, CAPABILITIES.FINANCE_RECEIVABLES_READ);
+
 const toFinancial = (financial) =>
     financial
         ? {
@@ -80,10 +98,6 @@ export const toPartnerDetail = (partner, viewer) => {
         website: partner.website ?? null,
         socialLinks: partner.socialLinks ?? [],
         documents: partner.documents ?? [],
-        commissionRateBps: partner.commissionRateBps,
-        creditLimitCents: partner.creditLimitCents ?? null,
-        creditLimitCurrency: partner.creditLimitCurrency ?? null,
-        creditLimitMode: partner.creditLimitMode ?? 'BLOCK',
         users: (partner.users ?? []).map(toContact),
         updatedAt: partner.updatedAt,
 
@@ -124,6 +138,18 @@ export const toPartnerDetail = (partner, viewer) => {
             terminatedReason: partner.terminatedReason ?? null
         }
     };
+
+    // The money terms, absent — not null — for a viewer who may not read them,
+    // so a screen cannot mistake "not shown to you" for "not set".
+    if (canViewCommission(viewer, partner)) {
+        detail.commissionRateBps = partner.commissionRateBps;
+    }
+
+    if (canViewCredit(viewer, partner)) {
+        detail.creditLimitCents = partner.creditLimitCents ?? null;
+        detail.creditLimitCurrency = partner.creditLimitCurrency ?? null;
+        detail.creditLimitMode = partner.creditLimitMode ?? 'BLOCK';
+    }
 
     // Present only when the bank details were joined for an entitled viewer:
     // `null` then means "none on file", and an absent key means "not shown".

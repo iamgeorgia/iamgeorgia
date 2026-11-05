@@ -14,7 +14,6 @@ export const article = {
   title: "Approvals: changes that need a second person",
   summary: "Which money changes must be approved by someone else, how to ask for one, and how to decide.",
   category: "finance",
-  roles: ["ADMIN"],
   routes: ["/admin/finance/approvals", "/admin/finance/approvals/[id]"],
   keywords: [
     "approval",

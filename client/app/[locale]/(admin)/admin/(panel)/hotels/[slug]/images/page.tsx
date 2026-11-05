@@ -7,6 +7,7 @@ import { RoomGalleries } from "@/components/admin/RoomGalleries";
 import { getHotel } from "@/lib/api/hotels";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Images" };
 
@@ -21,6 +22,7 @@ export const metadata: Metadata = { title: "Images" };
 export default async function HotelImagesPage({
   params,
 }: PageProps<"/[locale]/admin/hotels/[slug]/images">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

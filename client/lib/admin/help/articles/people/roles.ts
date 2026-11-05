@@ -14,7 +14,6 @@ export const article = {
   title: "Roles and permissions",
   summary: "What a role is, built-in versus custom roles, one-off overrides, and the rule that you can only hand out what you hold.",
   category: "people",
-  roles: ["ADMIN"],
   routes: ["/admin/roles", "/admin/roles/new", "/admin/roles/[key]"],
   keywords: [
     "role",
@@ -28,6 +27,9 @@ export const article = {
     "access",
     "ceiling",
     "built in",
+    "sidebar",
+    "preview",
+    "read-only",
   ],
   related: ["pp-staff", "gs-roles", "pp-audit-log"],
   blocks: [
@@ -59,6 +61,26 @@ export const article = {
     {
       type: "paragraph",
       text: "A custom role can be deleted once nobody holds it. If someone does, the page tells you how many — take the role off them first.",
+    },
+    { type: "heading", id: "what-it-sees", text: "What a role sees" },
+    {
+      type: "paragraph",
+      text: "The capabilities you tick decide everything a holder sees, not only what the server allows. Below the checklist, **What this role sees** shows the sidebar and the overview an account with those ticks would get, and it changes as you tick. Nothing is saved until you press the button.",
+    },
+    {
+      type: "list",
+      items: [
+        "**The sidebar** offers a screen when the role can do that screen's job. Registers, queues and reports appear on their read capability. Editing screens such as Hotels, Routes or Packages appear only to roles that can change them.",
+        "**The overview** puts the queues the role can act on under **Needs a decision**, and the figures it can only read under the next heading.",
+        "**Buttons and forms** follow the same ticks. A role that can read a screen but not change it sees the screen read-only, with one line saying which capability would unlock it.",
+        "**An address typed by hand** for a screen the role cannot open lands on a page that names the missing capability.",
+      ],
+    },
+    {
+      type: "callout",
+      tone: "info",
+      title: "Partner roles",
+      text: "The preview is for staff roles. A partner role decides what its holders see in the partner portal, in the same way.",
     },
     { type: "heading", id: "giving-roles", text: "Giving someone roles" },
     {

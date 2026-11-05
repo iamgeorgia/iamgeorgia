@@ -12,7 +12,8 @@
  * dictionaries.
  */
 
-export type Role =
+/** The roles the server ships with. Their keys are fixed and upper-case. */
+export type SystemRole =
   | "SUPER_ADMIN"
   | "ADMIN"
   | "MANAGEMENT"
@@ -25,6 +26,14 @@ export type Role =
   | "PARTNER_AGENT"
   | "PARTNER_FINANCE"
   | "DRIVER";
+
+/**
+ * A role key as an account carries it. A built-in key, or the lower-case key
+ * of a role made in the Roles editor — which is why this is open: the client
+ * must not refuse to type an account whose role did not exist when it was
+ * built. Nothing decides anything from the key; `can()` reads capabilities.
+ */
+export type Role = SystemRole | (string & {});
 
 /**
  * A partner's lifecycle. Only APPROVED reaches the B2B platform;
@@ -171,8 +180,13 @@ export interface Partner extends PartnerSummary {
   website: string | null;
   socialLinks: SocialLink[];
   documents: PartnerDocument[];
-  /** Basis points: 1000 is 10%. Integer, like every other rate on the server. */
-  commissionRateBps: number;
+  /**
+   * Basis points: 1000 is 10%. Integer, like every other rate on the server.
+   * Absent — not null — for a viewer the server does not show the rate to
+   * (a desk that reads partners but holds no commission capability); the
+   * company itself and finance always get it.
+   */
+  commissionRateBps?: number;
   users: PartnerContact[];
   updatedAt: string;
   review: PartnerReview;

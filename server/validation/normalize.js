@@ -16,6 +16,9 @@ export const textField = (max = 500) => z.string().trim().min(1).max(max);
  * make a number readable — spaces, dashes, brackets, dots — is stripped, so
  * "+995 (32) 2-123-456" and "+995322123456" are stored identically.
  */
+/** An honorific, printed on documents only when given. */
+export const titleField = z.enum(['MR', 'MRS', 'MS', 'MISS', 'MSTR']);
+
 export const phoneField = z
     .string()
     .trim()

@@ -14,7 +14,6 @@ export const article = {
   title: "Inventory and nightly prices",
   summary: "The calendar: how many rooms are open on each night, the minimum stay, and the supplier's net price per rate plan — all set by date range.",
   category: "hotels",
-  roles: ["ADMIN"],
   routes: ["/admin/hotels/[slug]/calendar"],
   keywords: ["calendar", "availability", "allotment", "rooms open", "minimum stay", "net price", "nightly rate", "extra adult", "closed", "stop sale", "apply to range", "weekdays"],
   related: ["ht-rooms-rates", "ht-hub", "ht-publish-checklist"],

@@ -13,6 +13,8 @@ import {
   TextArea,
   TextInput,
 } from "./FormControls";
+import { useCan } from "./AdminViewerContext";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import { overridePackageKosher, removePackageKosher, setPackageKosher } from "@/lib/api/packages";
 import { shabbatModeLabels } from "@/lib/admin/packages";
@@ -49,6 +51,8 @@ const MODES: ShabbatMode[] = ["SOLAR", "FIXED_HOURS", "NONE"];
  */
 export function PackageKosherEditor({ pkg }: { pkg: PackageWithChecklist }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
   const profile = pkg.kosherProfile;
 
   const [minServiceLevel, setMinServiceLevel] = useState<KosherServiceLevel>(
@@ -177,6 +181,7 @@ export function PackageKosherEditor({ pkg }: { pkg: PackageWithChecklist }) {
 
   return (
     <div className="flex flex-col gap-8">
+      <fieldset disabled={!canEdit} className="flex min-w-0 flex-col gap-8">
       <div className="grid gap-4 sm:grid-cols-3">
         <SelectInput
           label="Minimum hotel standard"
@@ -368,6 +373,7 @@ export function PackageKosherEditor({ pkg }: { pkg: PackageWithChecklist }) {
           setNotes(event.target.value);
         }}
       />
+      </fieldset>
 
       {blockers.length > 0 && (
         <div className="rounded-sm border border-error/40 bg-error/5 p-4">
@@ -391,27 +397,31 @@ export function PackageKosherEditor({ pkg }: { pkg: PackageWithChecklist }) {
 
       <FormError message={error} />
 
-      <div className="flex flex-wrap items-center gap-3">
-        <SubmitButton busy={busy === "save"} saved={saved} onClick={() => void save()}>
-          {profile ? "Save kosher profile" : "Make this a kosher package"}
-        </SubmitButton>
+      {canEdit ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <SubmitButton busy={busy === "save"} saved={saved} onClick={() => void save()}>
+            {profile ? "Save kosher profile" : "Make this a kosher package"}
+          </SubmitButton>
 
-        {profile && (
-          <button
-            type="button"
-            disabled={busy !== null}
-            onClick={() => void remove()}
-            className="inline-flex h-10 items-center gap-2 rounded-sm border border-line px-4 text-[0.8125rem] font-semibold text-muted transition-colors hover:border-error hover:text-error-text disabled:opacity-50"
-          >
-            {busy === "remove" ? (
-              <Loader2 size={15} className="animate-spin" aria-hidden />
-            ) : (
-              <ShieldOff size={15} aria-hidden />
-            )}
-            Remove kosher profile
-          </button>
-        )}
-      </div>
+          {profile && (
+            <button
+              type="button"
+              disabled={busy !== null}
+              onClick={() => void remove()}
+              className="inline-flex h-10 items-center gap-2 rounded-sm border border-line px-4 text-[0.8125rem] font-semibold text-muted transition-colors hover:border-error hover:text-error-text disabled:opacity-50"
+            >
+              {busy === "remove" ? (
+                <Loader2 size={15} className="animate-spin" aria-hidden />
+              ) : (
+                <ShieldOff size={15} aria-hidden />
+              )}
+              Remove kosher profile
+            </button>
+          )}
+        </div>
+      ) : (
+        <ReadOnlyNote needs="catalogue.write" what="Changing the kosher profile or its override" />
+      )}
 
       {profile && (
         <fieldset className="border-t border-line pt-6">
@@ -427,29 +437,35 @@ export function PackageKosherEditor({ pkg }: { pkg: PackageWithChecklist }) {
               </>
             )}
           </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <TextInput
-              label="Until"
-              type="date"
-              value={overrideUntil}
-              onChange={(event) => setOverrideUntil(event.target.value)}
-            />
-            <TextInput
-              label="Reason"
-              className="sm:col-span-2"
-              value={overrideReason}
-              onChange={(event) => setOverrideReason(event.target.value)}
-            />
-          </div>
-          <button
-            type="button"
-            disabled={busy !== null || !overrideUntil || overrideReason.trim().length === 0}
-            onClick={() => void override()}
-            className="mt-4 inline-flex h-10 items-center gap-2 rounded-sm border border-ink/20 px-4 text-[0.8125rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-surface-soft disabled:opacity-50"
-          >
-            {busy === "override" && <Loader2 size={15} className="animate-spin" aria-hidden />}
-            Record override
-          </button>
+          {/* The current override reads above for everyone; recording one is
+              a write and goes with the capability. */}
+          {canEdit && (
+            <>
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <TextInput
+                  label="Until"
+                  type="date"
+                  value={overrideUntil}
+                  onChange={(event) => setOverrideUntil(event.target.value)}
+                />
+                <TextInput
+                  label="Reason"
+                  className="sm:col-span-2"
+                  value={overrideReason}
+                  onChange={(event) => setOverrideReason(event.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={busy !== null || !overrideUntil || overrideReason.trim().length === 0}
+                onClick={() => void override()}
+                className="mt-4 inline-flex h-10 items-center gap-2 rounded-sm border border-ink/20 px-4 text-[0.8125rem] font-semibold text-ink transition-colors hover:border-ink hover:bg-surface-soft disabled:opacity-50"
+              >
+                {busy === "override" && <Loader2 size={15} className="animate-spin" aria-hidden />}
+                Record override
+              </button>
+            </>
+          )}
         </fieldset>
       )}
     </div>

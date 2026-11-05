@@ -15,7 +15,6 @@ export const article = {
   title: "A tour booking: confirm, decline, cancel",
   summary: "Answering a request — confirm or decline — and cancelling a confirmed departure, with what each sends and what cannot be undone.",
   category: "bookings",
-  roles: ["ADMIN"],
   routes: ["/admin/tours/bookings/[reference]"],
   keywords: ["TUR", "confirm request", "decline request", "voucher", "seats released", "travellers", "passport", "dietary", "meeting point", "cancel"],
   related: ["bk-tour-bookings-register", "bk-statuses-glossary", "rf-dangerous-actions", "tr-departures", "dp-who-is-told-what"],

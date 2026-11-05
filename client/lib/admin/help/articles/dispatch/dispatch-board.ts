@@ -15,7 +15,6 @@ export const article = {
   title: "The dispatch board",
   summary: "Every leg, who is on it and what happens next — the filters, the table, and the four actions on a leg with what each one sends.",
   category: "dispatch",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/dispatch"],
   keywords: ["dispatch", "leg", "assign", "reassign", "unassign", "mark as", "cancel leg", "driver", "needs a driver", "flight", "board"],
   related: ["dp-assigning-a-driver", "dp-leg-statuses", "dp-who-is-told-what", "bk-transfer-booking-detail", "dp-schedule", "gs-quick-start-dispatcher"],

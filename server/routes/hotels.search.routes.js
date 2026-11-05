@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import { optionalAuthenticate } from '../middleware/auth.js';
+import { actAsPartner } from '../lib/booking/onBehalf.js';
 import { searchLimiter } from '../middleware/rateLimit.js';
 import { validate } from '../middleware/validate.js';
 import { availabilityQuerySchema, offerQuoteSchema, searchQuerySchema } from '../validation/search.js';
@@ -24,7 +25,7 @@ import { toOffer, toRoomAvailability, toSearchResult } from '../serializers/sear
  */
 export const hotelSearchRoutes = Router();
 
-hotelSearchRoutes.use(optionalAuthenticate);
+hotelSearchRoutes.use(optionalAuthenticate, actAsPartner);
 
 hotelSearchRoutes.get('/', searchLimiter, validate({ query: searchQuerySchema }), async (req, res) => {
     const { locale } = req.valid.query;

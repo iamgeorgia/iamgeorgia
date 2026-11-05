@@ -9,7 +9,6 @@ export const article = {
   title: "Quick start for dispatchers",
   summary: "The six screens a dispatcher works, in the order of a working day — the board, an assignment, a leg's statuses, a diary, the fleet, the ratings queue.",
   category: "getting-started",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["quick start", "dispatcher", "first day", "onboarding", "checklist", "board"],
   related: ["dp-dispatch-board", "dp-assigning-a-driver", "rf-common-tasks-dispatcher", "rf-dangerous-actions"],
   blocks: [

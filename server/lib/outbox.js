@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+
 /**
  * The transactional outbox.
  *
@@ -46,6 +48,25 @@ export const TOPICS = Object.freeze({
     SERVICE_BOOKING_DECLINED: 'service.booking.declined',
     SERVICE_BOOKING_CANCELLED: 'service.booking.cancelled',
 
+    // The transfer voucher, when it follows an approval rather than the
+    // booking request itself (the route sends it directly otherwise).
+    TRANSFER_BOOKING_CONFIRMED: 'transfer.booking.confirmed',
+
+    // Platform approval (OD1). `payload.product` is HOTEL, TRANSFER, TOUR,
+    // SERVICE or ORDER and `bookingId` points into that table. Written by
+    // the facades when a booking is made, and by the approval service and
+    // its sweeper afterwards.
+    // Every booking made and every one amended, for the desk's bell. Written
+    // by the facades and the amend paths, whatever the product.
+    BOOKING_CREATED: 'booking.created',
+    BOOKING_MODIFIED: 'booking.modified',
+    BOOKING_AWAITING_APPROVAL: 'booking.awaiting_approval',
+    BOOKING_APPROVED: 'booking.approved',
+    BOOKING_REJECTED: 'booking.rejected',
+    BOOKING_APPROVAL_OVERDUE: 'booking.approval_overdue',
+    // A deadline is N days away, per the reminder schedule (`sweepDeadlineReminders`).
+    DEADLINE_UPCOMING: 'booking.deadline.upcoming',
+
     // The supplier's side. Written inside the `…InTx` functions, so the
     // property, operator or provider hears about every booking of theirs,
     // whether it was sold on its own or inside a package. `payload.product`
@@ -83,3 +104,12 @@ export const enqueueEvent = (client, { topic, payload = {}, entityType = null, e
     client.outboxEvent.create({
         data: { topic, payload, entityType, entityId }
     });
+
+/**
+ * The event an outbox handler is running for, reachable from anywhere beneath
+ * it. The drain sets it; the in-app notices read it to avoid telling someone
+ * twice on a retry, and the mailer reads it to avoid emailing them twice.
+ */
+export const outboxContext = new AsyncLocalStorage();
+
+export const currentOutboxEvent = () => outboxContext.getStore()?.event ?? null;

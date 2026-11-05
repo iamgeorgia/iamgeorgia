@@ -4,10 +4,12 @@ import { AdminBreadcrumbs, AdminContainer, AdminPageHeader } from "@/components/
 import { NewFleetVehicleForm } from "@/components/admin/NewFleetVehicleForm";
 import { listAdminTransferProviders, listAdminTransferVehicles } from "@/lib/api/transfers";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Add a car" };
 
 export default async function NewFleetVehiclePage() {
+  await requireScreen();
   const [{ data: providers }, { data: classes }, { path }] = await Promise.all([
     listAdminTransferProviders(),
     listAdminTransferVehicles(),

@@ -72,6 +72,19 @@ adminUserRoutes.post('/', inviteLimiter, validate({ body: inviteStaffSchema }), 
     res.status(201).json({ user: toUserSummary(issued.user), ...(await activation(issued)) });
 });
 
+/**
+ * What the caller may hand out to anyone on the staff side: the roles it
+ * dominates and the capabilities it may grant by name. The invite form reads
+ * this rather than a list kept in the client, so a role made in the editor
+ * can be offered to a new colleague the moment it exists. Declared before
+ * `/:id` so the word is a route, not an account that does not exist.
+ */
+adminUserRoutes.get('/grantable', async (req, res) => {
+    const { roles, capabilities } = await grantable(STAFF, req.user);
+
+    res.json({ roles: roles.map(toRole), capabilities });
+});
+
 adminUserRoutes.get('/:id', validate({ params: userIdParamSchema }), async (req, res) => {
     res.json(toUserDetail(await findUserOr404(req.valid.params.id, STAFF)));
 });

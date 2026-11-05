@@ -6,10 +6,12 @@ import { TourTranslationsEditor } from "@/components/admin/TourTranslationsEdito
 import { getTour, listTourTranslations } from "@/lib/api/tours";
 import { ApiError } from "@/lib/api/client";
 import { getI18n } from "@/lib/i18n/server";
+import { requireScreen } from "@/lib/auth/session";
 
 export const metadata: Metadata = { title: "Translations" };
 
 export default async function TourTranslationsPage({ params }: PageProps<"/[locale]/admin/tours/[slug]/translations">) {
+  await requireScreen();
   const { slug } = await params;
   const { path } = await getI18n();
 

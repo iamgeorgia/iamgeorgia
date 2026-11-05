@@ -2,6 +2,7 @@ import { Router } from 'express';
 
 import { validate } from '../middleware/validate.js';
 import { isTrade, optionalAuthenticate } from '../middleware/auth.js';
+import { actAsPartner } from '../lib/booking/onBehalf.js';
 import { accessWhere } from '../services/partner/access.service.js';
 import {
     publicTourQuerySchema,
@@ -36,7 +37,7 @@ const PUBLIC_STATUSES = ['ACTIVE'];
 
 export const tourRoutes = Router();
 
-tourRoutes.use(optionalAuthenticate);
+tourRoutes.use(optionalAuthenticate, actAsPartner);
 
 tourRoutes.get('/', validate({ query: publicTourQuerySchema }), async (req, res) => {
     const { locale } = req.valid.query;
@@ -74,7 +75,7 @@ tourRoutes.get('/:slug', validate({ params: tourSlugParamSchema, query: publicTo
  */
 export const tourSearchRoutes = Router();
 
-tourSearchRoutes.use(optionalAuthenticate);
+tourSearchRoutes.use(optionalAuthenticate, actAsPartner);
 
 tourSearchRoutes.get('/', validate({ query: tourSearchQuerySchema }), async (req, res) => {
     const { locale } = req.valid.query;

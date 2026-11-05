@@ -110,15 +110,20 @@ export function TeamSection({
   const [notice, setNotice] = useState<string | null>(null);
 
   return (
-    <div className="mt-10 space-y-6">
+    // The roles guide is reference, not work: beside the list on a wide
+    // screen, where it can be read while choosing a role, and after it below.
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_20rem] xl:items-start">
+      <div className="min-w-0 space-y-6">
       <InviteCard grantable={grantable} total={total} />
 
-      <section className="rounded-sm border border-line bg-surface">
-        <div className="p-5 sm:p-6">
-          <h2 className="font-display text-[1.25rem] text-ink">Members</h2>
-          <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">
-            {total} of {TEAM_MAX} places used. Invitations and deactivated members count too;
-            delete one to free its place.
+      <section aria-labelledby="team-members" className="rounded-md border border-line bg-surface">
+        <div className="px-4 py-4 sm:px-5">
+          <h2 id="team-members" className="text-[0.9375rem] font-semibold text-ink">Members</h2>
+          <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
+            <bdi>
+              {total} of {TEAM_MAX} places used. Invitations and deactivated members count too; delete one to free
+              its place.
+            </bdi>
           </p>
           <p aria-live="polite" className="text-[0.8125rem] text-success empty:hidden">
             {notice && (
@@ -151,6 +156,7 @@ export function TeamSection({
           </ul>
         )}
       </section>
+      </div>
 
       <RolesGuide />
     </div>
@@ -221,11 +227,11 @@ function InviteCard({ grantable, total }: { grantable: Role[]; total: number }) 
   if (roles.length === 0) return null;
 
   return (
-    <section className="rounded-sm border border-line bg-surface p-5 sm:p-6">
+    <section aria-labelledby="team-invite" className="rounded-md border border-line bg-surface px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h2 className="font-display text-[1.25rem] text-ink">Invite a team member</h2>
-          <p className="mt-1.5 text-[0.875rem] leading-relaxed text-muted">
+          <h2 id="team-invite" className="text-[0.9375rem] font-semibold text-ink">Invite a team member</h2>
+          <p className="mt-1 text-[0.8125rem] leading-relaxed text-muted">
             They get an email with a link to set their own password. You can copy the link
             and send it yourself too.
           </p>
@@ -486,28 +492,27 @@ function MemberRow({
     pending === action ? <Loader2 size={15} className="animate-spin" aria-hidden /> : null;
 
   return (
-    <li className="p-5 sm:p-6">
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.9375rem] font-medium text-ink">
-            <span className="min-w-0 wrap-break-word">{member.fullName}</span>
-            {self && (
-              <span className="rounded-sm bg-surface-soft px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted">
-                You
-              </span>
-            )}
-            {member.isPrimaryContact && (
-              <span className="inline-flex items-center gap-1 rounded-sm bg-brand/10 px-1.5 py-0.5 text-[0.6875rem] font-medium text-brand-text">
-                <Star size={11} aria-hidden />
-                Primary contact
-              </span>
-            )}
-          </p>
-          <p className="mt-0.5 text-[0.8125rem] break-all text-muted">{member.email}</p>
-          <p className="mt-1 text-[0.75rem] text-subtle">{activityLine(member)}</p>
-        </div>
+    <li className="px-4 py-4 sm:px-5">
+      {/* The badges sit beside the name only. On a phone the address and the
+          activity line run the full width under both, so an address is not
+          squeezed into the space the badges leave and broken mid-word. */}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-4">
+        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[0.9375rem] font-medium text-ink">
+          <span className="min-w-0 wrap-break-word">{member.fullName}</span>
+          {self && (
+            <span className="rounded-sm bg-surface-soft px-1.5 py-0.5 text-[0.6875rem] font-medium text-muted">
+              You
+            </span>
+          )}
+          {member.isPrimaryContact && (
+            <span className="inline-flex items-center gap-1 rounded-sm bg-brand/10 px-1.5 py-0.5 text-[0.6875rem] font-medium text-brand-text">
+              <Star size={11} aria-hidden />
+              Primary contact
+            </span>
+          )}
+        </p>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2 sm:row-span-3">
           <span className="rounded-sm border border-line px-2 py-0.5 text-[0.75rem] font-medium text-body">
             {teamRoleLabel(member.role)}
           </span>
@@ -520,6 +525,9 @@ function MemberRow({
             {teamStatusLabels[status]}
           </span>
         </div>
+
+        <p className="col-span-2 mt-0.5 text-[0.8125rem] text-muted wrap-anywhere sm:col-span-1">{member.email}</p>
+        <p className="col-span-2 mt-1 text-[0.75rem] text-subtle sm:col-span-1">{activityLine(member)}</p>
       </div>
 
       {self ? (
@@ -940,12 +948,12 @@ const roleDescription = (role: Role): string =>
 
 function RolesGuide() {
   return (
-    <section className="rounded-sm border border-line bg-surface p-5 sm:p-6">
-      <h2 className="font-display text-[1.25rem] text-ink">What each role can do</h2>
+    <section aria-labelledby="team-roles" className="rounded-md border border-line bg-surface px-4 py-4 sm:px-5 xl:sticky xl:top-24">
+      <h2 id="team-roles" className="text-[0.9375rem] font-semibold text-ink">What each role can do</h2>
       <dl className="mt-4 space-y-3">
         {(Object.keys(teamRoleLabels) as TeamRole[]).map((role) => (
-          <div key={role} className="sm:flex sm:gap-4">
-            <dt className="text-[0.875rem] font-medium text-ink sm:w-24 sm:shrink-0">
+          <div key={role} className="sm:flex sm:gap-4 xl:block">
+            <dt className="text-[0.875rem] font-medium text-ink sm:w-24 sm:shrink-0 xl:w-auto">
               {teamRoleLabels[role]}
             </dt>
             <dd className="text-[0.8125rem] leading-relaxed text-muted">

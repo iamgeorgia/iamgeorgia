@@ -12,7 +12,6 @@ export const article = {
   title: "Adding a tour",
   summary: "The create form: what each field wants, what it defaults to, and why the slug deserves a second look before you press Create draft.",
   category: "tours",
-  roles: ["ADMIN"],
   routes: ["/admin/tours/new"],
   keywords: ["new tour", "create tour", "add tour", "slug", "region", "difficulty", "length", "group size", "supplier", "draft"],
   related: ["tr-hub", "tr-details-itinerary", "tr-publish-checklist", "pb-slugs-and-seo"],

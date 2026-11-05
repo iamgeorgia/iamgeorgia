@@ -324,10 +324,13 @@ export function PlaceSearch({
     }
   };
 
-  const unavailable = availability === "missing-key" || availability === "failed";
+  // A key Google rejects reads as "not configured": true enough, and nothing
+  // the person at the keyboard can do about it either way.
+  const unavailable =
+    availability === "missing-key" || availability === "key-rejected" || availability === "failed";
   const inputDisabled = disabled || unavailable || availability === "loading";
   const placeholder =
-    availability === "missing-key"
+    availability === "missing-key" || availability === "key-rejected"
       ? strings.unavailable
       : availability === "failed"
         ? strings.failed

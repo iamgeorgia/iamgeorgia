@@ -1,4 +1,5 @@
 import { config } from '../../config.js';
+import { syncBookingIndexInTx } from '../booking/index.service.js';
 import { recordAudit, AUDIT_ENTITY } from '../../lib/audit.js';
 import { upsertPenaltyInTx } from './penalty.service.js';
 import { onReceivableAmountChangedInTx, onReceivableCreatedInTx } from '../invoicing/invoice.service.js';
@@ -43,7 +44,7 @@ const PRODUCTS = {
         departure: (b) => toDateOnly(b.checkOut),
         // The guest pays the room and the tax included in it; the cancellation
         // schedule charges against the same total.
-        buyerTotal: (b) => b.sellTotalCents + (b.taxTotalCents ?? 0),
+        buyerTotal: (b) => b.sellTotalCents + (b.taxTotalCents ?? 0) + (b.priceAdjustmentCents ?? 0),
         lead: (b) => ({ name: b.leadGuestName, email: b.leadGuestEmail })
     },
     TRANSFER: {
@@ -57,7 +58,7 @@ const PRODUCTS = {
         timezone: () => null,
         arrival: (b, tz) => todayInTimezone(tz, b.pickupAt),
         departure: (b, tz) => todayInTimezone(tz, b.returnPickupAt ?? b.pickupAt),
-        buyerTotal: (b) => b.sellTotalCents,
+        buyerTotal: (b) => b.sellTotalCents + (b.priceAdjustmentCents ?? 0),
         lead: (b) => ({ name: b.leadPassengerName, email: b.leadPassengerEmail })
     },
     TOUR: {
@@ -69,7 +70,7 @@ const PRODUCTS = {
         timezone: (b) => b.tour?.timezone,
         arrival: (b) => toDateOnly(b.date),
         departure: (b) => toDateOnly(b.endDate),
-        buyerTotal: (b) => b.sellTotalCents,
+        buyerTotal: (b) => b.sellTotalCents + (b.priceAdjustmentCents ?? 0),
         lead: (b) => ({ name: b.leadTravellerName, email: b.leadTravellerEmail })
     },
     SERVICE: {
@@ -81,7 +82,7 @@ const PRODUCTS = {
         timezone: (b) => b.service?.timezone,
         arrival: (b) => toDateOnly(b.date),
         departure: (b) => toDateOnly(b.endDate),
-        buyerTotal: (b) => b.sellTotalCents,
+        buyerTotal: (b) => b.sellTotalCents + (b.priceAdjustmentCents ?? 0),
         lead: (b) => ({ name: b.leadName, email: b.leadEmail })
     }
 };
@@ -99,6 +100,8 @@ const productOf = (product) => {
 };
 
 const partnerSelect = { select: { id: true, name: true, email: true, paymentDueDays: true, paymentDueAnchor: true } };
+/** A desk customer (manual bookings): the debtor when there is no partner. */
+const customerSelect = { select: { id: true, name: true, email: true } };
 
 // --- Pure arithmetic (unit-tested on its own) ----------------------------------------
 
@@ -346,7 +349,7 @@ const applyPayableTarget = async (tx, payable, targetCents, extra, actor, req, w
  * cancelled one owes what the supplier's cancellation liability says — or
  * Finance's own figure, once Finance has set one.
  */
-export const syncPayableInTx = async (tx, product, bookingId, actor = null, req = null, { source = 'CONFIRM' } = {}) => {
+const syncPayableCoreInTx = async (tx, product, bookingId, actor = null, req = null, { source = 'CONFIRM' } = {}) => {
     const spec = productOf(product);
     const booking = await loadBooking(tx, product, bookingId);
 
@@ -445,14 +448,15 @@ const applyReceivableTarget = async (tx, receivable, targetCents, actor, req, wh
     return updated;
 };
 
-const createReceivable = async (tx, subject, { reference, partner, lead, currency, amountCents, dueAt, source }, actor, req) => {
+const createReceivable = async (tx, subject, { reference, partner, customer = null, lead, currency, amountCents, dueAt, source }, actor, req) => {
     const receivable = await tx.receivable.create({
         data: {
             ...subject,
             reference,
             debtorPartnerId: partner?.id ?? null,
-            debtorName: partner?.name ?? lead.name,
-            debtorEmail: partner?.email ?? lead.email,
+            debtorCustomerId: customer?.id ?? null,
+            debtorName: partner?.name ?? customer?.name ?? lead.name,
+            debtorEmail: partner?.email ?? customer?.email ?? lead.email,
             currency,
             originalAmountCents: amountCents,
             amountCents,
@@ -488,7 +492,7 @@ const createReceivable = async (tx, subject, { reference, partner, lead, currenc
  * and by the cancel and on-request paths — never from inside `confirm…InTx`,
  * where an order's child has no order item yet and would look standalone.
  */
-export const syncBookingReceivableInTx = async (tx, product, bookingId, actor = null, req = null, { source = 'CONFIRM' } = {}) => {
+const syncBookingReceivableCoreInTx = async (tx, product, bookingId, actor = null, req = null, { source = 'CONFIRM' } = {}) => {
     const spec = productOf(product);
     const inOrder = await tx.orderItem.findUnique({ where: { [ORDER_CHILD_KEY[product]]: bookingId }, select: { id: true } });
 
@@ -498,7 +502,7 @@ export const syncBookingReceivableInTx = async (tx, product, bookingId, actor = 
 
     const booking = await tx[spec.model].findUnique({
         where: { id: bookingId },
-        include: { ...spec.include, partner: partnerSelect, receivable: true }
+        include: { ...spec.include, partner: partnerSelect, customer: customerSelect, receivable: true }
     });
 
     if (!booking) {
@@ -530,6 +534,7 @@ export const syncBookingReceivableInTx = async (tx, product, bookingId, actor = 
             {
                 reference: booking.reference,
                 partner: booking.partner,
+                customer: booking.customer,
                 lead: spec.lead(booking),
                 currency: booking.currency,
                 amountCents: owed ? target : spec.buyerTotal(booking),
@@ -550,7 +555,7 @@ export const syncBookingReceivableInTx = async (tx, product, bookingId, actor = 
 
 /** What a line on an order is worth to the buyer now, by its status. */
 const orderItemOwed = (item) => {
-    if (item.status === 'DECLINED') return 0;
+    if (item.status === 'DECLINED' || item.status === 'AWAITING_APPROVAL') return 0;
     if (item.status === 'CANCELLED') return Math.max(0, item.cancellationChargeCents ?? 0);
     return item.lineTotalCents;
 };
@@ -562,10 +567,10 @@ const ORDER_OWED = new Set(['CONFIRMED', 'PARTIALLY_CANCELLED', 'COMPLETED']);
  * stands confirmed (every request answered), then following each line —
  * a cancelled line owes its charge, a declined one nothing.
  */
-export const syncOrderReceivableInTx = async (tx, orderId, actor = null, req = null, { source = 'CONFIRM' } = {}) => {
+const syncOrderReceivableCoreInTx = async (tx, orderId, actor = null, req = null, { source = 'CONFIRM' } = {}) => {
     const order = await tx.order.findUnique({
         where: { id: orderId },
-        include: { items: true, partner: partnerSelect, receivable: true }
+        include: { items: true, partner: partnerSelect, customer: customerSelect, receivable: true }
     });
 
     if (!order) {
@@ -593,6 +598,7 @@ export const syncOrderReceivableInTx = async (tx, orderId, actor = null, req = n
         {
             reference: order.reference,
             partner: order.partner,
+            customer: order.customer,
             lead: { name: order.leadName, email: order.leadEmail },
             currency: order.currency,
             amountCents: Math.max(originalCents, target),
@@ -611,6 +617,36 @@ export const syncOrderReceivableInTx = async (tx, orderId, actor = null, req = n
 };
 
 /** Both sides of one standalone-or-child booking, after any change of status. */
+/**
+ * The three syncs, each followed by the booking index (`booking_index`): the
+ * supplier side and the buyer side are written from every status change, so
+ * this is where every change to a booking's money, and the booking itself,
+ * passes — the one place to keep the cross-product register in step.
+ */
+export const syncPayableInTx = async (tx, product, bookingId, actor = null, req = null, options = {}) => {
+    const payable = await syncPayableCoreInTx(tx, product, bookingId, actor, req, options);
+
+    await syncBookingIndexInTx(tx, product, bookingId);
+
+    return payable;
+};
+
+export const syncBookingReceivableInTx = async (tx, product, bookingId, actor = null, req = null, options = {}) => {
+    const receivable = await syncBookingReceivableCoreInTx(tx, product, bookingId, actor, req, options);
+
+    await syncBookingIndexInTx(tx, product, bookingId);
+
+    return receivable;
+};
+
+export const syncOrderReceivableInTx = async (tx, orderId, actor = null, req = null, options = {}) => {
+    const receivable = await syncOrderReceivableCoreInTx(tx, orderId, actor, req, options);
+
+    await syncBookingIndexInTx(tx, 'ORDER', orderId);
+
+    return receivable;
+};
+
 export const syncBookingInTx = async (tx, product, bookingId, actor = null, req = null, options = {}) => {
     const payable = await syncPayableInTx(tx, product, bookingId, actor, req, options);
     const receivable = await syncBookingReceivableInTx(tx, product, bookingId, actor, req, options);

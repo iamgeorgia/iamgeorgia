@@ -13,7 +13,6 @@ export const article = {
   title: "Transfer bookings register",
   summary: "Every journey sold, soonest pick-up first — what the tiles count, how to reach the next page, and why the pick-up times here are not local.",
   category: "bookings",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/bookings"],
   keywords: ["TRF", "transfer", "journey", "passenger", "pick-up", "UTC", "page", "confirmed value", "currency"],
   related: ["bk-transfer-booking-detail", "dp-dispatch-board", "bk-statuses-glossary", "rf-troubleshooting"],

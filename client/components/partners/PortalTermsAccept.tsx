@@ -37,13 +37,13 @@ export function PortalTermsAccept({ version }: { version: string }) {
   };
 
   return (
-    <div className="mt-6 space-y-4 border-t border-line pt-6">
-      <label className="flex items-start gap-2.5">
+    <div className="mt-5 space-y-4 border-t border-line pt-5">
+      <label className="flex cursor-pointer items-start gap-3">
         <input
           type="checkbox"
           checked={checked}
           onChange={(event) => setChecked(event.target.checked)}
-          className="mt-0.5 size-4 shrink-0 accent-brand"
+          className="mt-1 size-4 shrink-0 accent-brand"
         />
         <span className="text-[0.9375rem] leading-snug text-body">
           I have read the platform terms (version {version}) and accept them on behalf of my company.
@@ -60,7 +60,7 @@ export function PortalTermsAccept({ version }: { version: string }) {
         type="button"
         disabled={!checked || busy}
         onClick={accept}
-        className="inline-flex h-12 items-center gap-2 rounded-sm bg-brand px-6 text-[0.9375rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
+        className="inline-flex min-h-11 items-center gap-2 rounded-sm bg-brand px-5 text-[0.875rem] font-semibold text-white transition-colors hover:bg-brand-hover disabled:opacity-50"
       >
         {busy && <Loader2 size={16} className="animate-spin" aria-hidden />}
         Accept the terms

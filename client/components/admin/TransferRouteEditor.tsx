@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useCan } from "./AdminViewerContext";
 import {
   CheckboxField,
   FormError,
@@ -13,6 +14,7 @@ import {
   TextArea,
   TextInput,
 } from "./FormControls";
+import { ReadOnlyNote } from "./ReadOnlyNote";
 import { ApiError, describeError } from "@/lib/api/client";
 import { updateTransferRoute } from "@/lib/api/transfers";
 import { categoryOptions, tierOptions } from "@/lib/admin/transfers";
@@ -47,6 +49,8 @@ import type {
  */
 export function TransferRouteEditor({ route }: { route: TransferRouteWithChecklist }) {
   const router = useRouter();
+  const can = useCan();
+  const canEdit = can("catalogue.write");
 
   const [title, setTitle] = useState(route.title ?? "");
   const [summary, setSummary] = useState(route.summary ?? "");
@@ -123,7 +127,7 @@ export function TransferRouteEditor({ route }: { route: TransferRouteWithCheckli
   };
 
   return (
-    <div>
+    <fieldset disabled={!canEdit} className="min-w-0">
       <div className="space-y-5">
         <TextInput
           id="route-edit-title"
@@ -234,15 +238,19 @@ export function TransferRouteEditor({ route }: { route: TransferRouteWithCheckli
 
       <FormError message={error} />
 
-      <SubmitButton
-        className="mt-6"
-        busy={busy}
-        saved={saved && !dirty}
-        disabled={!dirty}
-        onClick={save}
-      >
-        {busy ? "Saving…" : saved && !dirty ? "Saved" : "Save route"}
-      </SubmitButton>
-    </div>
+      {canEdit ? (
+        <SubmitButton
+          className="mt-6"
+          busy={busy}
+          saved={saved && !dirty}
+          disabled={!dirty}
+          onClick={save}
+        >
+          {busy ? "Saving…" : saved && !dirty ? "Saved" : "Save route"}
+        </SubmitButton>
+      ) : (
+        <ReadOnlyNote className="mt-6" needs="catalogue.write" what="Editing this route" />
+      )}
+    </fieldset>
   );
 }

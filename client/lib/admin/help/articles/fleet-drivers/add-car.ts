@@ -14,7 +14,6 @@ export const article = {
   title: "Adding a car",
   summary: "Putting a physical car on file under a supplier and a vehicle class, ready for dispatch or held as a draft.",
   category: "fleet-drivers",
-  roles: ["ADMIN", "DISPATCHER"],
   routes: ["/admin/transfers/fleet/new"],
   keywords: ["new car", "add car", "plate", "VIN", "make", "model", "capacity", "wheelchair", "operated by", "sold as", "draft"],
   related: ["fd-fleet-register", "fd-car-detail", "fd-driver-detail", "dp-assigning-a-driver"],

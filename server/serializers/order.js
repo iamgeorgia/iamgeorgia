@@ -1,4 +1,7 @@
 import { toDateOnly } from '../lib/time.js';
+import { approvalOf } from '../lib/booking/approval.js';
+import { toPaymentSummary } from '../lib/finance/paymentStatus.js';
+import { toDesk } from '../lib/booking/desk.js';
 import { canViewBuyer, canViewMargin } from '../middleware/auth.js';
 import { toBookingSummary } from './booking.js';
 import { toTransferBookingSummary } from './transfer.js';
@@ -44,6 +47,12 @@ export const toOrderItem = (item, viewer) => ({
     lineTotalCents: item.lineTotalCents,
     cancellationChargeCents: item.cancellationChargeCents ?? null,
     cancelledAt: item.cancelledAt ?? null,
+    // Where the item came from: a package in the cart keeps its group, so
+    // the line can be shown under the package it belongs to.
+    packageId: item.packageId ?? null,
+    packageSlotIndex: item.packageSlotIndex ?? null,
+    groupKey: item.groupKey ?? null,
+    adjustmentSource: item.adjustmentSource ?? 'NONE',
     ...(canViewMargin(viewer) ? { netCents: item.netCents } : {}),
     booking: toChild(item, viewer)
 });
@@ -67,11 +76,14 @@ export const toOrderSummary = (order, viewer) => {
         adjustmentCents: order.adjustmentCents,
         itemCount: (order.items ?? []).length,
         pendingCount: (order.items ?? []).filter((item) => item.status === 'REQUESTED').length,
+        awaitingApprovalCount: (order.items ?? []).filter((item) => item.status === 'AWAITING_APPROVAL').length,
         requestDeadlineAt: order.requestDeadlineAt ?? null,
         createdAt: order.createdAt,
         confirmedAt: order.confirmedAt ?? null,
         cancelledAt: order.cancelledAt ?? null,
-        completedAt: order.completedAt ?? null
+        completedAt: order.completedAt ?? null,
+        approval: approvalOf(order),
+        payment: toPaymentSummary(order.receivable ?? null, { via: 'ORDER' })
     };
 
     if (canViewMargin(viewer)) {
@@ -82,6 +94,7 @@ export const toOrderSummary = (order, viewer) => {
 
     if (canViewBuyer(viewer)) {
         summary.partner = order.partner ?? null;
+        summary.desk = toDesk(order, { adjustment: false });
     }
 
     return summary;

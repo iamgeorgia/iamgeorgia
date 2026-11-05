@@ -12,7 +12,6 @@ export const article = {
   title: "Package kosher rules",
   summary: "The rules a kosher package is sold under — hotel standard, certification, Shabbat — and the dated override for a hotel that has lost eligibility.",
   category: "packages",
-  roles: ["ADMIN"],
   routes: ["/admin/packages/[slug]/kosher"],
   keywords: ["kosher", "shabbat", "candle lighting", "havdalah", "certification", "certificate", "supervision", "mashgiach", "board", "override", "ineligible", "passover"],
   related: ["pk-hub", "pk-parts", "ht-kosher", "sv-editing"],

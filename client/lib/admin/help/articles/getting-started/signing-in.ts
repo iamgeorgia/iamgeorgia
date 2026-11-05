@@ -13,7 +13,6 @@ export const article = {
   summary:
     "Where the sign-in screen is, why every failure shows the same message, how long a session lasts, and what to do about a forgotten password.",
   category: "getting-started",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["login", "log in", "password", "forgot", "reset", "session", "sign out", "logout", "locked", "too many attempts"],
   related: ["gs-accounts", "gs-roles", "rf-troubleshooting"],
   blocks: [

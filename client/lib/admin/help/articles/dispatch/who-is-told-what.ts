@@ -11,7 +11,6 @@ export const article = {
   title: "Who is told what",
   summary: "For every action in the panel that sends something, who receives an email or an in-app notice — and which actions send nothing at all.",
   category: "dispatch",
-  roles: ["ADMIN", "DISPATCHER"],
   keywords: ["email", "notification", "notice", "sent", "who receives", "driver", "partner", "guest", "buyer", "traveller", "outbox"],
   related: ["dp-dispatch-board", "dp-assigning-a-driver", "bk-transfer-booking-detail", "rf-dangerous-actions"],
   blocks: [

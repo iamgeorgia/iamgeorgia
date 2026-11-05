@@ -13,9 +13,52 @@ import type { Paginated } from "@/types/partner";
 
 export type NotificationScope = "admin" | "partner" | "driver";
 
+/** The tab a notice sits on. Stamped on the row by the server when it is written. */
+export type NotificationCategory = "BOOKING" | "DISPATCH" | "FINANCE" | "APPROVAL" | "DEADLINE" | "SYSTEM";
+
+export const NOTIFICATION_CATEGORIES: readonly NotificationCategory[] = [
+  "BOOKING",
+  "DISPATCH",
+  "FINANCE",
+  "APPROVAL",
+  "DEADLINE",
+  "SYSTEM",
+];
+
+export const notificationCategoryLabels: Record<NotificationCategory, string> = {
+  BOOKING: "Bookings",
+  DISPATCH: "Dispatch",
+  FINANCE: "Finance",
+  APPROVAL: "Approvals",
+  DEADLINE: "Deadlines",
+  SYSTEM: "System",
+};
+
+/** The tab's name, or "System" for a row stamped with something this build does not know. */
+export const notificationCategoryLabel = (category: string | null | undefined): string =>
+  notificationCategoryLabels[category as NotificationCategory] ?? notificationCategoryLabels.SYSTEM;
+
+export const isNotificationCategory = (value: unknown): value is NotificationCategory =>
+  typeof value === "string" && (NOTIFICATION_CATEGORIES as readonly string[]).includes(value);
+
+export type NotificationSort = "newest" | "oldest" | "unreadFirst";
+
+export const NOTIFICATION_SORTS: readonly NotificationSort[] = ["newest", "oldest", "unreadFirst"];
+
+export const notificationSortLabels: Record<NotificationSort, string> = {
+  newest: "Newest",
+  oldest: "Oldest",
+  unreadFirst: "Unread first",
+};
+
+export const isNotificationSort = (value: unknown): value is NotificationSort =>
+  typeof value === "string" && (NOTIFICATION_SORTS as readonly string[]).includes(value);
+
 export interface AppNotification {
   id: string;
   kind: string;
+  /** Which tab the notice belongs on. */
+  category: NotificationCategory;
   title: string;
   body: string;
   /** Deep-link data. Which keys are present depends on the kind. */
@@ -34,17 +77,40 @@ export interface AppNotification {
   };
   entityType: string | null;
   entityId: string | null;
+  /**
+   * The path to open, decided by the server for the panel that asked, or
+   * null when the notice is only news. Undefined only on a row served before
+   * the server wrote links — `hrefFor` falls back to the client table then.
+   */
+  href?: string | null;
   readAt: string | null;
   createdAt: string;
 }
 
 export interface NotificationQuery {
   unread?: "true" | "false";
+  category?: NotificationCategory;
+  /** One or more kinds; an unknown kind matches nothing. */
+  kind?: string | string[];
+  sort?: NotificationSort;
   page?: number;
   pageSize?: number;
 }
 
-export type NotificationPage = Paginated<AppNotification> & { unreadCount: number };
+export type NotificationPage = Paginated<AppNotification> & {
+  unreadCount: number;
+  unreadByCategory: Record<NotificationCategory, number>;
+};
+
+export interface UnreadSummary {
+  unreadCount: number;
+  byCategory: Record<NotificationCategory, number>;
+}
+
+export const NO_UNREAD: UnreadSummary = {
+  unreadCount: 0,
+  byCategory: { BOOKING: 0, DISPATCH: 0, FINANCE: 0, APPROVAL: 0, DEADLINE: 0, SYSTEM: 0 },
+};
 
 const BASES: Record<NotificationScope, string> = {
   admin: "/api/admin/notifications",
@@ -56,8 +122,20 @@ const BASES: Record<NotificationScope, string> = {
 export const listNotifications = (scope: NotificationScope, query: NotificationQuery = {}) =>
   serverFetch<NotificationPage>(`${BASES[scope]}${toQueryString(query)}`);
 
-export const getUnreadCount = async (scope: NotificationScope) =>
-  (await serverFetch<{ unreadCount: number }>(`${BASES[scope]}/unread-count`)).unreadCount;
+/**
+ * The bell's number with its per-tab split. The driver panel has no such
+ * route — its bell reads the count off the list — so the scope is narrowed.
+ */
+export const getUnreadSummary = (scope: Exclude<NotificationScope, "driver">) =>
+  serverFetch<UnreadSummary>(`${BASES[scope]}/unread-count`);
+
+/** Just the number, for the callers that paint one badge. */
+export const getUnreadCount = async (scope: Exclude<NotificationScope, "driver">) =>
+  (await getUnreadSummary(scope)).unreadCount;
+
+/** The same summary from the browser, for the shells that poll it. */
+export const fetchUnreadSummary = (scope: Exclude<NotificationScope, "driver">) =>
+  apiFetch<UnreadSummary>(`${BASES[scope]}/unread-count`);
 
 /** The bell's dropdown reads from the browser. */
 export const fetchNotifications = (scope: NotificationScope, query: NotificationQuery = {}) =>
@@ -66,8 +144,12 @@ export const fetchNotifications = (scope: NotificationScope, query: Notification
 export const markNotificationRead = (scope: NotificationScope, id: string) =>
   apiFetch<AppNotification>(`${BASES[scope]}/${encodeURIComponent(id)}/read`, { method: "POST" });
 
-export const markAllNotificationsRead = (scope: NotificationScope) =>
-  apiFetch<{ count: number }>(`${BASES[scope]}/read-all`, { method: "POST" });
+/** Marks one tab read when a category is given, otherwise everything. */
+export const markAllNotificationsRead = (scope: NotificationScope, category?: NotificationCategory) =>
+  apiFetch<{ count: number }>(`${BASES[scope]}/read-all`, {
+    method: "POST",
+    body: category ? { category } : {},
+  });
 
 /** The page the bell lists everything on, per panel. */
 export const notificationsPath: Record<NotificationScope, string> = {
@@ -77,12 +159,18 @@ export const notificationsPath: Record<NotificationScope, string> = {
 };
 
 /**
+ * Where a notice leads: the server's word when it gave one, else the table
+ * below for a row served before links were written on the server.
+ */
+export const hrefFor = (scope: NotificationScope, notification: AppNotification): string | null =>
+  notification.href === undefined ? notificationHref(scope, notification) : notification.href;
+
+/**
  * Where a notice leads, as a canonical path, or null when it is only news.
  *
- * Decided here rather than stored on the row: the server writes an entity
- * and a payload, and which screen shows that entity depends on which panel
- * the reader is in — a receivable is a detail page to Finance and the
- * statement to the agency that owes it.
+ * The fallback table. The server now decides the path per panel and sends
+ * it as `href`; this stays for rows that predate that, and mirrors the
+ * server's own table for the entities that existed then.
  */
 export function notificationHref(scope: NotificationScope, notification: AppNotification): string | null {
   const { payload, entityType, entityId } = notification;
@@ -116,3 +204,47 @@ export function notificationHref(scope: NotificationScope, notification: AppNoti
       }
   }
 }
+
+/** The browser's URL state: which tab, unread only, the order and the page. */
+export interface NotificationBrowseState {
+  category?: NotificationCategory;
+  unread: boolean;
+  sort: NotificationSort;
+  page: number;
+}
+
+const readParam = (params: Record<string, string | string[] | undefined>, key: string): string | undefined => {
+  const value = params[key];
+  return Array.isArray(value) ? value[0] : value;
+};
+
+/**
+ * Reads the browser's state out of the URL. Anything unrecognised is dropped
+ * rather than rejected — a stale bookmark shows every tab, not an error.
+ */
+export function notificationBrowseStateFromParams(
+  params: Record<string, string | string[] | undefined>,
+): NotificationBrowseState {
+  const category = readParam(params, "category");
+  const sort = readParam(params, "sort");
+  const page = Number.parseInt(readParam(params, "page") ?? "", 10);
+
+  return {
+    category: isNotificationCategory(category) ? category : undefined,
+    unread: readParam(params, "unread") === "true",
+    sort: isNotificationSort(sort) ? sort : "newest",
+    page: Number.isFinite(page) && page > 0 ? page : 1,
+  };
+}
+
+/** The browser's page size: a screen of notices, not the bell's handful. */
+export const NOTIFICATIONS_PAGE_SIZE = 25;
+
+/** The list request a browser state asks the server for. */
+export const notificationQueryFor = (state: NotificationBrowseState): NotificationQuery => ({
+  category: state.category,
+  unread: state.unread ? "true" : undefined,
+  sort: state.sort,
+  page: state.page,
+  pageSize: NOTIFICATIONS_PAGE_SIZE,
+});

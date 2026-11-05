@@ -13,7 +13,6 @@ export const article = {
   summary:
     "The tree of places every hotel, tour and package is filed inside: how to find one, what the columns say, and why there is no status column.",
   category: "destinations",
-  roles: ["ADMIN"],
   routes: ["/admin/destinations"],
   keywords: ["places", "country", "region", "city", "resort", "tree", "featured", "not placed", "coordinates", "children"],
   related: ["ds-editing", "ht-create", "pb-b2c-vs-trade"],

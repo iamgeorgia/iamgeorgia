@@ -69,6 +69,8 @@ Both use the same images and the same environment contract
   `client/next.config.ts`.
 - **A transactional email provider** (Resend, Postmark, Amazon SES, Brevo)
   with SMTP credentials. A Gmail or Mailtrap account is fine for staging only.
+  Alternatively, a company Google account through the Gmail API (§3.4c),
+  within Gmail's daily sending cap.
 - The repository pushed to GitHub, because both Render and CI deploy from it.
 
 ---
@@ -96,9 +98,14 @@ Region is `frankfurt` in the file — the closest to Georgia. Change it in
 | `APP_URL` | Same as `CLIENT_ORIGIN` |
 | `AUTH_COOKIE_DOMAIN` | The domain the site and the API share (rule 1): `iamgeorgia.travel` in production, `preview.iamgeorgia.com.ge` for the preview |
 | `MAIL_REPLY_TO` | The mailbox humans reply to |
-| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` | From the email provider |
+| `SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` | From the email provider. Not required once `MAIL_TRANSPORT=gmail`, but keep them set: switching back to SMTP is the rollback |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`, `GMAIL_SENDER_EMAIL` | Only to send through the Gmail API (§3.4c). Leave all four blank otherwise; a partial set refuses to boot |
 | `TRANSFER_OPS_EMAIL` | Where "leg still has no driver" alerts go |
 | `FINANCE_OPS_EMAIL` | The shared finance mailbox: supplier payment reminders, overdue alerts and overdue bills are emailed there beside the in-app notices. Unset, reminders are in-app only (the API warns at boot). The schedule itself (`FINANCE_REMINDER_OFFSET_DAYS=7,3,1,0`, `FINANCE_OVERDUE_REPEAT_DAYS=1`) has defaults and is only set to change it |
+| `BOOKING_APPROVAL_ENABLED` | `false` until the admin panel's **Booking approvals** screen is deployed with it; then `true` (owner decision OD1, 2026-10-20: every booking waits for an operator's yes and holds its inventory meanwhile). Off, bookings confirm at once as before. The switch changes only bookings made after it |
+| `CART_ENABLED` | `false` until the public cart pages (`/cart`, `/cart/checkout`) are deployed; then `true`. Off, `POST /orders/custom*` answer 404 `CART_DISABLED`; the desk's `POST /admin/orders/custom/manual` works either way (owner decision OD2) |
+| `BOOKING_OPS_EMAIL` | The booking desk's shared mailbox: every booking waiting for approval and every one left unanswered past `BOOKING_APPROVAL_SLA_HOURS` (default 24) is emailed there beside the in-app notice. Unset, in-app only |
+| `DEADLINE_REMINDERS_ENABLED` | `false` until the deadline calendar and Settings → Reminders are deployed; then `true`. The schedule itself lives in the database (`reminder_policies`, seeded 7/3/1/0 days for payment, 3/1 for free cancellation, 1/0 for confirmation) and is edited in the panel. After the first deploy with Phase 4+ run `node scripts/backfill-booking-index.js` once (builds the register and the deadlines from the product tables; safe to re-run) |
 | `INVOICEOCEAN_ENABLED` | `false` on the first deploy. Invoicing through InvoiceOcean is switched on later, in the order §3.4b gives; off, nothing is issued and nothing is called |
 | `INVOICEOCEAN_DOMAIN` | The InvoiceOcean account's subdomain (`acme` for acme.invoiceocean.com). Prompted; leave blank until §3.4b |
 | `INVOICEOCEAN_API_TOKEN` | **Secret**, prompted: the account's API token (Settings → API). Blank until §3.4b |
@@ -243,6 +250,86 @@ Documents already issued stay listed and readable; nothing new is issued and
 nothing is called until it is switched on again. Nothing is deleted on
 either side.
 
+### 3.4c Sending mail through Gmail (optional)
+
+The API can send every email through the Gmail API as one company Google
+account, instead of SMTP. Nothing in the bookings, templates or queue
+changes; only the transport does. The account is authorised once by an
+administrator in the panel, and the refresh token is stored in the database
+sealed with `MAIL_CREDENTIALS_KEY`. Recipients never deal with Google.
+
+**Before choosing it**, know its limits:
+
+- **Daily cap.** Roughly 2,000 messages a day for a Google Workspace account
+  (500 on a trial) and 500 for a personal `@gmail.com` account, counted over a
+  rolling 24 hours and shared with mail people send from that mailbox by
+  hand. Past the cap Gmail refuses; queued emails wait in the outbox and go
+  when the window rolls, and administrators are warned in-app at
+  `GMAIL_DAILY_SEND_WARN` (default 400). A transactional provider has no such
+  ceiling; switching to one later is a transport change, not a rewrite.
+- **Sender address.** Gmail sends as the account itself. `MAIL_FROM` must be
+  that address, or an address added to the account as a verified *Send mail
+  as* alias (Gmail → Settings → Accounts). The API refuses to boot on any
+  other `MAIL_FROM`, because Gmail would otherwise silently rewrite it.
+- **The grant can be lost.** Google revokes it when the account's password
+  changes, when someone removes the app under the account's security
+  settings, after six months without use, or after seven days if the consent
+  screen is left in *Testing*. When that happens mail stops, every
+  administrator is notified in-app, queued emails are kept, and an
+  administrator reconnects from Settings → Email.
+
+**Google Cloud Console** (once per environment; use separate OAuth clients
+for production and staging):
+
+1. Create or choose a project. **APIs & Services → Library → Gmail API →
+   Enable.**
+2. **OAuth consent screen.** For a Google Workspace account choose
+   **Internal**: no verification, no test-user list, no seven-day expiry.
+   For a personal `@gmail.com` account the app is **External**: while
+   setting up, add the account as a test user; before connecting the real
+   account, press **Publish app** so its status is *In production*,
+   otherwise the token dies after seven days. `gmail.send` is a *sensitive*
+   scope, so an unverified External app shows a "Google hasn't verified this
+   app" screen to the one administrator who connects it. That is acceptable
+   for a single company account; Google's verification (a privacy policy URL
+   and a short review, no security assessment) removes it.
+3. **Scopes:** `https://www.googleapis.com/auth/gmail.send` and `email`. The
+   second only lets the API confirm which account was connected. Nothing
+   reads, lists or deletes mail.
+4. **Credentials → Create credentials → OAuth client ID → Web
+   application.** Authorised redirect URI, exactly:
+   `https://<api host>/api/admin/mail/google/callback`. No JavaScript
+   origins are needed.
+5. Workspace only: if the admin console restricts third-party apps, mark this
+   client as trusted (Security → Access and data control → API controls).
+
+**Switching over:**
+
+1. Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` and
+   `GMAIL_SENDER_EMAIL` (all four or none: a partial set refuses to boot).
+   `MAIL_CREDENTIALS_KEY` is generated by the Blueprint; on another host use
+   `openssl rand -base64 32`. Leave `MAIL_TRANSPORT=smtp`. Redeploy.
+2. As a super administrator, open **Settings → Email** and press **Connect
+   Google account**. Sign in as the sender account and allow sending. You
+   land back on the same screen showing *Connected*. Any other account is
+   refused and its grant revoked.
+3. Press **Send test email**. It goes through Gmail to your own address
+   whatever `MAIL_TRANSPORT` is. Check it arrives, and that the sender shown
+   is the one you expect.
+4. If `MAIL_FROM` is not the account itself, add the alias in Gmail first,
+   then set `GMAIL_FROM_ALIAS_VERIFIED=true`.
+5. Set `MAIL_TRANSPORT=gmail` and redeploy. Watch Settings → Email (last
+   sent, last failure) and the outbox's dead letters for the first hour.
+
+**Rollback** is the transport: set `MAIL_TRANSPORT=smtp` and redeploy, which is
+why the `SMTP_*` values should stay set until Gmail has been proven. Emails
+queued at the moment of the switch are sent by whichever transport is active
+when they are retried; none are lost. The connected account stays stored for
+the next attempt, and **Disconnect** on the same screen revokes it at Google.
+
+Rotating `MAIL_CREDENTIALS_KEY` makes the stored token unreadable: reconnect
+after a rotation.
+
 ### 3.5 Database plan, backups, access
 
 - **Do not use a free database.** Render deletes free Postgres instances after
@@ -370,6 +457,14 @@ Vercel preview pattern, `http://localhost:3000/*`) and to exactly the Maps
 JavaScript API, Places API (New) and Geocoding API, and set per-minute quotas
 and a budget alert there. Without the key the location screens fall back to
 typed coordinates and the checkout hides the address search.
+
+A key Google refuses does the same, with a different notice: the location
+screens say the key was rejected, and the browser console names the reason
+(`InvalidKeyMapError` means the key no longer exists in any project —
+deleted, or from a different account; `RefererNotAllowedMapError` means this
+host is missing from its referrer list; `ApiNotActivatedMapError` means one
+of the three APIs is not enabled). The fix is in the Cloud console, then a
+rebuild if the key itself changes.
 
 ---
 
