@@ -160,11 +160,18 @@ export const config = {
     // whole internet, which makes a per-IP login limit worse than useless.
     trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
 
-    // Requests per minute per IP, across everything except /health. Raised
-    // under test for the same reason the auth limiters are: a suite drives
-    // hundreds of requests through one in-process counter, and a search suite
-    // that exercises fifty fixtures is not an attack.
-    globalRateLimit: numberEnv('RATE_LIMIT_GLOBAL', (nodeEnv === 'test' ? 100_000 : 100)),
+    // Requests per minute per IP, across everything except /health. Sized to
+    // the panels, not to a single request: one admin screen is a server render
+    // that asks the API for the session, the queue counts and every figure on
+    // it — about twenty requests for the overview — and all of them count
+    // against the person looking at it. At 100 the fifth refresh in a minute
+    // was refused, session check included, and the panel fell over; a few
+    // staff behind one office address got there by ordinary work. The
+    // expensive and the guessable endpoints keep their own, tighter limits.
+    // Raised under test for the same reason the auth limiters are: a suite
+    // drives hundreds of requests through one in-process counter, and a search
+    // suite that exercises fifty fixtures is not an attack.
+    globalRateLimit: numberEnv('RATE_LIMIT_GLOBAL', (nodeEnv === 'test' ? 100_000 : 600)),
 
     // Dated search per minute per visitor — the most expensive read, with its
     // own budget so one scraper cannot spend the global allowance on it.

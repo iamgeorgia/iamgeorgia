@@ -53,12 +53,26 @@ describe('Gmail API transport and its OAuth connection', { skip: dbAvailable ? f
     let adminCookie;
     let partnerCookie;
 
-    const authorize = async () => {
+    /** The authenticated half: a ticket, and where the browser takes it. */
+    const begin = async () => {
         const res = await request(app).post(`${BASE}/authorize`).set('Cookie', superCookie);
 
         assert.equal(res.status, 200, JSON.stringify(res.body));
 
-        const state = new URL(res.body.url).searchParams.get('state');
+        return { res, start: new URL(res.body.url) };
+    };
+
+    /** The stop on the way to Google, as a browser with no session makes it. */
+    const openStart = (start) => request(app).get(start.pathname + start.search);
+
+    /** Both halves: the consent URL, its state, and the cookie that binds them. */
+    const authorize = async () => {
+        const { start } = await begin();
+        const res = await openStart(start);
+
+        assert.equal(res.status, 302, res.text);
+
+        const state = new URL(res.headers.location).searchParams.get('state');
 
         return { res, state, binding: cookieValue(res.headers['set-cookie'], 'iag_gmail_oauth') };
     };
@@ -169,9 +183,32 @@ describe('Gmail API transport and its OAuth connection', { skip: dbAvailable ? f
     });
 
     describe('connecting the account', () => {
+        it('hands the browser a single-use ticket for the callback\'s own host, and no cookie yet', async () => {
+            const { res, start } = await begin();
+
+            // Where Google will return to, not wherever this request arrived.
+            assert.equal(start.origin + start.pathname, 'http://localhost:5000/api/admin/mail/google/start');
+            assert.ok(start.searchParams.get('ticket').length >= 43, 'a 256-bit ticket');
+            assert.equal(cookieValue(res.headers['set-cookie'], 'iag_gmail_oauth'), null);
+            assert.ok(!JSON.stringify(res.body).includes('stub-client-secret'));
+
+            // Stored hashed, and good for one visit.
+            assert.equal(await prisma.oAuthState.count({ where: { stateHash: start.searchParams.get('ticket') } }), 0);
+            assert.equal((await openStart(start)).status, 302);
+            assert.deepEqual(outcomeOf(await openStart(start)), { error: 'state' });
+
+            assert.deepEqual(outcomeOf(await request(app).get(`${BASE}/start`).query({ ticket: 'not-a-ticket' })), { error: 'state' });
+            assert.deepEqual(outcomeOf(await request(app).get(`${BASE}/start`)), { error: 'state' });
+
+            const stale = await begin();
+            await prisma.oAuthState.updateMany({ where: { userId: superAdmin.id, usedAt: null }, data: { expiresAt: new Date(Date.now() - 1000) } });
+            assert.deepEqual(outcomeOf(await openStart(stale.start)), { error: 'state' });
+            await prisma.oAuthState.deleteMany({ where: { userId: superAdmin.id } });
+        });
+
         it('builds a consent URL for the one scope, offline, bound to a cookie', async () => {
             const { res, state, binding } = await authorize();
-            const url = new URL(res.body.url);
+            const url = new URL(res.headers.location);
 
             assert.equal(url.origin + url.pathname, `${stub.url}/o/oauth2/v2/auth`);
             assert.equal(url.searchParams.get('scope'), 'https://www.googleapis.com/auth/gmail.send email');
@@ -186,12 +223,13 @@ describe('Gmail API transport and its OAuth connection', { skip: dbAvailable ? f
 
             assert.match(flags, /httponly/);
             assert.match(flags, /samesite=lax/);
-            assert.match(flags, /path=\/api\/admin\/mail\/google/);
+            assert.match(flags, /path=\/api\/admin\/mail\/google(;|$)/);
+            assert.equal(res.headers['referrer-policy'], 'no-referrer');
+            assert.equal(res.headers['cache-control'], 'no-store');
 
             // Stored hashed: the raw state is nowhere in the database.
             assert.equal(await prisma.oAuthState.count({ where: { stateHash: state } }), 0);
             assert.equal(await prisma.oAuthState.count({ where: { userId: superAdmin.id, usedAt: null } }), 1);
-            assert.ok(!JSON.stringify(res.body).includes('stub-client-secret'));
         });
 
         it('rejects an unknown, reused, expired or unbound state', async () => {

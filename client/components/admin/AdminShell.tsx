@@ -8,6 +8,7 @@ import { AdminSidebar } from "./AdminSidebar";
 import { AdminViewerProvider } from "./AdminViewerContext";
 import { LiveBadgesProvider, useLiveBadges } from "./LiveBadgesContext";
 import { NavigationProgressBar, NavigationProgressProvider } from "./NavigationProgress";
+import { StalledLoadRecovery } from "./StalledLoadRecovery";
 import { NotificationBell } from "@/components/notifications/NotificationBell";
 import { signOut } from "@/lib/api/partners";
 import { NO_BADGES } from "@/lib/api/admin";
@@ -164,6 +165,7 @@ export function AdminShell({ badges, user, children }: AdminShellProps) {
   return (
     <NavigationProgressProvider>
       <LiveBadgesProvider>
+        <StalledLoadRecovery />
         <div className="flex min-h-svh w-full bg-background">
           <Suspense
             fallback={

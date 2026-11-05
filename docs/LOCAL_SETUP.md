@@ -394,7 +394,7 @@ The session is an `httpOnly` cookie named `iag_session`. In a browser, check
 the cookie jar is on and you are hitting the same host that issued the cookie.
 
 **`429 Too many requests`**
-You hit a rate limit — 100 requests/minute per IP globally, and tighter limits
+You hit a rate limit — 600 requests/minute per IP globally, and tighter limits
 on the auth endpoints (see the testing guide). They are counted in this
 process's memory locally, so **restarting the server clears every counter**.
 

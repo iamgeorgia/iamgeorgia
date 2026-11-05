@@ -5,6 +5,8 @@ import { useEffect } from "react";
 
 import { PortalContainer, PortalMessage } from "@/components/partners/PortalPage";
 import { Button } from "@/components/ui/Button";
+import { failureCopy } from "@/lib/errors/failureCopy";
+import { useAutoRetry } from "@/lib/errors/useAutoRetry";
 import { useLocalePath } from "@/lib/i18n/provider";
 
 /**
@@ -15,6 +17,10 @@ import { useLocalePath } from "@/lib/i18n/provider";
  *
  * `retry` rather than `reset`: the pages here are server-rendered from the
  * API, and re-rendering the same failed payload would only fail the same way.
+ *
+ * A load cut short, a paced burst of refreshes and an API that did not answer
+ * pass by themselves, so those are named and retried without being asked
+ * (`useAutoRetry`), as in the admin panel.
  */
 export default function PortalError({
   error,
@@ -24,6 +30,7 @@ export default function PortalError({
   retry: () => void;
 }) {
   const path = useLocalePath();
+  const copy = failureCopy(useAutoRetry(error, retry), "page");
 
   useEffect(() => {
     // A live product would report this. Here it is the only place the console
@@ -36,7 +43,7 @@ export default function PortalError({
       <PortalMessage
         icon={TriangleAlert}
         tone="critical"
-        title="This page could not load"
+        title={copy?.title ?? "This page could not load"}
         className="max-w-2xl"
         actions={
           <>
@@ -48,10 +55,15 @@ export default function PortalError({
         }
       >
         <p>
-          The records behind it did not come back. Nothing has been changed on any booking — try again,
-          or go back to the dashboard.
+          {copy?.body ??
+            "The records behind it did not come back. Nothing has been changed on any booking — try again, or go back to the dashboard."}
         </p>
-        {error.digest && <p className="mt-2 text-[0.8125rem] text-subtle">Reference: {error.digest}</p>}
+        {copy?.status && (
+          <p role="status" className="mt-2 font-medium">
+            {copy.status}
+          </p>
+        )}
+        {error.digest && !copy && <p className="mt-2 text-[0.8125rem] text-subtle">Reference: {error.digest}</p>}
       </PortalMessage>
     </PortalContainer>
   );

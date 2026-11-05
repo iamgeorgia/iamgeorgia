@@ -1,14 +1,14 @@
 "use client";
 
 import { AlertTriangle, CheckCircle2, Mail, Send, Unplug } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { AdminPanel } from "@/components/admin/AdminPage";
 import { useCan } from "@/components/admin/AdminViewerContext";
 import { FormError, SubmitButton } from "@/components/admin/FormControls";
 import { ReadOnlyNote } from "@/components/admin/ReadOnlyNote";
 import { Modal } from "@/components/ui/Modal";
-import { describeError } from "@/lib/api/client";
+import { API_BASE_URL, describeError } from "@/lib/api/client";
 import {
   authorizeMailProvider,
   disconnectMailProvider,
@@ -23,9 +23,9 @@ import type { MailProviderStatus, MailTestResult } from "@/types/mail";
  * (`settingsUrl` in server/services/mail/googleAccount.service.js); nothing
  * Google sent is ever shown.
  */
-const callbackErrors = (sender: string | null): Record<string, string> => ({
+const callbackErrors = (sender: string | null, callbackHost: string | null): Record<string, string> => ({
   state: "That connection attempt expired or was already used. Press Connect again.",
-  session: "Google sent the browser back without the sign-in cookie this screen set. Connect again from this browser, and allow cookies for the API.",
+  session: `Google sent the browser back without the cookie this connection started with. Connect again and finish in the same browser window, with cookies allowed for ${callbackHost ?? "the API"}.`,
   denied: "Permission was not granted on Google’s screen, so nothing changed.",
   account: `Only ${sender ?? "the configured sender account"} may send for the platform. Connect again and choose that account. The other account’s access was revoked.`,
   scope: "Permission to send email was unticked on Google’s screen. Connect again and leave it ticked.",
@@ -36,6 +36,15 @@ const callbackErrors = (sender: string | null): Record<string, string> => ({
   google: "Google could not complete the connection. Try again in a minute.",
   server: "The connection could not be saved. Try again; if it keeps failing, check the API log.",
 });
+
+/** The host of a URL, or null for one that is missing or not a URL. */
+const hostOf = (url: string | null): string | null => {
+  try {
+    return url ? new URL(url).host : null;
+  } catch {
+    return null;
+  }
+};
 
 const dateTime = (iso: string) =>
   new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tbilisi" }).format(new Date(iso));
@@ -88,7 +97,23 @@ export function MailProviderSettings({
   const [test, setTest] = useState<MailTestResult | null>(null);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [notice, setNotice] = useState<string | null>(justConnected ? "The Google account is connected." : null);
-  const callbackError = errorCode ? (callbackErrors(status.senderEmail)[errorCode] ?? callbackErrors(null).google) : null;
+  // Where Google returns the browser to, against where this panel calls the API.
+  const callbackHost = hostOf(status.redirectUri);
+  const apiHost = hostOf(API_BASE_URL);
+  // Kept from the first render: the address is cleaned below, and a banner
+  // read straight from it would vanish with it.
+  const [callbackCode] = useState(errorCode);
+  const callbackError = callbackCode
+    ? (callbackErrors(status.senderEmail, callbackHost)[callbackCode] ?? callbackErrors(null, null).google)
+    : null;
+
+  // The outcome of one return from Google is in the address (`?connected=1`,
+  // `?error=…`). Left there, every refresh and every bookmark of this screen
+  // would announce it again, long after it stopped being true.
+  useEffect(() => {
+    if (!justConnected && !errorCode) return;
+    window.history.replaceState(null, "", window.location.pathname);
+  }, [justConnected, errorCode]);
 
   const refresh = useCallback(async () => {
     setStatus(await getMailProviderStatusClient());
@@ -194,6 +219,16 @@ export function MailProviderSettings({
                 )}
               </Fact>
               <Fact label="Sender account">{account?.accountEmail ?? status.senderEmail}</Fact>
+              {callbackHost && apiHost && callbackHost !== apiHost ? (
+                <Fact label="Google returns to">
+                  {callbackHost}
+                  <span className="mt-1 block text-[0.8125rem] text-warning-text">
+                    This panel reaches the API at {apiHost}, a different address from the one in <code>GOOGLE_REDIRECT_URI</code>. Connecting still
+                    works; if you land on the sign-in screen afterwards you are still signed in. Pointing <code>GOOGLE_REDIRECT_URI</code> (and the
+                    OAuth client’s redirect) at {apiHost} avoids that.
+                  </span>
+                </Fact>
+              ) : null}
               <Fact label="Emails are sent as">
                 {status.fromAddress}
                 {senderMismatch ? (

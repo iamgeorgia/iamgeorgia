@@ -11,6 +11,8 @@
  * where the base URL, the credential mode and the error shape are decided once.
  */
 
+import { transientDigest } from "@/lib/errors/transient";
+
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:5000";
 
 /** The API origin, for the rare link the browser follows itself (a CSV download). */
@@ -25,12 +27,25 @@ export interface ApiErrorBody {
 export class ApiError extends Error {
   readonly status: number;
   readonly details: unknown;
+  /** Seconds the server asked the caller to wait (a 429's `Retry-After`), when it said. */
+  readonly retryAfterSeconds: number | null;
+  /**
+   * Set only on a failure that passes by itself — the API pacing the caller,
+   * or not answering. An error thrown during a server render reaches the
+   * panel's error boundary with its message stripped and this intact, which
+   * is how the boundary knows to wait and ask again instead of presenting a
+   * broken screen. See `lib/errors/transient.ts`.
+   */
+  digest?: string;
 
-  constructor(status: number, message: string, details?: unknown) {
+  constructor(status: number, message: string, details?: unknown, retryAfterSeconds: number | null = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.details = details;
+    this.retryAfterSeconds = retryAfterSeconds;
+    const digest = transientDigest(status, retryAfterSeconds);
+    if (digest) this.digest = digest;
   }
 
   /** Zod issues, when the failure was a validation one. */
@@ -246,6 +261,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
       response.status,
       error?.message ?? `Request failed with status ${response.status}`,
       error?.details,
+      retryAfterSeconds(response),
     );
   }
 
@@ -254,6 +270,19 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   return payload as T;
+}
+
+/**
+ * How long a refusal said to wait: `Retry-After` in seconds, else the rate
+ * limiter's own `RateLimit-Reset`. Null when neither is there or readable —
+ * in the browser a cross-origin response hides both.
+ */
+function retryAfterSeconds(response: Response): number | null {
+  for (const name of ["retry-after", "ratelimit-reset"]) {
+    const value = response.headers.get(name);
+    if (value && /^\d+$/.test(value.trim())) return Number(value.trim());
+  }
+  return null;
 }
 
 /** Browser-side call. The session cookie is attached by the browser. */

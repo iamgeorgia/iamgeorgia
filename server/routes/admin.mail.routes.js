@@ -11,21 +11,49 @@ import {
     completeAuthorization,
     disconnectAccount,
     oauthCookieOptions,
+    openConsent,
     sendTestEmail,
     settingsUrl,
     startAuthorization
 } from '../services/mail/googleAccount.service.js';
-import { googleCallbackQuerySchema } from '../validation/mail.js';
+import { googleCallbackQuerySchema, googleStartQuerySchema } from '../validation/mail.js';
 
 /**
  * Settings → Email: the Google account outgoing mail is sent as.
  *
  * Reading the status is for anyone who administers the platform; connecting,
  * disconnecting and test-sending change who the platform speaks as, so they
- * take `settings.write`. The callback is the one route without a session — see
- * services/mail/googleAccount.service.js for what authorises it instead.
+ * take `settings.write`. The stop on the way to Google and the callback are
+ * the two routes without a session — see
+ * services/mail/googleAccount.service.js for what authorises them instead.
  */
 export const adminMailRoutes = Router();
+
+adminMailRoutes.get('/google/start', validate({ query: googleStartQuerySchema }), async (req, res) => {
+    let outcome;
+
+    try {
+        outcome = await openConsent(req.valid.query, req);
+    } catch (err) {
+        logger.error({ err }, 'Gmail authorisation could not be opened');
+        outcome = { ok: false, code: 'server' };
+    }
+
+    res.set('Cache-Control', 'no-store');
+    // The URL carried a one-time ticket; keep it out of the next page's Referer.
+    res.set('Referrer-Policy', 'no-referrer');
+
+    if (!outcome.ok) {
+        res.status(200).type('html').send(returnPage(settingsUrl(outcome)));
+
+        return;
+    }
+
+    // Set here, on the host and path Google will return the browser to, so
+    // the callback is certain to be sent it.
+    res.cookie(OAUTH_COOKIE, outcome.state, oauthCookieOptions());
+    res.redirect(302, outcome.url);
+});
 
 adminMailRoutes.get('/google/callback', validate({ query: googleCallbackQuerySchema }), async (req, res) => {
     const cookieState = req.cookies?.[OAUTH_COOKIE] ?? null;
@@ -86,10 +114,7 @@ adminMailRoutes.get('/google', requireCapability(CAPABILITIES.PLATFORM_ADMIN, CA
 });
 
 adminMailRoutes.post('/google/authorize', requireCapability(CAPABILITIES.SETTINGS_WRITE), mailProviderLimiter, async (req, res) => {
-    const { url, state, expiresAt } = await startAuthorization(req.user, req);
-
-    res.cookie(OAUTH_COOKIE, state, oauthCookieOptions());
-    res.json({ url, expiresAt });
+    res.json(await startAuthorization(req.user, req));
 });
 
 adminMailRoutes.post('/google/disconnect', requireCapability(CAPABILITIES.SETTINGS_WRITE), mailProviderLimiter, async (req, res) => {

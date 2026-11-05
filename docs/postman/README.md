@@ -87,7 +87,7 @@ several results that look wrong are deliberate.
 | Setting | Value | Why |
 | --- | --- | --- |
 | Iterations | `1` | The booking flow creates real records |
-| Delay | `650` ms | The global limiter allows 100 requests a minute per address; ~700 requests need this spacing. Use `100` ms when running a single folder |
+| Delay | `650` ms | Keeps ~700 requests clear of the global limiter (600 a minute per address by default) and of the tighter per-endpoint limits. Use `100` ms when running a single folder |
 | Keep variable values | **on** | So captured tokens and references survive the run |
 | Folders | all, **in order** | Later folders consume tokens the earlier ones captured |
 
@@ -219,7 +219,7 @@ Check this list before filing.
 | Different `priceFrom` for anonymous vs partner | Prices are viewer-relative — partner markup differs from the platform default |
 | Transfer *revalidate* returning 200 on a moved fare | It is a preview; it shows the new fare. Only *booking* refuses with 409 |
 | Postman not blocked by the cross-site check | Postman sends no `Origin`/`Sec-Fetch-Site`, and a browser cannot suppress those. Only requests from a page are checked |
-| `429` after a lot of clicking | The global limit is 100/minute per IP. Restart the server to clear it |
+| `429` after a lot of clicking | The global limit is 600/minute per IP (`RATE_LIMIT_GLOBAL`). Restart the server to clear it |
 | `400` from a media upload | No file was picked in the request's form-data tab. Everything downstream of it tolerates the missing id |
 | `422` `INVOICING_DISABLED` from an invoice write in folder 06q | Invoicing is switched off on that server (`INVOICEOCEAN_ENABLED=false`, the shipped value). Deliberate, and asserted; the same request answers for real once it is on |
 | `409` `NOT_ISSUED` from an invoice PDF | The folder picks a document that is not at the provider on purpose, so the run never calls InvoiceOcean. A real PDF needs an issued document and the account configured |

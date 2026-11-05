@@ -299,7 +299,12 @@ for production and staging):
 4. **Credentials → Create credentials → OAuth client ID → Web
    application.** Authorised redirect URI, exactly:
    `https://<api host>/api/admin/mail/google/callback`. No JavaScript
-   origins are needed.
+   origins are needed. `<api host>` is the API's custom domain — the host in
+   the site's `NEXT_PUBLIC_API_URL`, e.g. `api.iamgeorgia.travel` — not the
+   platform's own `*.onrender.com` address. Connecting works with either, but
+   after a return through a host on another site the browser arrives at the
+   panel without its session cookie and shows the sign-in screen; Settings →
+   Email says so when the two differ.
 5. Workspace only: if the admin console restricts third-party apps, mark this
    client as trusted (Security → Access and data control → API controls).
 
