@@ -97,8 +97,13 @@ services:
         sync: false
 
       # Mail
+      # This deployment sends through the Gmail API, so SMTP_* below may stay
+      # empty. A value written here is re-applied on every Blueprint sync and
+      # replaces what the dashboard holds: with `smtp` here and no SMTP_*
+      # credentials, the next sync stops the API from booting. To fall back to
+      # SMTP, fill SMTP_HOST, SMTP_USER and SMTP_PASS first, then change this.
       - key: MAIL_TRANSPORT
-        value: smtp
+        value: gmail
       - key: MAIL_FROM
         # Must be GMAIL_SENDER_EMAIL itself under MAIL_TRANSPORT=gmail, or a
         # "Send mail as" alias verified in that account with
@@ -117,10 +122,10 @@ services:
         sync: false
       - key: SMTP_PASS
         sync: false
-      # The Gmail API (docs/DEPLOYMENT.md, "Sending mail through Gmail"): fill
-      # all four identifiers or none, connect the account in Settings → Email,
-      # send a test, then change MAIL_TRANSPORT above to gmail. Switching it
-      # back to smtp is the rollback, so leave SMTP_* in place until then.
+      # The Gmail API (docs/DEPLOYMENT.md, "Sending mail through Gmail"): all
+      # four identifiers and MAIL_CREDENTIALS_KEY are required while
+      # MAIL_TRANSPORT above is gmail. Mail is sent once the account is
+      # connected in Settings → Email.
       - key: GOOGLE_CLIENT_ID
         sync: false
       - key: GOOGLE_CLIENT_SECRET
