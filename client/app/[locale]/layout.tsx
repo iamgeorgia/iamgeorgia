@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Fraunces, Inter, Noto_Sans_Georgian, Noto_Sans_Hebrew } from "next/font/google";
 import { notFound } from "next/navigation";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 
 import "../globals.css";
 import { site } from "@/constants/site";
@@ -147,6 +148,7 @@ export default async function RootLayout(props: LayoutProps<"/[locale]">) {
         <LocaleProvider locale={locale}>{props.children}</LocaleProvider>
         {/* The script only exists on Vercel; anywhere else it is a 404 on every page. */}
         {process.env.VERCEL ? <SpeedInsights /> : null}
+        {process.env.VERCEL ? <Analytics /> : null}
       </body>
     </html>
   );
