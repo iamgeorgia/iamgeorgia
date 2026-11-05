@@ -138,7 +138,7 @@ jar to exploit.
 
 | Limit | Window | Counted per | Env variable |
 | --- | --- | --- | --- |
-| 100 requests | 1 minute | IP, across everything except `/health` | `RATE_LIMIT_GLOBAL` |
+| 600 requests | 1 minute | IP, across everything except `/health` | `RATE_LIMIT_GLOBAL` |
 | 30 requests | 1 minute | IP, on `/api/search/*` only | — |
 | 10 **failed** sign-ins | 15 minutes | IP **and** email combined | `AUTH_LOGIN_LIMIT` |
 | 5 wrong current-passwords | 15 minutes | signed-in user | `AUTH_PASSWORD_CHANGE_LIMIT` |

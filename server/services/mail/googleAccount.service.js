@@ -27,6 +27,18 @@ import { usersWithCapability } from '../rbac/access.js';
  * a single-use state, stored hashed, ten minutes to live, bound to that admin
  * and to their browser by an HttpOnly cookie — and by nothing it is sent.
  *
+ * The cookie is set by a stop on the way out (`/start`), not by the request
+ * that began the flow. That request comes from the panel's script to whatever
+ * host the panel calls the API on; Google returns the browser to the host in
+ * GOOGLE_REDIRECT_URI. A cookie set by the first is only sent to the second
+ * when the two are the same host under the same path — and an API reachable
+ * under two names (its platform address and its custom domain, `localhost`
+ * and `127.0.0.1`) or behind a path prefix broke that silently: every
+ * connection ended in "came back without the cookie". So the authenticated
+ * request hands out a single-use ticket instead, the browser carries it to
+ * `/start` on the redirect URI's own host, and the cookie is set there, by
+ * the address that will later be asked for it.
+ *
  * What the callback may then do is narrow on purpose: store a grant for the
  * one account named in GMAIL_SENDER_EMAIL. Any other account is refused and
  * its grant revoked at Google before anything is kept.
@@ -34,21 +46,42 @@ import { usersWithCapability } from '../rbac/access.js';
 
 const STATE_PURPOSE = 'gmail';
 const STATE_TTL_MS = 10 * 60 * 1000;
+// The ticket only has to survive one navigation the panel starts at once.
+const START_PURPOSE = 'gmail-start';
+const START_TTL_MS = 2 * 60 * 1000;
 const SEND_SCOPE = GMAIL_SCOPES[0];
 
 export const OAUTH_COOKIE = 'iag_gmail_oauth';
-export const OAUTH_COOKIE_PATH = '/api/admin/mail/google';
+
+const CALLBACK_SUFFIX = '/callback';
+const DEFAULT_ROUTES_PATH = '/api/admin/mail/google';
 
 /**
- * The binding cookie. Host-only on the API, scoped to these routes, Lax so the
- * top-level return from Google carries it — which is the one navigation the
- * Strict session cookie cannot make.
+ * These routes as the browser addresses them, read off GOOGLE_REDIRECT_URI:
+ * the origin Google returns to, and the path the callback sits under there —
+ * which is not this app's own mount path when a proxy adds a prefix.
+ */
+const browserRoutes = () => {
+    try {
+        const { origin, pathname } = new URL(config.mail.gmail.redirectUri);
+        const path = pathname.endsWith(CALLBACK_SUFFIX) ? pathname.slice(0, -CALLBACK_SUFFIX.length) : DEFAULT_ROUTES_PATH;
+
+        return { origin, path: path.replace(/\/+$/, '') };
+    } catch {
+        return { origin: null, path: DEFAULT_ROUTES_PATH };
+    }
+};
+
+/**
+ * The binding cookie. Host-only on the host that serves the callback, scoped
+ * to these routes, Lax so the top-level return from Google carries it — which
+ * is the one navigation the Strict session cookie cannot make.
  */
 export const oauthCookieOptions = () => ({
     httpOnly: true,
     sameSite: 'lax',
     secure: config.isDeployed,
-    path: OAUTH_COOKIE_PATH,
+    path: browserRoutes().path || '/',
     maxAge: STATE_TTL_MS
 });
 
@@ -77,23 +110,69 @@ const assertConfigured = () => {
 };
 
 /**
- * The URL to send the admin's browser to, and the state to bind to it.
- *
- * `prompt=consent` makes Google issue a refresh token every time, which a
- * reconnect needs; `login_hint` preselects the expected account.
+ * The first half of a connection, for the signed-in administrator: a
+ * single-use ticket, and the address on the callback's own host where the
+ * browser trades it for the state and its binding cookie.
  */
 export const startAuthorization = async (user, req) => {
     assertConfigured();
 
-    const state = randomBytes(32).toString('base64url');
+    const ticket = randomBytes(32).toString('base64url');
     const now = new Date();
+    const expiresAt = new Date(now.getTime() + START_TTL_MS);
 
     await prisma.$transaction([
         prisma.oAuthState.deleteMany({ where: { OR: [{ expiresAt: { lt: now } }, { usedAt: { not: null } }] } }),
-        prisma.oAuthState.create({
-            data: { stateHash: hashState(state), purpose: STATE_PURPOSE, userId: user.id, expiresAt: new Date(now.getTime() + STATE_TTL_MS) }
-        })
+        prisma.oAuthState.create({ data: { stateHash: hashState(ticket), purpose: START_PURPOSE, userId: user.id, expiresAt } })
     ]);
+
+    const { origin, path } = browserRoutes();
+    const url = new URL(`${path}/start`, origin);
+
+    url.searchParams.set('ticket', ticket);
+
+    req?.log?.info({ userId: user.id }, 'Gmail authorisation started');
+
+    return { url: url.toString(), expiresAt };
+};
+
+/**
+ * The stop on the way to Google. Spends the ticket and mints the state for
+ * the administrator who was issued it; the route sets the state as the binding
+ * cookie and sends the browser on to `url`. Resolves to `{ ok: false, code }`
+ * for anything a visitor can cause, like the callback.
+ *
+ * `prompt=consent` makes Google issue a refresh token every time, which a
+ * reconnect needs; `login_hint` preselects the expected account.
+ */
+export const openConsent = async ({ ticket }, req) => {
+    if (!config.mail.gmail.configured) return { ok: false, code: 'not_configured' };
+    if (!ticket || typeof ticket !== 'string' || ticket.length > 200) return { ok: false, code: 'state' };
+
+    const now = new Date();
+    const ticketHash = hashState(ticket);
+    const state = randomBytes(32).toString('base64url');
+
+    // One transaction, so the ticket's row cannot be swept by another
+    // administrator's fresh start between being spent and being read.
+    const userId = await prisma.$transaction(async (tx) => {
+        const { count } = await tx.oAuthState.updateMany({
+            where: { stateHash: ticketHash, purpose: START_PURPOSE, usedAt: null, expiresAt: { gt: now } },
+            data: { usedAt: now }
+        });
+
+        if (count !== 1) return null;
+
+        const spent = await tx.oAuthState.findUnique({ where: { stateHash: ticketHash }, select: { userId: true } });
+
+        await tx.oAuthState.create({
+            data: { stateHash: hashState(state), purpose: STATE_PURPOSE, userId: spent.userId, expiresAt: new Date(now.getTime() + STATE_TTL_MS) }
+        });
+
+        return spent.userId;
+    });
+
+    if (!userId) return { ok: false, code: 'state' };
 
     const url = createOAuthClient().generateAuthUrl({
         access_type: 'offline',
@@ -104,9 +183,9 @@ export const startAuthorization = async (user, req) => {
         state
     });
 
-    req?.log?.info({ userId: user.id }, 'Gmail authorisation started');
+    req?.log?.info({ userId }, 'Gmail consent opened');
 
-    return { url, state, expiresAt: new Date(now.getTime() + STATE_TTL_MS) };
+    return { ok: true, url, state };
 };
 
 const revokeQuietly = async (client, token) => {

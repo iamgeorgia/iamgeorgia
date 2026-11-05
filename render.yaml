@@ -100,7 +100,11 @@ services:
       - key: MAIL_TRANSPORT
         value: smtp
       - key: MAIL_FROM
-        value: I am Georgia <no-reply@iamgeorgia.travel>
+        # Must be GMAIL_SENDER_EMAIL itself under MAIL_TRANSPORT=gmail, or a
+        # "Send mail as" alias verified in that account with
+        # GMAIL_FROM_ALIAS_VERIFIED=true — config.js refuses to boot otherwise,
+        # because Gmail would quietly send as the account instead.
+        value: I am Georgia <dev@iamgeorgia.com.ge>
       - key: MAIL_REPLY_TO
         sync: false
       - key: SMTP_HOST
@@ -121,7 +125,8 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
-      # https://<this API's host>/api/admin/mail/google/callback
+      # https://<this API's custom domain>/api/admin/mail/google/callback —
+      # the host in the site's NEXT_PUBLIC_API_URL, not the *.onrender.com one.
       - key: GOOGLE_REDIRECT_URI
         sync: false
       - key: GMAIL_SENDER_EMAIL

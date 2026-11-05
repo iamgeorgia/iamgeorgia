@@ -367,7 +367,7 @@ export const globalLimiter = rateLimit({
 
 /**
  * Dated hotel search, the most expensive read in the system: a windowed
- * aggregate over the two largest tables. The global limiter allows 100 a
+ * aggregate over the two largest tables. The global limiter allows 600 a
  * minute across everything; this one keeps a scraper from spending all of it
  * here.
  *

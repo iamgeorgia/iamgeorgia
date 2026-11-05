@@ -10,3 +10,8 @@ export const googleCallbackQuerySchema = z.object({
     state: z.string().min(1).max(200).optional(),
     error: z.string().min(1).max(100).optional()
 });
+
+/** The stop on the way to Google: the single-use ticket and nothing else. */
+export const googleStartQuerySchema = z.object({
+    ticket: z.string().min(1).max(200).optional()
+});
