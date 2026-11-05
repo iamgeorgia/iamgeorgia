@@ -110,11 +110,16 @@ export async function Footer() {
           </div>
         </div>
 
-        <div className="mt-16 flex flex-col gap-4 border-t border-on-dark/12 pt-8 sm:flex-row sm:items-center sm:justify-between">
+        {/* Wraps rather than switching at a breakpoint: the three lines only
+            fit one row at a width that differs by language. */}
+        <div className="mt-16 flex flex-wrap items-center justify-between gap-x-10 gap-y-4 border-t border-on-dark/12 pt-8">
           <p className="type-caption text-on-dark/40">
             {fill(t.footer.rights, { year: new Date().getFullYear(), name: site.name })}
           </p>
           <p className="type-caption text-on-dark/40">{site.contact.hours}</p>
+          <p className="type-caption text-on-dark/40">
+            {fill(t.footer.credit, { name: site.developer })}
+          </p>
         </div>
       </Container>
     </footer>

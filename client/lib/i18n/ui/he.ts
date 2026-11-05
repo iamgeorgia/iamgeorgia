@@ -300,6 +300,7 @@ export const he: UiDictionary = {
     newsletterThanks: "תודה — נהיה בקשר.",
     newsletterError: "נא להזין כתובת אימייל תקינה.",
     rights: "‏© {year} {name}. כל הזכויות שמורות.",
+    credit: "עיצוב ופיתוח: {name}",
   },
 
   studio: {
