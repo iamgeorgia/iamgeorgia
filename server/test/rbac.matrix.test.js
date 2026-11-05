@@ -209,15 +209,21 @@ describe('who reaches what, across the whole API', { skip: dbAvailable ? false :
     });
 
     /**
-     * The one /admin route that answers without a session. Google sends the
-     * browser here in a cross-site navigation, where the SameSite=Strict
-     * session cookie is withheld; what authorises it instead is the signed
-     * state bound to the administrator who started the flow and the HttpOnly
-     * cookie set beside it (services/mail/googleAccount.service.js). Every
-     * role "reaches" it the way an anonymous caller does — with a refusal
-     * page, not an account.
+     * The two /admin routes that answer without a session, both halves of
+     * the Gmail connection. Google sends the browser to `callback` in a
+     * cross-site navigation, where the SameSite=Strict session cookie is
+     * withheld; what authorises it instead is the signed state bound to the
+     * administrator who started the flow and the HttpOnly cookie set beside
+     * it (services/mail/googleAccount.service.js). `start` is where that
+     * cookie is set: the browser is sent there, to the callback's own host,
+     * with a single-use ticket only a signed-in administrator can obtain.
+     * Every role "reaches" them the way an anonymous caller does — with a
+     * refusal page, not an account.
      */
-    const SESSIONLESS_ADMIN_ROUTES = new Set(['GET /api/admin/mail/google/callback']);
+    const SESSIONLESS_ADMIN_ROUTES = new Set([
+        'GET /api/admin/mail/google/start',
+        'GET /api/admin/mail/google/callback'
+    ]);
 
     it('keeps every /admin route closed to drivers and partners', () => {
         for (const [key, byRole] of Object.entries(expected)) {
